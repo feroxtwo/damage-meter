@@ -145,6 +145,13 @@ async fn reset(State(engine): State<AppState>, headers: HeaderMap) -> Result<Sta
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn toggle_record(State(engine): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
+    guard(&headers)?;
+    let on = engine.toggle_recording();
+    let dir = engine.capture_dir().display().to_string();
+    Ok(Json(json!({ "recording": on, "dir": dir })))
+}
+
 #[derive(Deserialize)]
 struct ModeBody {
     mode: String,
@@ -176,6 +183,7 @@ pub fn router(engine: AppState) -> Router {
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))
         .route("/api/reset", post(reset))
+        .route("/api/record/toggle", post(toggle_record))
         .route("/api/target-mode", post(target_mode))
         .with_state(engine)
 }

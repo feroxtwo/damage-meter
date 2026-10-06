@@ -2,6 +2,7 @@
 //! and web app show, and the run tracking that fills the database.
 
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -13,14 +14,19 @@ use a2tools_dps_meter_lib::combat::data_storage::DataStorage;
 use a2tools_dps_meter_lib::combat::dps_calculator::DpsCalculator;
 use a2tools_dps_meter_lib::combat::ping_tracker::PingTracker;
 use a2tools_dps_meter_lib::entity::dps_data::DpsData;
+use a2tools_dps_meter_lib::entity::fight_record::FightRecord;
 use a2tools_dps_meter_lib::i18n::lookup::{NpcLookup, SkillLookup};
 
-use crate::db::{Db, Member};
+use crate::buffs::{self, BuffTracker};
+use crate::db::{Db, EffectRow, Member};
 use crate::names;
 
 const TICK: Duration = Duration::from_millis(500);
 /// Boss fights are saved this often while they run, and again when they end.
 const SAVE_EVERY_TICKS: u64 = 60;
+/// Effects below this uptime in a fight are not kept.
+const MIN_UPTIME_PERCENT: f64 = 3.0;
+const MAX_EFFECTS_PER_ENTITY: usize = 16;
 
 pub fn now_ms() -> i64 {
     SystemTime::now()
@@ -52,6 +58,11 @@ pub struct CaptureStatus {
     pub locked_port: Option<u16>,
     pub device: Option<String>,
     pub error: Option<String>,
+    /// The packet recording being written, if any.
+    pub recording: Option<String>,
+    /// Recording was asked for; it starts with the game connection.
+    pub recording_requested: bool,
+    pub recording_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -117,6 +128,9 @@ pub struct Engine {
     run: Mutex<RunState>,
     reset_requested: AtomicBool,
     target_mode: RwLock<String>,
+    pub buffs: BuffTracker,
+    record_wanted: AtomicBool,
+    capture_dir: PathBuf,
 }
 
 fn load_lookups(language: &str) -> (SkillLookup, NpcLookup) {
@@ -138,7 +152,7 @@ fn load_lookups(language: &str) -> (SkillLookup, NpcLookup) {
 }
 
 impl Engine {
-    pub fn new(db: Db, language: &str) -> Arc<Self> {
+    pub fn new(db: Db, language: &str, capture_dir: PathBuf) -> Arc<Self> {
         let (skills, npcs) = load_lookups(language);
         let skills = Arc::new(skills);
         let npcs = Arc::new(npcs);
@@ -173,6 +187,9 @@ impl Engine {
             run: Mutex::new(RunState { run_id: None, dungeon_id: 0, started_at: 0, members_written: HashSet::new() }),
             reset_requested: AtomicBool::new(false),
             target_mode: RwLock::new("bossTargets".into()),
+            buffs: BuffTracker::default(),
+            record_wanted: AtomicBool::new(false),
+            capture_dir,
         });
 
         // Combat data is cleared on zone changes and when a party ends; save
@@ -214,6 +231,89 @@ impl Engine {
         s.device = lock.map(|l| l.1);
     }
 
+    pub fn capture_dir(&self) -> PathBuf {
+        self.capture_dir.clone()
+    }
+
+    pub fn recording_wanted(&self) -> bool {
+        self.record_wanted.load(Ordering::SeqCst)
+    }
+
+    /// Start or stop recording the game connection. Returns whether it records now.
+    pub fn toggle_recording(&self) -> bool {
+        let on = !self.record_wanted.fetch_xor(true, Ordering::SeqCst);
+        let mut s = self.status.write();
+        s.recording_error = None;
+        s.recording_requested = on;
+        if !on {
+            s.recording = None;
+        }
+        on
+    }
+
+    pub fn set_recording(&self, on: bool) {
+        if self.recording_wanted() != on {
+            self.toggle_recording();
+        }
+    }
+
+    pub fn recording_started(&self, path: &Path) {
+        self.status.write().recording = Some(path.display().to_string());
+    }
+
+    pub fn stop_recording(&self, error: Option<String>) {
+        self.record_wanted.store(false, Ordering::SeqCst);
+        let mut s = self.status.write();
+        s.recording = None;
+        s.recording_requested = false;
+        s.recording_error = error;
+    }
+
+    fn effect_name(&self, code: u32) -> String {
+        buffs::name_keys(code)
+            .into_iter()
+            .map(|k| self.skills.get_skill_name(k))
+            .find(|n| !n.is_empty())
+            .unwrap_or_else(|| format!("#{code}"))
+    }
+
+    /// Buff uptimes of every fighter and debuff uptimes on the boss, per fight.
+    fn fight_effects(&self, records: &[FightRecord]) -> Vec<EffectRow> {
+        let mut rows = Vec::new();
+        for record in records {
+            let from = record.start_time_ms;
+            let to = from + record.duration_ms.max(0);
+            let targets = record
+                .actors
+                .iter()
+                .map(|a| (a.actor_id, false))
+                .chain(std::iter::once((record.target_id, true)));
+            for (entity, on_boss) in targets {
+                if entity <= 0 {
+                    continue;
+                }
+                for u in self
+                    .buffs
+                    .uptimes(entity as u32, from, to)
+                    .into_iter()
+                    .filter(|u| u.percent >= MIN_UPTIME_PERCENT)
+                    .take(MAX_EFFECTS_PER_ENTITY)
+                {
+                    rows.push(EffectRow {
+                        fight_id: record.id.clone(),
+                        entity_id: entity,
+                        code: u.code,
+                        name: self.effect_name(u.code),
+                        caster_id: u.caster as i64,
+                        uptime: u.percent,
+                        on_boss,
+                    });
+                }
+            }
+        }
+        rows
+    }
+
     /// Start the meter over: the live numbers go, saved fights stay.
     pub fn request_reset(&self) {
         self.reset_requested.store(true, Ordering::SeqCst);
@@ -252,9 +352,16 @@ impl Engine {
         let dungeon = self.storage.current_dungeon_id();
         let dead = self.storage.get_dead_entities();
         match self.db.save_fights(&records, dungeon, &self.self_names(), local, &dead) {
-            Ok(0) => {}
+            Ok(0) => return,
             Ok(n) => tracing::info!("Saved {n} fight(s)"),
-            Err(e) => tracing::error!("Saving fights failed: {e:#}"),
+            Err(e) => {
+                tracing::error!("Saving fights failed: {e:#}");
+                return;
+            }
+        }
+        let effects = self.fight_effects(&records);
+        if let Err(e) = self.db.save_effects(&records, &effects) {
+            tracing::error!("Saving buffs failed: {e:#}");
         }
     }
 
@@ -424,6 +531,9 @@ impl Engine {
             }
             if tick % SAVE_EVERY_TICKS == 0 {
                 self.save_fights(false);
+            }
+            if tick % 7_200 == 0 {
+                self.buffs.prune_old(now_ms());
             }
         }
     }

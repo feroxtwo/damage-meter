@@ -1,5 +1,6 @@
 //! AION 2 damage meter for Linux.
 
+mod buffs;
 mod capture;
 mod db;
 mod dispatcher;
@@ -42,6 +43,9 @@ struct Cli {
     /// Do not wait for an AION2.exe process before capturing.
     #[arg(long)]
     any_process: bool,
+    /// Record the game connection from the start (see `ctl record`).
+    #[arg(long)]
+    record: bool,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -67,6 +71,9 @@ enum Action {
     ToggleVisible,
     /// Reset the live meter.
     Reset,
+    /// Start/stop recording the game connection to
+    /// ~/.local/share/aion2-meter/captures (to decode more packets).
+    Record,
     /// Show overlay and capture state without changing anything.
     Status,
 }
@@ -85,14 +92,27 @@ fn status_text(live: &serde_json::Value) -> String {
         "AION2 nicht gestartet".to_string()
     };
     format!(
-        "Overlay sichtbar: {}\nOverlay gesperrt: {}\nVerbindung:       {}\nCharakter:        {}\nOrt:              {}\nPing:             {}",
+        "Overlay sichtbar: {}\nOverlay gesperrt: {}\nVerbindung:       {}\nCharakter:        {}\nOrt:              {}\nPing:             {}\nMitschnitt:       {}",
         yes_no(&o["visible"]),
         yes_no(&o["locked"]),
         connection,
         live["character"].as_str().unwrap_or("–"),
         live["dungeon"].as_str().unwrap_or("–"),
         live["ping_ms"].as_i64().map(|p| format!("{p} ms")).unwrap_or_else(|| "–".into()),
+        recording_text(c),
     )
+}
+
+fn recording_text(capture: &serde_json::Value) -> String {
+    if let Some(path) = capture["recording"].as_str() {
+        format!("läuft → {path}")
+    } else if capture["recording_requested"].as_bool() == Some(true) {
+        "wartet auf die Spielverbindung".into()
+    } else if let Some(e) = capture["recording_error"].as_str() {
+        format!("Fehler: {e}")
+    } else {
+        "aus".into()
+    }
 }
 
 fn default_db() -> PathBuf {
@@ -125,6 +145,7 @@ fn main() -> anyhow::Result<()> {
             Action::ToggleLock => ("POST", "/api/overlay/toggle-lock"),
             Action::ToggleVisible => ("POST", "/api/overlay/toggle-visible"),
             Action::Reset => ("POST", "/api/reset"),
+            Action::Record => ("POST", "/api/record/toggle"),
             Action::Status => ("GET", "/api/live"),
         };
         let body = web::request(local, method, path).context("Läuft aion2-meter?")?;
@@ -133,6 +154,14 @@ fn main() -> anyhow::Result<()> {
             // The live snapshot trails a toggle by up to half a second.
             live["overlay"] = serde_json::from_str(&web::request(local, "GET", "/api/overlay")?)?;
             println!("{}", status_text(&live));
+        } else if matches!(action, Action::Record) {
+            let r: serde_json::Value = serde_json::from_str(&body)?;
+            let dir = r["dir"].as_str().unwrap_or_default();
+            if r["recording"].as_bool() == Some(true) {
+                println!("Mitschnitt läuft, sobald das Spiel verbunden ist. Ordner: {dir}");
+            } else {
+                println!("Mitschnitt gestoppt. Ordner: {dir}");
+            }
         } else {
             println!("{body}");
         }
@@ -146,7 +175,11 @@ fn main() -> anyhow::Result<()> {
         Lang::De => "de",
         Lang::En => "en",
     };
-    let engine = engine::Engine::new(database, lang);
+    let captures = db_path.parent().map(|p| p.join("captures")).unwrap_or_else(|| PathBuf::from("captures"));
+    let engine = engine::Engine::new(database, lang, captures);
+    if cli.record {
+        engine.set_recording(true);
+    }
 
     // Capture → parser
     let permission = capture::has_capture_permission();

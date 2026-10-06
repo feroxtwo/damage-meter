@@ -95,6 +95,18 @@ CREATE TABLE IF NOT EXISTS fight_players (
     PRIMARY KEY (fight_id, actor_id)
 );
 CREATE INDEX IF NOT EXISTS fight_players_name ON fight_players(name);
+
+-- Buffs on fighters and debuffs on the boss: share of the fight they were up.
+CREATE TABLE IF NOT EXISTS fight_effects (
+    fight_id  TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL,
+    code      INTEGER NOT NULL,
+    name      TEXT,
+    caster_id INTEGER,
+    uptime    REAL NOT NULL,
+    on_boss   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (fight_id, entity_id, code)
+);
 "#;
 
 /// Columns added after the first release, for databases created by it.
@@ -131,6 +143,19 @@ pub struct Member {
     pub combat_power: i64,
     pub dbid: u64,
     pub is_self: bool,
+}
+
+/// One effect's uptime in one fight.
+#[derive(Debug, Clone)]
+pub struct EffectRow {
+    pub fight_id: String,
+    pub entity_id: i32,
+    pub code: u32,
+    pub name: String,
+    pub caster_id: i64,
+    /// 0..=100
+    pub uptime: f64,
+    pub on_boss: bool,
 }
 
 fn rows_to_json(stmt: &mut rusqlite::Statement, params: impl rusqlite::Params) -> Result<Vec<Value>> {
@@ -416,6 +441,24 @@ impl Db {
         Ok(records.len())
     }
 
+    /// Replace the effect uptimes of these fights.
+    pub fn save_effects(&self, records: &[FightRecord], effects: &[EffectRow]) -> Result<()> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        for record in records {
+            tx.execute("DELETE FROM fight_effects WHERE fight_id = ?1", params![record.id])?;
+        }
+        for e in effects {
+            tx.execute(
+                "INSERT OR REPLACE INTO fight_effects(fight_id, entity_id, code, name, caster_id, uptime, on_boss)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![e.fight_id, e.entity_id, e.code, e.name, e.caster_id, e.uptime, e.on_boss],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn delete_run(&self, run_id: i64) -> Result<()> {
         self.conn.lock().execute("DELETE FROM runs WHERE id = ?1", params![run_id])?;
         Ok(())
@@ -534,6 +577,21 @@ impl Db {
         )?;
         let mut players = rows_to_json(&mut stmt, params![fight_id])?;
         decorate_job(&mut players);
+
+        let mut stmt = conn.prepare(
+            "SELECT e.entity_id, e.code, e.name, e.uptime, e.on_boss, e.caster_id, p.name AS caster
+             FROM fight_effects e
+             LEFT JOIN fight_players p ON p.fight_id = e.fight_id AND p.actor_id = e.caster_id
+             WHERE e.fight_id = ?1 ORDER BY e.uptime DESC",
+        )?;
+        let effects = rows_to_json(&mut stmt, params![fight_id])?;
+        let (boss, buffs): (Vec<Value>, Vec<Value>) =
+            effects.into_iter().partition(|e| e["on_boss"].as_i64() == Some(1));
+        for p in &mut players {
+            let actor = p["actor_id"].as_i64();
+            p["buffs"] = Value::Array(buffs.iter().filter(|e| e["entity_id"].as_i64() == actor).cloned().collect());
+        }
+        fight["boss_debuffs"] = Value::Array(boss);
         if let Some(record) = record {
             for p in &mut players {
                 let actor = p["actor_id"].as_i64().unwrap_or(0) as i32;
@@ -769,6 +827,33 @@ mod tests {
         assert_eq!(kills[1]["dps"], 300.0);
         assert_eq!(kills[0]["difficulty"], "Schwer");
         assert_eq!(db.summary().unwrap()["my_deaths"], 1);
+    }
+
+    #[test]
+    fn effects_show_on_their_fighter_and_the_boss() {
+        let db = Db::in_memory().unwrap();
+        let fight = record("f1", 1_000, 500);
+        db.save_fights(std::slice::from_ref(&fight), 0, &[], None, &HashSet::new()).unwrap();
+        let row = |entity_id, code, on_boss| EffectRow {
+            fight_id: "f1".into(),
+            entity_id,
+            code,
+            name: format!("E{code}"),
+            caster_id: 1,
+            uptime: 50.0,
+            on_boss,
+        };
+        db.save_effects(std::slice::from_ref(&fight), &[row(1, 10, false), row(fight.target_id, 20, true)])
+            .unwrap();
+        // Saving again replaces, not duplicates.
+        db.save_effects(std::slice::from_ref(&fight), &[row(1, 10, false), row(fight.target_id, 20, true)])
+            .unwrap();
+        let detail = db.fight_detail("f1").unwrap().unwrap();
+        assert_eq!(detail["boss_debuffs"].as_array().unwrap().len(), 1);
+        assert_eq!(detail["boss_debuffs"][0]["name"], "E20");
+        let me = detail["players"].as_array().unwrap().iter().find(|p| p["actor_id"] == 1).unwrap();
+        assert_eq!(me["buffs"][0]["code"], 10);
+        assert_eq!(me["buffs"][0]["caster"], me["name"]);
     }
 
     #[test]

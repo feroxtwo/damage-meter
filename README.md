@@ -77,10 +77,22 @@ Kurzbefehle* ändern.
 `~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem
 Spiel verbunden ist, ohne etwas umzuschalten.
 
+### Buffs, Debuffs und Mitschnitt
+
+Bei jedem gespeicherten Bosskampf (Runs → Kampf → Skills) steht, wie lange jeder Spieler welche Buffs hatte
+und welche Debuffs wie lange auf dem Boss lagen, jeweils in Prozent der Kampfzeit. Das Buff-Paket ist aus den
+offenen Metern NOIA2 und AIon2-Dps-Meter übernommen.
+
+Ausweichen und nDPS entschlüsselt bisher kein offener Meter. Damit sich das ändern kann, schneidet
+`~/.local/bin/aion2-meter ctl record` (oder „Pakete mitschneiden“ im Dashboard bzw. im Overlay-Menü) die
+Spielverbindung mit, bis du es nochmal aufrufst. Die Dateien (`*.a2mcap`, rohe TCP-Daten der Spielverbindung
+mit Zeitstempel) landen in `~/.local/share/aion2-meter/captures/`. Sie enthalten alles, was der Server
+deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zeigen willst.
+
 ### Optionen
 
 ```
-aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de|en] [--db PFAD] [--any-process]
+aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de|en] [--db PFAD] [--any-process] [--record]
 ```
 
 - `--no-overlay` nur Mitschnitt + Dashboard (z. B. Dashboard auf zweitem Monitor).
@@ -88,6 +100,7 @@ aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de
 - `--listen 0.0.0.0` Dashboard im Heimnetz erreichbar (Handy, Zweit-PC). Ohne Passwort, also nur im eigenen Netz.
 - `--lang en` Skill- und Monsternamen auf Englisch.
 - `--any-process` nicht auf einen `AION2.exe`-Prozess warten (z. B. Spiel in VM/Container).
+- `--record` gleich beim Start mitschneiden (siehe oben).
 - `/overlay` im Dashboard ist eine Browser-Variante des Overlays, z. B. als OBS-Browserquelle.
 
 ## Fehlerbehebung

@@ -120,6 +120,11 @@ impl Overlay {
             self.engine.overlay.write().locked = true;
             ui.close();
         }
+        let recording = self.engine.recording_wanted();
+        if ui.button(if recording { "Mitschnitt stoppen" } else { "Pakete mitschneiden" }).clicked() {
+            self.engine.toggle_recording();
+            ui.close();
+        }
         ui.separator();
         ui.label("Ziel");
         for (id, label) in [
@@ -191,7 +196,10 @@ impl Overlay {
         };
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
         p.text(rect.left_center() + Vec2::new(18.0, 0.0), Align2::LEFT_CENTER, state, FontId::proportional(10.5), Color32::from_gray(200));
-        let ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
+        let mut ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
+        if c.recording.is_some() {
+            ping = format!("● REC  {ping}");
+        }
         p.text(rect.right_center() - Vec2::new(8.0, 0.0), Align2::RIGHT_CENTER, ping, FontId::monospace(10.5), Color32::from_gray(200));
         resp.context_menu(|ui| self.menu(ui));
     }

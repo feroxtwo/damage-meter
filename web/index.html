@@ -42,6 +42,13 @@ tr.click { cursor: pointer; } tr.click:hover { background: var(--panel2); }
 .chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .chip.me { color: var(--gold); }
 .muted { color: var(--muted); }
+.uptimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 18px; margin: 8px 0 12px; }
+.uptime { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; font-size: 12px; align-items: center; }
+.uptime .track { grid-column: 1 / -1; height: 4px; background: var(--panel2); border-radius: 2px; overflow: hidden; }
+.uptime .track div { height: 100%; background: var(--accent); border-radius: 2px; }
+.uptime.debuff .track div { background: var(--red); }
+.uptime .num { text-align: right; }
+h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #2b3a55; color: #b9d0ff; margin-left: 6px; }
 .badge.Schwer { background: #552b2b; color: #ffb9b9; } .badge.Normal { background: #2b4a35; color: #b9ffcb; }
 button.btn, select, input[type=text] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
@@ -89,6 +96,7 @@ code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-siz
             <option value="trainTargets">Trainingspuppe</option>
           </select>
           <button class="btn" id="resetBtn">Zurücksetzen</button>
+          <button class="btn" id="recBtn" title="Schneidet die Spielverbindung mit, um weitere Pakete (Ausweichen, nDPS) zu entschlüsseln">Pakete mitschneiden</button>
         </div>
       </div>
       <div class="hp" id="liveHp" style="display:none"><div></div></div>
@@ -196,7 +204,11 @@ function setStatus(c) {
   else if (c.error) { col = 'var(--red)'; txt = 'Capture-Fehler: ' + c.error; }
   else if (c.locked_port) { col = 'var(--green)'; txt = `Verbunden (Port ${c.locked_port}, ${c.device})`; }
   else if (c.game_running) { col = 'var(--gold)'; txt = 'Suche Spielverbindung …'; }
+  if (c.recording) txt += ' · ● Mitschnitt läuft';
+  else if (c.recording_requested) txt += ' · Mitschnitt wartet auf Spielverbindung';
+  else if (c.recording_error) txt += ' · Mitschnitt-Fehler: ' + c.recording_error;
   $('#statusDot').style.background = col; $('#statusText').textContent = txt;
+  $('#recBtn').textContent = c.recording_requested ? 'Mitschnitt stoppen' : 'Pakete mitschneiden';
 }
 async function pollLive() {
   try {
@@ -215,6 +227,11 @@ async function pollLive() {
   } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar'; }
 }
 $('#resetBtn').onclick = () => api('/api/reset', { method: 'POST' });
+$('#recBtn').onclick = async () => {
+  const r = await api('/api/record/toggle', { method: 'POST' });
+  $('#recBtn').textContent = r.recording ? 'Mitschnitt stoppen' : 'Pakete mitschneiden';
+  if (r.recording) alert('Mitschnitt startet, sobald das Spiel verbunden ist.\nDateien landen in ' + r.dir);
+};
 $('#targetMode').onchange = (e) => api('/api/target-mode', { method: 'POST', body: JSON.stringify({ mode: e.target.value }) });
 setInterval(pollLive, 1000); pollLive();
 
@@ -263,10 +280,18 @@ async function openRun(id) {
   el.querySelectorAll('[data-fight]').forEach(b => b.onclick = (e) => { e.preventDefault(); b.closest('details').open = true; openSkills(b.dataset.fight); });
 }
 
+function uptimes(list, debuff) {
+  if (!list || !list.length) return '';
+  return `<div class="uptimes">${list.map(e => `<div class="uptime${debuff ? ' debuff' : ''}" title="${esc(e.caster ? 'von ' + e.caster : '')}">
+    <span>${esc(e.name)}${debuff && e.caster ? ` <span class="muted">· ${esc(e.caster)}</span>` : ''}</span><span class="num">${e.uptime.toFixed(0)}%</span>
+    <div class="track"><div style="width:${Math.min(100, e.uptime).toFixed(1)}%"></div></div></div>`).join('')}</div>`;
+}
 async function openSkills(fid) {
   const f = await api('/api/fights/' + encodeURIComponent(fid));
   const box = document.getElementById('sk-' + fid);
-  box.innerHTML = f.players.map(p => `<details><summary>${deathMark(p)}${chip(p)} <span class="num muted">${num(p.damage)} · ${num(p.dps)}/s${p.damage_received ? ` · ${num(p.damage_received)} erlitten in ${p.hits_received} Treffern` : ''}</span></summary>
+  box.innerHTML = (f.boss_debuffs && f.boss_debuffs.length ? `<h4>Debuffs auf ${esc(f.boss_name || 'dem Boss')} (Uptime)</h4>${uptimes(f.boss_debuffs, true)}` : '')
+    + f.players.map(p => `<details><summary>${deathMark(p)}${chip(p)} <span class="num muted">${num(p.damage)} · ${num(p.dps)}/s${p.damage_received ? ` · ${num(p.damage_received)} erlitten in ${p.hits_received} Treffern` : ''}</span></summary>
+    ${p.buffs && p.buffs.length ? `<h4>Buffs (Uptime)</h4>${uptimes(p.buffs, false)}` : ''}
     <table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer</th><th>Krit</th><th>Rücken</th><th>Perfekt</th><th>Pariert</th><th>Max</th></tr></thead><tbody>
     ${(p.skills || []).map(s => `<tr><td>${esc(s.name)}${s.is_dot ? ' <span class="badge">DoT</span>' : ''}</td><td class="num">${num(s.damage)}</td>
       <td class="num">${s.hits}</td><td class="num">${s.crit_rate.toFixed(0)}%</td><td class="num">${s.back_rate.toFixed(0)}%</td>
