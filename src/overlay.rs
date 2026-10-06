@@ -101,7 +101,11 @@ impl Overlay {
             );
         }
 
-        if resp.drag_started() && !self.engine.overlay.read().locked {
+        // Ask for the move on the press itself, while that press is the
+        // newest input event: a Wayland move request names the press it
+        // belongs to, and one sent after egui's drag threshold went unheeded.
+        let pressed = ui.input(|i| i.pointer.primary_pressed());
+        if pressed && resp.hovered() && !self.engine.overlay.read().locked {
             ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
         }
         resp.context_menu(|ui| self.menu(ui));

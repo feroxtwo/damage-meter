@@ -15,6 +15,8 @@ Kein Discord, kein Account, nichts verlässt deinen Rechner.
 
 ## Installation (Fedora / KDE)
 
+**Fedora Workstation / KDE Spin:**
+
 ```bash
 sudo dnf install rust cargo gcc git
 git clone https://github.com/feroxtwo/damage-meter.git
@@ -22,12 +24,28 @@ cd damage-meter
 ./scripts/install.sh
 ```
 
+**Bazzite, Kinoite, Silverblue (rpm-ostree):** `dnf` funktioniert dort nicht. Rust kommt ohne root über rustup,
+der Rest ist schon an Bord:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git clone https://github.com/feroxtwo/damage-meter.git
+cd damage-meter
+./scripts/install.sh
+```
+
+Das Skript lädt `~/.cargo/env` selbst, ein neues Terminal nach rustup ist also nicht nötig.
+
+> Solange das Repository **privat** ist, braucht `git clone` eine Anmeldung: entweder `gh auth login` und dann
+> `gh repo clone feroxtwo/damage-meter`, oder auf GitHub *Code → Download ZIP* und das Archiv entpacken.
+
 Das Skript
 
 1. baut das Programm (`cargo build --release`, beim ersten Mal einige Minuten),
 2. installiert es nach `~/.local/bin/aion2-meter` mit Startmenü-Einträgen „AION2 Meter“ und „AION2 Meter Dashboard“,
 3. erlaubt ihm per `sudo setcap cap_net_raw=ep` den Paketmitschnitt (der Meter selbst läuft **nicht** als root),
-4. legt unter KDE eine **KWin-Fensterregel** an, damit das Overlay über dem Spiel bleibt.
+4. legt unter KDE eine **KWin-Fensterregel** an, damit das Overlay über dem Spiel bleibt,
+5. fragt, ob es die **Tastenkürzel** einrichten soll (siehe unten).
 
 Nach einem Update (`git pull && ./scripts/install.sh`) wird `setcap` erneut ausgeführt, weil eine neu gebaute Datei die Berechtigung verliert.
 
@@ -39,17 +57,25 @@ Nach einem Update (`git pull && ./scripts/install.sh`) wird `setcap` erneut ausg
 3. Kämpfen. Bosskämpfe werden automatisch gespeichert, Runs beim Verlassen der Instanz abgeschlossen.
 
 **Overlay bedienen:** Kopfzeile ziehen zum Verschieben, Rechtsklick für Menü (Zurücksetzen, Ziel-Modus,
-Sperren, Dashboard, Beenden). **Gesperrt** gehen alle Klicks durch ans Spiel. Entsperren geht über das
-Dashboard (Tab „Overlay“) oder ein Tastenkürzel.
+Sperren, Dashboard, Beenden). Klappt das Ziehen nicht, geht es unter KDE immer mit **Meta (Windows-Taste) +
+Linksziehen**. **Gesperrt** gehen alle Klicks durch ans Spiel. Entsperren geht über das Dashboard (Tab „Overlay“)
+oder ein Tastenkürzel.
 
-**Tastenkürzel:** Wayland erlaubt Programmen keine globalen Hotkeys. Leg sie in
-*Systemeinstellungen → Tastatur → Kurzbefehle → Neu hinzufügen → Befehl oder Skript* an:
+**Tastenkürzel:** Wayland erlaubt Programmen keine eigenen globalen Hotkeys, deshalb registriert
+`./scripts/install-shortcuts.sh` sie bei KDE (sofort aktiv, kein Neustart):
 
-| Befehl | Wirkung |
-|---|---|
-| `aion2-meter ctl toggle-lock` | Overlay sperren / entsperren |
-| `aion2-meter ctl toggle-visible` | Overlay ein- / ausblenden |
-| `aion2-meter ctl reset` | Live-Meter zurücksetzen |
+| Standard | Befehl | Wirkung |
+|---|---|---|
+| Strg+Umschalt+F9 | `~/.local/bin/aion2-meter ctl toggle-lock` | Overlay sperren / entsperren |
+| Strg+Umschalt+F10 | `~/.local/bin/aion2-meter ctl toggle-visible` | Overlay ein- / ausblenden |
+| Strg+Umschalt+F11 | `~/.local/bin/aion2-meter ctl reset` | Live-Meter zurücksetzen |
+
+Andere Tasten: `LOCK=Strg+Ü VISIBLE=Strg+Ö RESET=Strg+Ä ./scripts/install-shortcuts.sh`. Entfernen:
+`./scripts/install-shortcuts.sh --remove`. Danach lassen sie sich auch unter *Systemeinstellungen → Tastatur →
+Kurzbefehle* ändern.
+
+`~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem
+Spiel verbunden ist, ohne etwas umzuschalten.
 
 ### Optionen
 
@@ -71,6 +97,7 @@ aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de
 | Overlay rot: „keine Capture-Berechtigung“ | `sudo setcap cap_net_raw=ep ~/.local/bin/aion2-meter` |
 | Overlay bleibt grau, obwohl das Spiel läuft | Starte mit `--any-process`. Bleibt es dann gelb, sieht der Meter den Spielverkehr nicht (VPN/Ping-Reducer?). Log mit `RUST_LOG=debug aion2-meter` |
 | Overlay verschwindet hinter dem Spiel | Spiel randlos/Fenster statt Vollbild. `./scripts/install-kwin-rule.sh` erneut ausführen, oder in *Systemeinstellungen → Fensterverwaltung → Fensterregeln* für `aion2-meter` „Ebene: Overlay“ erzwingen. Alternativ `aion2-meter --x11`. |
+| Overlay lässt sich an der Kopfzeile nicht ziehen | Meta + Linksziehen. Wenn du die KWin-Regel vor Version 0.1.1 installiert hast: `./scripts/install-kwin-rule.sh` erneut ausführen (die alte Regel verbot dem Overlay den Fokus). |
 | Overlay hat schwarzen statt transparenten Hintergrund | `aion2-meter --x11` probieren und melden. |
 | Nach einem Spiel-Patch kein Schaden mehr | Der Parser stammt aus A2Tools (siehe unten). `rev` in `Cargo.toml` auf den neuesten Commit von A2Tools setzen und neu installieren. |
 

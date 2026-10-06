@@ -182,13 +182,13 @@ pub async fn serve(engine: AppState, addr: SocketAddr) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Send one action to a running meter (for KDE shortcuts and scripts).
-pub fn send_action(addr: SocketAddr, path: &str) -> anyhow::Result<String> {
+/// One request to a running meter (for KDE shortcuts and scripts).
+pub fn request(addr: SocketAddr, method: &str, path: &str) -> anyhow::Result<String> {
     use std::io::{Read, Write};
     let mut stream = std::net::TcpStream::connect(addr)?;
     write!(
         stream,
-        "POST {path} HTTP/1.1\r\nHost: {addr}\r\n{ACTION_HEADER}: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{ACTION_HEADER}: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     )?;
     let mut response = String::new();
     stream.read_to_string(&mut response)?;

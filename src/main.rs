@@ -67,6 +67,32 @@ enum Action {
     ToggleVisible,
     /// Reset the live meter.
     Reset,
+    /// Show overlay and capture state without changing anything.
+    Status,
+}
+
+fn status_text(live: &serde_json::Value) -> String {
+    let yes_no = |v: &serde_json::Value| if v.as_bool() == Some(true) { "ja" } else { "nein" };
+    let o = &live["overlay"];
+    let c = &live["capture"];
+    let connection = if c["permission"].as_bool() != Some(true) {
+        "keine Capture-Berechtigung (setcap fehlt)".to_string()
+    } else if let Some(port) = c["locked_port"].as_u64() {
+        format!("verbunden (Port {port}, {})", c["device"].as_str().unwrap_or("?"))
+    } else if c["game_running"].as_bool() == Some(true) {
+        "Spiel läuft, suche Verbindung".to_string()
+    } else {
+        "AION2 nicht gestartet".to_string()
+    };
+    format!(
+        "Overlay sichtbar: {}\nOverlay gesperrt: {}\nVerbindung:       {}\nCharakter:        {}\nOrt:              {}\nPing:             {}",
+        yes_no(&o["visible"]),
+        yes_no(&o["locked"]),
+        connection,
+        live["character"].as_str().unwrap_or("–"),
+        live["dungeon"].as_str().unwrap_or("–"),
+        live["ping_ms"].as_i64().map(|p| format!("{p} ms")).unwrap_or_else(|| "–".into()),
+    )
 }
 
 fn default_db() -> PathBuf {
@@ -95,13 +121,21 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(Command::Ctl { action }) = cli.command {
         let local = SocketAddr::new(if cli.listen.is_unspecified() { [127, 0, 0, 1].into() } else { cli.listen }, cli.port);
-        let path = match action {
-            Action::ToggleLock => "/api/overlay/toggle-lock",
-            Action::ToggleVisible => "/api/overlay/toggle-visible",
-            Action::Reset => "/api/reset",
+        let (method, path) = match action {
+            Action::ToggleLock => ("POST", "/api/overlay/toggle-lock"),
+            Action::ToggleVisible => ("POST", "/api/overlay/toggle-visible"),
+            Action::Reset => ("POST", "/api/reset"),
+            Action::Status => ("GET", "/api/live"),
         };
-        let body = web::send_action(local, path).context("Läuft aion2-meter?")?;
-        println!("{body}");
+        let body = web::request(local, method, path).context("Läuft aion2-meter?")?;
+        if matches!(action, Action::Status) {
+            let mut live: serde_json::Value = serde_json::from_str(&body)?;
+            // The live snapshot trails a toggle by up to half a second.
+            live["overlay"] = serde_json::from_str(&web::request(local, "GET", "/api/overlay")?)?;
+            println!("{}", status_text(&live));
+        } else {
+            println!("{body}");
+        }
         return Ok(());
     }
 

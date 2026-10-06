@@ -36,8 +36,10 @@ write_cfg "${g[@]}" --key skippager     true
 write_cfg "${g[@]}" --key skippagerrule 2
 write_cfg "${g[@]}" --key skipswitcher  true
 write_cfg "${g[@]}" --key skipswitcherrule 2
-write_cfg "${g[@]}" --key acceptfocus   false
-write_cfg "${g[@]}" --key acceptfocusrule 2
+# No "accept focus: no" here: with it, KWin refused the overlay's own move
+# request, so dragging its header did nothing.
+write_cfg "${g[@]}" --key acceptfocus     --delete
+write_cfg "${g[@]}" --key acceptfocusrule --delete
 
 # Tell KWin to reload its rules.
 if command -v qdbus6 >/dev/null; then qdbus6 org.kde.KWin /KWin reconfigure

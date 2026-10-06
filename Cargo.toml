@@ -1,6 +1,6 @@
 [package]
 name = "aion2-meter"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Standalone AION 2 damage meter for Linux: packet capture, in-game overlay, web dashboard and run history"
