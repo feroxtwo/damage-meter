@@ -162,9 +162,9 @@ impl Overlay {
             p.text(
                 inner.left_center() + Vec2::new(6.0, 0.0),
                 Align2::LEFT_CENTER,
-                format!("{}. {}", i + 1, name),
+                format!("{}. {}{}", i + 1, if row.dead { "† " } else { "" }, name),
                 font.clone(),
-                Color32::WHITE,
+                if row.dead { Color32::from_gray(170) } else { Color32::WHITE },
             );
             let right = if show_dps {
                 format!("{}  {}/s  {:>3.0}%", short_number(row.damage), short_number(row.dps), row.share)

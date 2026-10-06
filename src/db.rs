@@ -1,6 +1,6 @@
 //! The run history: every dungeon run, its party and its boss fights, in SQLite.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
@@ -90,10 +90,32 @@ CREATE TABLE IF NOT EXISTS fight_players (
     combat_power    INTEGER,
     server_id       INTEGER,
     is_self         INTEGER NOT NULL DEFAULT 0,
+    hits_received   INTEGER NOT NULL DEFAULT 0,
+    died            INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (fight_id, actor_id)
 );
 CREATE INDEX IF NOT EXISTS fight_players_name ON fight_players(name);
 "#;
+
+/// Columns added after the first release, for databases created by it.
+const MIGRATIONS: &[(&str, &str, &str)] = &[
+    ("fight_players", "hits_received", "INTEGER NOT NULL DEFAULT 0"),
+    ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
+];
+
+fn migrate(conn: &Connection) -> Result<()> {
+    for (table, column, decl) in MIGRATIONS {
+        let exists: bool = conn.query_row(
+            &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
+            params![column],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
+        }
+    }
+    Ok(())
+}
 
 pub struct Db {
     conn: Mutex<Connection>,
@@ -149,6 +171,7 @@ impl Db {
         }
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -156,6 +179,7 @@ impl Db {
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -275,7 +299,14 @@ impl Db {
 
     /// Store boss fights. A fight saved again (it went on after a pause)
     /// replaces its earlier copy.
-    pub fn save_fights(&self, records: &[FightRecord], fallback_dungeon: i32, self_names: &[String], local_actor: Option<i64>) -> Result<usize> {
+    pub fn save_fights(
+        &self,
+        records: &[FightRecord],
+        fallback_dungeon: i32,
+        self_names: &[String],
+        local_actor: Option<i64>,
+        dead: &HashSet<i32>,
+    ) -> Result<usize> {
         if records.is_empty() {
             return Ok(0);
         }
@@ -328,15 +359,16 @@ impl Db {
             for actor in &record.actors {
                 let dmg = damage.get(&actor.actor_id).copied().unwrap_or(0);
                 let healed = heal.get(&actor.actor_id).copied().unwrap_or(0) + actor.party_heal;
-                if dmg == 0 && healed == 0 {
+                if dmg == 0 && healed == 0 && actor.damage_received == 0 {
                     continue;
                 }
                 let is_self = self_names.iter().any(|n| n == &actor.nickname)
                     || local_actor == Some(actor.actor_id as i64);
                 tx.execute(
                     "INSERT OR REPLACE INTO fight_players(fight_id, actor_id, name, job, damage, dps, share, heal,
-                                                         damage_received, combat_power, server_id, is_self)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                                                         damage_received, combat_power, server_id, is_self,
+                                                         hits_received, died)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                     params![
                         record.id,
                         actor.actor_id,
@@ -349,7 +381,9 @@ impl Db {
                         actor.damage_received,
                         actor.combat_power,
                         actor.server_id,
-                        is_self
+                        is_self,
+                        actor.hits_received,
+                        dead.contains(&actor.actor_id)
                     ],
                 )?;
                 // Everyone who fought alongside you in a run is in its party,
@@ -457,8 +491,8 @@ impl Db {
         )?;
         let mut fights = rows_to_json(&mut stmt, params![run_id])?;
         let mut stmt = conn.prepare(
-            "SELECT name, job, damage, dps, share, heal, is_self FROM fight_players WHERE fight_id = ?1
-             ORDER BY damage DESC",
+            "SELECT name, job, damage, dps, share, heal, damage_received, hits_received, died, is_self
+             FROM fight_players WHERE fight_id = ?1 ORDER BY damage DESC",
         )?;
         for fight in &mut fights {
             let id = fight["id"].as_str().unwrap_or_default().to_string();
@@ -468,7 +502,8 @@ impl Db {
         }
         let mut stmt = conn.prepare(
             "SELECT fp.name, MAX(fp.job) AS job, SUM(fp.damage) AS damage,
-                    SUM(fp.damage) * 1000.0 / MAX(SUM(f.duration_ms), 1) AS dps, MAX(fp.is_self) AS is_self
+                    SUM(fp.damage) * 1000.0 / MAX(SUM(f.duration_ms), 1) AS dps, MAX(fp.is_self) AS is_self,
+                    SUM(fp.damage_received) AS damage_received, SUM(fp.died) AS deaths
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE f.run_id = ?1 AND f.is_train = 0
              GROUP BY fp.name ORDER BY damage DESC",
@@ -493,7 +528,8 @@ impl Db {
         let record: Option<FightRecord> = fight["record_json"].as_str().and_then(|s| serde_json::from_str(s).ok());
         fight.as_object_mut().map(|o| o.remove("record_json"));
         let mut stmt = conn.prepare(
-            "SELECT actor_id, name, job, damage, dps, share, heal, damage_received, combat_power, is_self
+            "SELECT actor_id, name, job, damage, dps, share, heal, damage_received, hits_received, died,
+                    combat_power, is_self
              FROM fight_players WHERE fight_id = ?1 ORDER BY damage DESC",
         )?;
         let mut players = rows_to_json(&mut stmt, params![fight_id])?;
@@ -515,6 +551,7 @@ impl Db {
                             "crit_rate": s.crit as f64 * 100.0 / hits as f64,
                             "back_rate": s.back as f64 * 100.0 / hits as f64,
                             "perfect_rate": s.perfect as f64 * 100.0 / hits as f64,
+                            "parry_rate": s.parry as f64 * 100.0 / hits as f64,
                             "max": s.max_dmg,
                             "is_dot": s.is_dot,
                         })
@@ -552,6 +589,36 @@ impl Db {
         Ok(rows)
     }
 
+    /// Your DPS on every kill of each boss, oldest first, for the trend chart.
+    pub fn boss_history(&self) -> Result<Value> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
+                    fp.dps, fp.share, fp.died, fp.job
+             FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> ''
+             ORDER BY f.started_at",
+        )?;
+        let rows = rows_to_json(&mut stmt, [])?;
+        let mut bosses: Vec<(String, Vec<Value>)> = Vec::new();
+        for mut row in rows {
+            let boss = row["boss"].as_str().unwrap_or_default().to_string();
+            let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
+            row["difficulty"] = json!(names::dungeon_difficulty(id));
+            match bosses.iter_mut().find(|(b, _)| *b == boss) {
+                Some((_, list)) => list.push(row),
+                None => bosses.push((boss, vec![row])),
+            }
+        }
+        bosses.sort_by_key(|(_, list)| std::cmp::Reverse(list.len()));
+        Ok(Value::Array(
+            bosses
+                .into_iter()
+                .map(|(boss, kills)| json!({ "boss": boss, "kills": kills }))
+                .collect(),
+        ))
+    }
+
     pub fn summary(&self) -> Result<Value> {
         let conn = self.conn.lock();
         let (runs, play_ms): (i64, i64) = conn.query_row(
@@ -586,6 +653,11 @@ impl Db {
              GROUP BY day ORDER BY day",
         )?;
         let per_day = rows_to_json(&mut stmt, [])?;
+        let my_deaths: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(died), 0) FROM fight_players WHERE is_self = 1",
+            [],
+            |r| r.get(0),
+        )?;
         let mut stmt = conn.prepare("SELECT name, server_id, job, level, last_seen FROM my_characters ORDER BY last_seen DESC")?;
         let mut characters = rows_to_json(&mut stmt, [])?;
         decorate_job(&mut characters);
@@ -598,6 +670,7 @@ impl Db {
             "my_best": my_best,
             "per_day": per_day,
             "characters": characters,
+            "my_deaths": my_deaths,
         }))
     }
 }
@@ -645,6 +718,72 @@ mod tests {
         assert!(!names.contains(&"Me".to_string()));
         assert_eq!(names.len(), 5);
         assert_eq!(top[0]["favourite"], "Ferocious Horn Den");
+    }
+
+    fn record(id: &str, start: i64, my_dmg: i32) -> FightRecord {
+        serde_json::from_value(json!({
+            "id": id, "bossName": "Kargos", "targetId": 9, "startTimeMs": start, "durationMs": 10_000,
+            "totalDamage": my_dmg + 500, "jobs": [], "dungeonId": 600093,
+            "details": { "targetId": 9, "totalTargetDamage": my_dmg + 500, "battleTime": 10_000, "skills": [
+                { "actorId": 1, "code": 11, "name": "Hieb", "time": 4, "dmg": my_dmg, "multiHitCount": 0,
+                  "multiHitDamage": 0, "crit": 1, "parry": 1, "back": 2, "perfect": 0, "double": 0,
+                  "smite": 0, "powershard": 0, "regen": 0, "hitTimestamps": [1, 2] },
+                { "actorId": 2, "code": 12, "name": "Stich", "time": 2, "dmg": 500, "multiHitCount": 0,
+                  "multiHitDamage": 0, "crit": 0, "parry": 0, "back": 0, "perfect": 0, "double": 0,
+                  "smite": 0, "powershard": 0, "regen": 0 }
+            ]},
+            "actors": [
+                { "actorId": 1, "nickname": "Me", "job": "치유성", "damageReceived": 300, "hitsReceived": 3 },
+                { "actorId": 2, "nickname": "Anna", "job": "검성", "dbid": 5 }
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn fights_keep_deaths_damage_taken_and_feed_the_boss_history() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        let dead: HashSet<i32> = [1].into();
+        db.save_fights(&[record("a", 1_000, 1_500)], 0, &["Me".into()], None, &dead).unwrap();
+        db.save_fights(&[record("b", 50_000, 3_000)], 0, &["Me".into()], None, &HashSet::new()).unwrap();
+
+        let fight = db.fight_detail("a").unwrap().unwrap();
+        let me = &fight["players"][0];
+        assert_eq!(me["name"], "Me");
+        assert_eq!(me["died"], 1);
+        assert_eq!(me["damage_received"], 300);
+        assert_eq!(me["hits_received"], 3);
+        assert_eq!(me["skills"][0]["parry_rate"], 25.0);
+        assert_eq!(fight["run_id"], run);
+
+        let detail = db.run_detail(run).unwrap().unwrap();
+        assert_eq!(detail["members"].as_array().unwrap().len(), 2, "fighters join the run");
+        assert_eq!(detail["totals"][0]["deaths"], 1);
+
+        let history = db.boss_history().unwrap();
+        assert_eq!(history[0]["boss"], "Kargos");
+        let kills = history[0]["kills"].as_array().unwrap();
+        assert_eq!(kills.len(), 2);
+        assert_eq!(kills[0]["dps"], 150.0);
+        assert_eq!(kills[1]["dps"], 300.0);
+        assert_eq!(kills[0]["difficulty"], "Schwer");
+        assert_eq!(db.summary().unwrap()["my_deaths"], 1);
+    }
+
+    #[test]
+    fn a_database_from_the_first_release_gains_the_new_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE fight_players (fight_id TEXT NOT NULL, actor_id INTEGER NOT NULL, name TEXT,
+             PRIMARY KEY (fight_id, actor_id));",
+        )
+        .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap();
+        conn.execute("INSERT INTO fight_players(fight_id, actor_id, died, hits_received) VALUES ('x', 1, 1, 2)", [])
+            .unwrap();
     }
 
     #[test]

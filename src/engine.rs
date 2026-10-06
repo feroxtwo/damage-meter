@@ -41,6 +41,8 @@ pub struct LiveRow {
     pub share: f64,
     pub combat_power: i64,
     pub is_self: bool,
+    /// Died in the current fight (the game's combat-death event).
+    pub dead: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -248,7 +250,8 @@ impl Engine {
             (records, self.live.read().rows.iter().find(|r| r.is_self).map(|r| r.id as i64))
         };
         let dungeon = self.storage.current_dungeon_id();
-        match self.db.save_fights(&records, dungeon, &self.self_names(), local) {
+        let dead = self.storage.get_dead_entities();
+        match self.db.save_fights(&records, dungeon, &self.self_names(), local, &dead) {
             Ok(0) => {}
             Ok(n) => tracing::info!("Saved {n} fight(s)"),
             Err(e) => tracing::error!("Saving fights failed: {e:#}"),
@@ -337,6 +340,7 @@ impl Engine {
     fn build_live(&self, dps: &DpsData) -> Live {
         let profile = self.storage.local_profile();
         let me = profile.name.clone().or_else(|| self.storage.local_character_name());
+        let dead = self.storage.get_dead_entities();
         let mut rows: Vec<LiveRow> = dps
             .map
             .iter()
@@ -352,6 +356,7 @@ impl Engine {
                     dps: p.dps,
                     share: p.damage_contribution,
                     combat_power: p.combat_power,
+                    dead: dead.contains(&id),
                     is_self: dps.local_player_id == Some(id as i64)
                         || (me.is_some() && me.as_deref() == Some(p.nickname.as_str())),
                 }

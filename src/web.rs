@@ -99,6 +99,10 @@ async fn partners(State(engine): State<AppState>, Query(q): Query<LimitQuery>) -
     Ok(Json(Value::Array(rows)))
 }
 
+async fn boss_history(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    engine.db.boss_history().map(Json).map_err(db_error)
+}
+
 async fn summary(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
     engine.db.summary().map(Json).map_err(db_error)
 }
@@ -167,6 +171,7 @@ pub fn router(engine: AppState) -> Router {
         .route("/api/fights/{id}", get(fight_detail))
         .route("/api/stats/partners", get(partners))
         .route("/api/stats/summary", get(summary))
+        .route("/api/stats/boss-history", get(boss_history))
         .route("/api/overlay", get(get_overlay).post(set_overlay))
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))
