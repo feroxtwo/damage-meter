@@ -17,8 +17,8 @@ Kein Discord, kein Account, nichts verlässt deinen Rechner.
 
 ```bash
 sudo dnf install rust cargo gcc git
-git clone https://github.com/feroxtwo/aion2-meter.git
-cd aion2-meter
+git clone https://github.com/feroxtwo/damage-meter.git
+cd damage-meter
 ./scripts/install.sh
 ```
 
