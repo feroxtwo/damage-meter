@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=AION2 Meter Dashboard
+Comment=Runs, Statistiken und Mitspieler
+Exec=xdg-open http://127.0.0.1:8787/
+Icon=aion2-meter
+Terminal=false
+Categories=Game;Utility;

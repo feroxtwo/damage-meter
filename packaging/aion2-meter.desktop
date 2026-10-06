@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AION2 Meter
+GenericName=Damage Meter
+Comment=Damage Meter Overlay für AION 2
+Exec=aion2-meter
+Icon=aion2-meter
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=aion2-meter

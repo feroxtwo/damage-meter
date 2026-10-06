@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>AION2 Meter Overlay</title>
+<style>
+:root { --gladiator: #c47840; --templar: #d6b65c; --ranger: #78ba54; --assassin: #c85ac8; --sorcerer: #5896ec;
+  --cleric: #ececec; --elementalist: #966ee6; --chanter: #5ad2c8; --fighter: #dc5050; --unknown: #787882; }
+html, body { margin: 0; background: transparent; color: #fff; font: 13px system-ui, sans-serif; text-shadow: 0 1px 2px #000; }
+.box { width: 330px; background: rgba(0,0,0,.55); border-radius: 8px; overflow: hidden; }
+.head { padding: 5px 8px; background: rgba(0,0,0,.35); display: flex; justify-content: space-between; color: #f0dcaa; }
+.hp { height: 6px; margin: 0 8px 4px; background: rgba(0,0,0,.6); border-radius: 3px; overflow: hidden; } .hp div { height: 100%; background: #c43434; }
+.row { position: relative; height: 21px; margin: 2px 4px; background: rgba(0,0,0,.35); border-radius: 3px; overflow: hidden; }
+.row .f { position: absolute; inset: 0 auto 0 0; opacity: .65; }
+.row .t { position: relative; display: flex; justify-content: space-between; padding: 0 6px; line-height: 21px; }
+.n { font-family: ui-monospace, monospace; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="box"><div class="head"><span id="t">Kein Ziel</span><span class="n" id="time"></span></div>
+<div class="hp"><div id="hp" style="width:0"></div></div><div id="rows"></div><div style="height:4px"></div></div>
+<script>
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v) => v >= 1e6 ? (v/1e6).toFixed(2) + 'M' : v >= 1e3 ? (v/1e3).toFixed(1) + 'K' : Math.round(v);
+const dur = (ms) => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+async function tick() {
+  try {
+    const l = await (await fetch('/api/live')).json();
+    document.getElementById('t').textContent = l.target_name || 'Kein Ziel';
+    document.getElementById('time').textContent = dur(l.battle_time_ms);
+    document.getElementById('hp').style.width = ((l.target_hp ?? 0) * 100) + '%';
+    const top = Math.max(1, ...l.rows.map(r => r.damage));
+    document.getElementById('rows').innerHTML = l.rows.slice(0, l.overlay.max_rows).map((r, i) => `<div class="row">
+      <div class="f" style="width:${r.damage / top * 100}%;background:var(--${r.class_key})"></div>
+      <div class="t"><span>${i + 1}. ${esc(r.name)}</span><span class="n">${num(r.damage)} ${num(r.dps)}/s ${r.share.toFixed(0)}%</span></div></div>`).join('');
+  } catch (e) {}
+}
+setInterval(tick, 500); tick();
+</script>
+</body>
+</html>

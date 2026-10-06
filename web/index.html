@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AION2 Meter</title>
+<style>
+:root {
+  --bg: #0e1117; --panel: #161b24; --panel2: #1d2430; --line: #2a3342;
+  --text: #e6e8ee; --muted: #8e98aa; --gold: #f0c674; --accent: #6aa6ff; --red: #e05858; --green: #5fcf7a;
+  --gladiator: #c47840; --templar: #d6b65c; --ranger: #78ba54; --assassin: #c85ac8; --sorcerer: #5896ec;
+  --cleric: #ececec; --elementalist: #966ee6; --chanter: #5ad2c8; --fighter: #dc5050; --unknown: #787882;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 24px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 17px; letter-spacing: .5px; color: var(--gold); }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { background: none; border: 0; color: var(--muted); padding: 7px 14px; border-radius: 6px; cursor: pointer; font: inherit; }
+nav button.active, nav button:hover { background: var(--panel2); color: var(--text); }
+#status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+main { max-width: 1180px; margin: 0 auto; padding: 20px; }
+section { display: none; } section.active { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.card h2 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.kpi .v { font-size: 26px; font-weight: 700; } .kpi .l { color: var(--muted); font-size: 12px; }
+.bar { position: relative; min-height: 28px; background: var(--panel2); border-radius: 5px; margin: 5px 0; overflow: hidden; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; opacity: .38; border-right: 3px solid currentColor; }
+.bar .lbl { position: relative; display: flex; justify-content: space-between; align-items: center; min-height: 28px; padding: 3px 10px; gap: 10px; text-shadow: 0 1px 2px #000; }
+.bar .lbl > span:last-child { white-space: nowrap; }
+.bar.me { outline: 1px solid var(--gold); }
+.num { font-variant-numeric: tabular-nums; font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 13px; }
+.hp { height: 10px; background: var(--panel2); border-radius: 5px; overflow: hidden; margin-top: 8px; }
+.hp div { height: 100%; background: var(--red); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+tr.click { cursor: pointer; } tr.click:hover { background: var(--panel2); }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 10px; background: var(--panel2); margin: 2px 3px 2px 0; font-size: 12px; }
+.chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chip.me { color: var(--gold); }
+.muted { color: var(--muted); }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #2b3a55; color: #b9d0ff; margin-left: 6px; }
+.badge.Schwer { background: #552b2b; color: #ffb9b9; } .badge.Normal { background: #2b4a35; color: #b9ffcb; }
+button.btn, select, input[type=text] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+button.btn:hover { border-color: var(--accent); } button.danger:hover { border-color: var(--red); color: var(--red); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.partner { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.partner:last-child { border: 0; }
+.rank { font-size: 22px; font-weight: 800; color: var(--gold); text-align: center; }
+.partner .name { font-size: 16px; font-weight: 600; }
+.partner .count { font-size: 24px; font-weight: 700; text-align: right; } .partner .count small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.spark { display: flex; align-items: flex-end; gap: 3px; height: 80px; }
+.spark div { flex: 1; background: var(--accent); opacity: .75; border-radius: 2px 2px 0 0; min-height: 2px; }
+.back { margin-bottom: 12px; }
+details summary { cursor: pointer; padding: 6px 0; }
+label.set { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚔ AION2 Meter</h1>
+  <nav>
+    <button data-tab="live" class="active">Live</button>
+    <button data-tab="runs">Runs</button>
+    <button data-tab="stats">Statistik</button>
+    <button data-tab="settings">Overlay</button>
+  </nav>
+  <div id="status"><span class="dot" id="statusDot"></span><span id="statusText">…</span></div>
+</header>
+<main>
+  <section id="live" class="active">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div style="font-size:20px;font-weight:700" id="liveTarget">Kein Ziel</div>
+          <div class="muted" id="liveSub"></div>
+        </div>
+        <div class="row">
+          <select id="targetMode">
+            <option value="bossTargets">Bosse</option>
+            <option value="mostDamage">Meister Schaden</option>
+            <option value="lastHitByMe">Zuletzt von mir getroffen</option>
+            <option value="allTargets">Alle Ziele</option>
+            <option value="trainTargets">Trainingspuppe</option>
+          </select>
+          <button class="btn" id="resetBtn">Zurücksetzen</button>
+        </div>
+      </div>
+      <div class="hp" id="liveHp" style="display:none"><div></div></div>
+    </div>
+    <div class="card"><div id="liveRows"></div></div>
+  </section>
+
+  <section id="runs">
+    <div id="runList">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:10px">
+          <h2 style="margin:0">Expeditionen</h2>
+          <select id="dungeonFilter"><option value="">Alle Dungeons</option></select>
+        </div>
+        <table><thead><tr><th>Datum</th><th>Dungeon</th><th>Dauer</th><th>Bosse</th><th>Gruppe</th><th>Meine DPS</th></tr></thead>
+        <tbody id="runRows"></tbody></table>
+        <div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="moreRuns">Mehr laden</button></div>
+      </div>
+    </div>
+    <div id="runDetail" style="display:none"></div>
+  </section>
+
+  <section id="stats">
+    <div class="grid" id="kpis"></div>
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-top:16px">
+      <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
+      <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
+      <div class="card"><h2>Meine beste DPS pro Boss</h2><div id="myBest"></div></div>
+      <div class="card"><h2>Runs der letzten 30 Tage</h2><div class="spark" id="perDay"></div><div class="muted" id="perDayLbl" style="font-size:12px;margin-top:6px"></div></div>
+    </div>
+  </section>
+
+  <section id="settings">
+    <div class="card">
+      <h2>Overlay</h2>
+      <label class="set">Sichtbar <input type="checkbox" data-k="visible"></label>
+      <label class="set">Gesperrt (Klicks gehen durch ans Spiel) <input type="checkbox" data-k="locked"></label>
+      <label class="set">Hintergrund-Deckkraft <input type="range" min="0" max="1" step="0.05" data-k="opacity"></label>
+      <label class="set">Größe <input type="range" min="0.6" max="2" step="0.05" data-k="scale"></label>
+      <label class="set">Max. Zeilen <input type="range" min="1" max="12" step="1" data-k="max_rows"></label>
+      <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
+      <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
+    </div>
+    <div class="card">
+      <h2>Tastenkürzel unter KDE</h2>
+      <p class="muted">Wayland erlaubt Apps keine globalen Hotkeys. Leg sie in <b>Systemeinstellungen → Tastatur → Kurzbefehle → Neu → Befehl</b> an:</p>
+      <p><code>aion2-meter ctl toggle-lock</code> Overlay sperren/entsperren<br>
+         <code>aion2-meter ctl toggle-visible</code> Overlay ein-/ausblenden<br>
+         <code>aion2-meter ctl reset</code> Meter zurücksetzen</p>
+      <p class="muted">Browser-Overlay (z.&nbsp;B. für OBS): <a style="color:var(--accent)" href="/overlay">/overlay</a></p>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v) => { v = Number(v) || 0; const a = Math.abs(v);
+  if (a >= 1e9) return (v/1e9).toFixed(2).replace('.', ',') + 'B';
+  if (a >= 1e6) return (v/1e6).toFixed(2).replace('.', ',') + 'M';
+  if (a >= 1e3) return (v/1e3).toFixed(1).replace('.', ',') + 'K';
+  return Math.round(v).toString(); };
+const dur = (ms) => { const s = Math.max(0, Math.round((ms || 0) / 1000)); const h = Math.floor(s/3600), m = Math.floor(s/60)%60, x = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${m}:${String(x).padStart(2,'0')}`; };
+const date = (ms) => ms ? new Date(ms).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '';
+const color = (k) => `var(--${k || 'unknown'})`;
+const api = (path, opts = {}) => fetch(path, { ...opts, headers: { 'x-a2m': '1', 'content-type': 'application/json', ...(opts.headers || {}) } })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.status === 204 ? null : r.json(); });
+const chip = (m) => `<span class="chip ${m.is_self ? 'me' : ''}" title="${esc(m.class_name)}"><i style="background:${color(m.class_key)}"></i>${esc(m.name)}</span>`;
+const badge = (d) => d ? `<span class="badge ${esc(d)}">${esc(d)}</span>` : '';
+
+// Tabs
+let tab = location.hash.slice(1) || 'live';
+function show(t) {
+  tab = t; location.hash = t;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === t));
+  if (t === 'runs') loadRuns(true);
+  if (t === 'stats') loadStats();
+  if (t === 'settings') loadSettings();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+
+// Live
+function bars(rows, opts = {}) {
+  if (!rows.length) return `<div class="empty">${opts.empty || 'Noch kein Schaden.'}</div>`;
+  const top = Math.max(...rows.map(r => r.damage), 1);
+  const sum = rows.reduce((a, r) => a + (r.damage || 0), 0) || 1;
+  return rows.map((r, i) => `<div class="bar ${r.is_self ? 'me' : ''}">
+    <div class="fill" style="width:${(r.damage / top * 100).toFixed(1)}%;background:${color(r.class_key)};color:${color(r.class_key)}"></div>
+    <div class="lbl"><span>${opts.noRank ? '' : (i + 1) + '. '}<b>${esc(r.name)}</b> <span class="muted">${esc(r.class_name || '')}</span></span>
+    <span class="num">${opts.right ? opts.right(r) : `${num(r.damage)} · ${num(r.dps)}/s · ${(r.share ?? (r.damage / sum * 100)).toFixed(1).replace('.', ',')}%`}</span></div></div>`).join('');
+}
+function setStatus(c) {
+  let col = 'var(--muted)', txt = 'AION2 nicht gestartet';
+  if (!c.permission) { col = 'var(--red)'; txt = 'Keine Capture-Berechtigung (setcap fehlt)'; }
+  else if (c.error) { col = 'var(--red)'; txt = 'Capture-Fehler: ' + c.error; }
+  else if (c.locked_port) { col = 'var(--green)'; txt = `Verbunden (Port ${c.locked_port}, ${c.device})`; }
+  else if (c.game_running) { col = 'var(--gold)'; txt = 'Suche Spielverbindung …'; }
+  $('#statusDot').style.background = col; $('#statusText').textContent = txt;
+}
+async function pollLive() {
+  try {
+    const l = await api('/api/live');
+    setStatus(l.capture);
+    if (tab === 'live') {
+      $('#liveTarget').textContent = l.target_name || 'Kein Ziel';
+      const dps = l.battle_time_ms ? l.total_damage * 1000 / l.battle_time_ms : 0;
+      $('#liveSub').textContent = [l.dungeon, dur(l.battle_time_ms), num(l.total_damage) + ' Schaden', num(dps) + '/s Gruppe',
+        l.ping_ms != null ? l.ping_ms + ' ms' : null, l.character ? 'Charakter: ' + l.character : null].filter(Boolean).join(' · ');
+      $('#liveHp').style.display = l.target_hp == null ? 'none' : 'block';
+      if (l.target_hp != null) $('#liveHp div').style.width = (l.target_hp * 100).toFixed(1) + '%';
+      $('#liveRows').innerHTML = bars(l.rows, { empty: 'Warte auf Kampf …' });
+      if (document.activeElement !== $('#targetMode')) $('#targetMode').value = l.target_mode || 'bossTargets';
+    }
+  } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar'; }
+}
+$('#resetBtn').onclick = () => api('/api/reset', { method: 'POST' });
+$('#targetMode').onchange = (e) => api('/api/target-mode', { method: 'POST', body: JSON.stringify({ mode: e.target.value }) });
+setInterval(pollLive, 1000); pollLive();
+
+// Runs
+let runOffset = 0;
+async function loadRuns(reset) {
+  $('#runDetail').style.display = 'none'; $('#runList').style.display = 'block';
+  if (reset) runOffset = 0;
+  const dungeon = $('#dungeonFilter').value;
+  const data = await api(`/api/runs?limit=50&offset=${runOffset}&dungeon=${encodeURIComponent(dungeon)}`);
+  const sel = $('#dungeonFilter'), cur = sel.value;
+  sel.innerHTML = '<option value="">Alle Dungeons</option>' + data.dungeons.map(d => `<option>${esc(d)}</option>`).join('');
+  sel.value = cur;
+  const html = data.runs.map(r => `<tr class="click" data-id="${r.id}">
+    <td>${date(r.started_at)}</td><td><b>${esc(r.dungeon_name)}</b>${badge(r.difficulty)}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</td>
+    <td class="num">${r.ended_at ? dur(r.ended_at - r.started_at) : '<span style="color:var(--green)">läuft</span>'}</td>
+    <td class="num">${r.fights}</td><td>${r.members.map(chip).join('')}</td><td class="num">${r.my_dps ? num(r.my_dps) : '–'}</td></tr>`).join('');
+  if (reset) $('#runRows').innerHTML = html || `<tr><td colspan="6" class="empty">Noch keine Runs gespeichert. Betritt eine Expedition mit laufendem Meter.</td></tr>`;
+  else $('#runRows').insertAdjacentHTML('beforeend', html);
+  runOffset += data.runs.length;
+  $('#moreRuns').style.display = runOffset < data.total ? '' : 'none';
+  document.querySelectorAll('#runRows tr.click').forEach(tr => tr.onclick = () => openRun(tr.dataset.id));
+}
+$('#dungeonFilter').onchange = () => loadRuns(true);
+$('#moreRuns').onclick = () => loadRuns(false);
+
+async function openRun(id) {
+  const r = await api('/api/runs/' + id);
+  $('#runList').style.display = 'none';
+  const el = $('#runDetail'); el.style.display = 'block';
+  el.innerHTML = `<button class="btn back" id="backBtn">← Zurück</button>
+  <div class="card"><div class="row" style="justify-content:space-between">
+    <div><div style="font-size:20px;font-weight:700">${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
+    <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} Bosskämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
+    <div class="row"><input type="text" id="noteIn" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
+    <button class="btn danger" id="delBtn">Löschen</button></div></div>
+    <div style="margin-top:10px">${r.members.map(chip).join('')}</div></div>
+  <div class="card"><h2>Gesamt über alle Bosse</h2>${bars(r.totals)}</div>
+  ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Boss')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
+    <span class="muted"> · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden · ${date(f.started_at)}</span>
+    <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
+    ${bars(f.players)}<div class="skills" id="sk-${esc(f.id)}"></div></details></div>`).join('')}`;
+  $('#backBtn').onclick = () => loadRuns(true);
+  $('#noteBtn').onclick = () => api(`/api/runs/${id}/note`, { method: 'POST', body: JSON.stringify({ note: $('#noteIn').value }) });
+  $('#delBtn').onclick = async () => { if (confirm('Diesen Run wirklich löschen?')) { await api('/api/runs/' + id, { method: 'DELETE' }); loadRuns(true); } };
+  el.querySelectorAll('[data-fight]').forEach(b => b.onclick = (e) => { e.preventDefault(); b.closest('details').open = true; openSkills(b.dataset.fight); });
+}
+
+async function openSkills(fid) {
+  const f = await api('/api/fights/' + encodeURIComponent(fid));
+  const box = document.getElementById('sk-' + fid);
+  box.innerHTML = f.players.map(p => `<details><summary>${chip(p)} <span class="num muted">${num(p.damage)} · ${num(p.dps)}/s</span></summary>
+    <table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer</th><th>Krit</th><th>Rücken</th><th>Perfekt</th><th>Max</th></tr></thead><tbody>
+    ${(p.skills || []).map(s => `<tr><td>${esc(s.name)}${s.is_dot ? ' <span class="badge">DoT</span>' : ''}</td><td class="num">${num(s.damage)}</td>
+      <td class="num">${s.hits}</td><td class="num">${s.crit_rate.toFixed(0)}%</td><td class="num">${s.back_rate.toFixed(0)}%</td>
+      <td class="num">${s.perfect_rate.toFixed(0)}%</td><td class="num">${num(s.max)}</td></tr>`).join('')}
+    </tbody></table></details>`).join('');
+}
+
+// Stats
+async function loadStats() {
+  const [s, partners] = await Promise.all([api('/api/stats/summary'), api('/api/stats/partners?limit=5')]);
+  const kpi = (v, l) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#kpis').innerHTML = kpi(s.runs, 'Expeditionen') + kpi(s.fights, 'Bosskämpfe') + kpi(dur(s.play_ms), 'Zeit in Dungeons')
+    + kpi(s.partners, 'verschiedene Mitspieler') + kpi(s.characters.map(c => esc(c.name)).join(', ') || '–', 'Deine Charaktere');
+  $('#partners').innerHTML = partners.length ? partners.map((p, i) => `<div class="partner">
+    <div class="rank">${i + 1}</div>
+    <div><div class="name"><span class="chip"><i style="background:${color(p.class_key)}"></i>${esc(p.class_name || '?')}</span> ${esc(p.name)}</div>
+      <div class="muted" style="font-size:12px">Zuletzt ${date(p.last_run)}${p.favourite ? ' · meist in ' + esc(p.favourite) : ''}${p.avg_dps ? ' · Ø ' + num(p.avg_dps) + '/s' : ''}${p.combat_power ? ' · KP ' + num(p.combat_power) : ''}</div></div>
+    <div class="count">${p.runs}<small>Runs</small></div></div>`).join('')
+    : '<div class="empty">Noch keine Gruppen-Runs.</div>';
+  const maxD = Math.max(1, ...s.per_dungeon.map(d => d.runs));
+  $('#perDungeon').innerHTML = s.per_dungeon.map(d => `<div class="bar"><div class="fill" style="width:${d.runs / maxD * 100}%;background:var(--accent);color:var(--accent)"></div>
+    <div class="lbl"><span>${esc(d.dungeon_name)}${badge(d.difficulty)}</span><span class="num">${d.runs}× ${d.fastest_ms ? '· schnellster ' + dur(d.fastest_ms) : ''}</span></div></div>`).join('') || '<div class="empty">–</div>';
+  $('#myBest').innerHTML = bars(s.my_best.map(b => ({ name: b.boss_name, class_key: b.class_key, class_name: b.kills + '× gelegt', damage: b.best_dps })),
+    { empty: 'Noch keine Bosskämpfe.', noRank: true, right: (r) => num(r.damage) + '/s' });
+  const days = []; const map = Object.fromEntries(s.per_day.map(d => [d.day, d.runs]));
+  for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); const k = d.toLocaleDateString('sv-SE'); days.push([k, map[k] || 0]); }
+  const maxR = Math.max(1, ...days.map(d => d[1]));
+  $('#perDay').innerHTML = days.map(([k, v]) => `<div title="${k}: ${v}" style="height:${v / maxR * 100}%"></div>`).join('');
+  $('#perDayLbl').textContent = `${days[0][0]} – ${days[29][0]}`;
+}
+
+// Settings
+let settings = null;
+async function loadSettings() {
+  settings = await api('/api/overlay');
+  document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v; });
+}
+document.querySelectorAll('[data-k]').forEach(i => i.oninput = async () => {
+  if (!settings) return;
+  settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : Number(i.value);
+  settings = await api('/api/overlay', { method: 'POST', body: JSON.stringify(settings) });
+});
+
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== tab) show(t); });
+show(tab);
+</script>
+</body>
+</html>
