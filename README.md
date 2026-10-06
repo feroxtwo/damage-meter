@@ -77,6 +77,10 @@ Kurzbefehle* ändern.
 `~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem
 Spiel verbunden ist, ohne etwas umzuschalten.
 
+**Mehrere Charaktere:** Jeder Run merkt sich, mit welchem Charakter du gespielt hast. Oben im Dashboard
+filtert eine Auswahl Runs und Statistik (Top-Mitspieler, DPS-Verlauf, Bestwerte) auf einen Charakter oder
+zeigt alle zusammen. Deine eigenen Charaktere zählen nie als Mitspieler.
+
 ### Buffs, Debuffs und Mitschnitt
 
 Bei jedem gespeicherten Bosskampf (Runs → Kampf → Skills) steht, wie lange jeder Spieler welche Buffs hatte

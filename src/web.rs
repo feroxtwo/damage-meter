@@ -50,13 +50,15 @@ struct RunsQuery {
     limit: Option<i64>,
     offset: Option<i64>,
     dungeon: Option<String>,
+    character: Option<String>,
 }
 
 async fn runs(State(engine): State<AppState>, Query(q): Query<RunsQuery>) -> Result<Json<Value>, StatusCode> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
     let offset = q.offset.unwrap_or(0).max(0);
     let dungeon = q.dungeon.as_deref().filter(|d| !d.is_empty());
-    engine.db.list_runs(limit, offset, dungeon).map(Json).map_err(db_error)
+    let character = q.character.as_deref().unwrap_or("");
+    engine.db.list_runs(limit, offset, dungeon, character).map(Json).map_err(db_error)
 }
 
 async fn run_detail(State(engine): State<AppState>, Path(id): Path<i64>) -> Result<Json<Value>, StatusCode> {
@@ -89,22 +91,29 @@ async fn fight_detail(State(engine): State<AppState>, Path(id): Path<String>) ->
     engine.db.fight_detail(&id).map_err(db_error)?.map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
+/// `?character=Name` limits a statistic to one of your characters.
 #[derive(Deserialize)]
-struct LimitQuery {
+struct StatsQuery {
     limit: Option<i64>,
+    #[serde(default)]
+    character: String,
 }
 
-async fn partners(State(engine): State<AppState>, Query(q): Query<LimitQuery>) -> Result<Json<Value>, StatusCode> {
-    let rows = engine.db.top_partners(q.limit.unwrap_or(5).clamp(1, 100)).map_err(db_error)?;
+async fn partners(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
+    let rows = engine.db.top_partners(q.limit.unwrap_or(5).clamp(1, 100), &q.character).map_err(db_error)?;
     Ok(Json(Value::Array(rows)))
 }
 
-async fn boss_history(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
-    engine.db.boss_history().map(Json).map_err(db_error)
+async fn boss_history(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
+    engine.db.boss_history(&q.character).map(Json).map_err(db_error)
 }
 
-async fn summary(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
-    engine.db.summary().map(Json).map_err(db_error)
+async fn summary(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
+    engine.db.summary(&q.character).map(Json).map_err(db_error)
+}
+
+async fn characters(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    engine.db.characters().map(|c| Json(Value::Array(c))).map_err(db_error)
 }
 
 async fn get_overlay(State(engine): State<AppState>) -> Json<OverlaySettings> {
@@ -176,6 +185,7 @@ pub fn router(engine: AppState) -> Router {
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
         .route("/api/runs/{id}/note", post(run_note))
         .route("/api/fights/{id}", get(fight_detail))
+        .route("/api/characters", get(characters))
         .route("/api/stats/partners", get(partners))
         .route("/api/stats/summary", get(summary))
         .route("/api/stats/boss-history", get(boss_history))

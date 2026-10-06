@@ -77,6 +77,7 @@ code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-siz
     <button data-tab="stats">Statistik</button>
     <button data-tab="settings">Overlay</button>
   </nav>
+  <select id="charSel" title="Runs und Statistik für einen Charakter" style="display:none"><option value="">Alle Charaktere</option></select>
   <div id="status"><span class="dot" id="statusDot"></span><span id="statusText">…</span></div>
 </header>
 <main>
@@ -237,11 +238,32 @@ setInterval(pollLive, 1000); pollLive();
 
 // Runs
 let runOffset = 0;
+// Character filter for runs and statistics, remembered per browser.
+let character = '';
+try { character = localStorage.getItem('a2m-character') || ''; } catch (e) {}
+const charQ = () => 'character=' + encodeURIComponent(character);
+async function loadCharacters() {
+  const list = await api('/api/characters').catch(() => []);
+  const sel = $('#charSel');
+  sel.innerHTML = '<option value="">Alle Charaktere</option>' + list.map(c =>
+    `<option value="${esc(c.name)}">${esc(c.name)}${c.class_name ? ' · ' + esc(c.class_name) : ''}${c.runs ? ` (${c.runs} Runs)` : ''}</option>`).join('');
+  if (character && !list.some(c => c.name === character)) character = '';
+  sel.value = character;
+  sel.style.display = list.length ? '' : 'none';
+}
+$('#charSel').onchange = (e) => {
+  character = e.target.value;
+  try { localStorage.setItem('a2m-character', character); } catch (err) {}
+  if (tab === 'runs') { $('#dungeonFilter').value = ''; loadRuns(true); }
+  if (tab === 'stats') { loadStats(); loadBossHistory(); }
+};
+loadCharacters(); setInterval(loadCharacters, 60000);
+
 async function loadRuns(reset) {
   $('#runDetail').style.display = 'none'; $('#runList').style.display = 'block';
   if (reset) runOffset = 0;
   const dungeon = $('#dungeonFilter').value;
-  const data = await api(`/api/runs?limit=50&offset=${runOffset}&dungeon=${encodeURIComponent(dungeon)}`);
+  const data = await api(`/api/runs?limit=50&offset=${runOffset}&dungeon=${encodeURIComponent(dungeon)}&${charQ()}`);
   const sel = $('#dungeonFilter'), cur = sel.value;
   sel.innerHTML = '<option value="">Alle Dungeons</option>' + data.dungeons.map(d => `<option>${esc(d)}</option>`).join('');
   sel.value = cur;
@@ -301,7 +323,7 @@ async function openSkills(fid) {
 
 // Stats
 async function loadStats() {
-  const [s, partners] = await Promise.all([api('/api/stats/summary'), api('/api/stats/partners?limit=5')]);
+  const [s, partners] = await Promise.all([api('/api/stats/summary?' + charQ()), api('/api/stats/partners?limit=5&' + charQ())]);
   const kpi = (v, l) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   $('#kpis').innerHTML = kpi(s.runs, 'Expeditionen') + kpi(s.fights, 'Bosskämpfe') + kpi(dur(s.play_ms), 'Zeit in Dungeons')
     + kpi(s.partners, 'verschiedene Mitspieler') + kpi(s.my_deaths ?? 0, 'eigene Tode in Bosskämpfen') + kpi(s.characters.map(c => esc(c.name)).join(', ') || '–', 'Deine Charaktere');
@@ -326,7 +348,7 @@ async function loadStats() {
 // Boss DPS trend: one series (your DPS per kill), so no legend; the title names it.
 let bossHistory = [];
 async function loadBossHistory() {
-  bossHistory = await api('/api/stats/boss-history');
+  bossHistory = await api('/api/stats/boss-history?' + charQ());
   const sel = $('#bossSel'), cur = sel.value;
   sel.innerHTML = bossHistory.map((b, i) => `<option value="${i}">${esc(b.boss)} (${b.kills.length}×)</option>`).join('');
   if (cur && cur < bossHistory.length) sel.value = cur;

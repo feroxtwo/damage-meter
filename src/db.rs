@@ -471,7 +471,9 @@ impl Db {
 
     // ── queries for the web app ───────────────────────────────────────────
 
-    pub fn list_runs(&self, limit: i64, offset: i64, dungeon: Option<&str>) -> Result<Value> {
+    /// `character` limits everything to runs played on that character; empty
+    /// means all of them.
+    pub fn list_runs(&self, limit: i64, offset: i64, dungeon: Option<&str>, character: &str) -> Result<Value> {
         let conn = self.conn.lock();
         let filter = dungeon.unwrap_or("");
         let mut stmt = conn.prepare(
@@ -483,10 +485,10 @@ impl Db {
                     (SELECT ROUND(AVG(fp.dps)) FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
                        WHERE f.run_id = r.id AND fp.is_self = 1) AS my_dps
              FROM runs r
-             WHERE (?3 = '' OR r.dungeon_name = ?3)
+             WHERE (?3 = '' OR r.dungeon_name = ?3) AND (?4 = '' OR r.character = ?4)
              ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2",
         )?;
-        let mut rows = rows_to_json(&mut stmt, params![limit, offset, filter])?;
+        let mut rows = rows_to_json(&mut stmt, params![limit, offset, filter, character])?;
         for row in &mut rows {
             let members: Vec<Value> = row["members"]
                 .as_str()
@@ -505,13 +507,13 @@ impl Db {
             row["members"] = Value::Array(members);
         }
         let total: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1)",
-            params![filter],
+            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1) AND (?2 = '' OR character = ?2)",
+            params![filter, character],
             |r| r.get(0),
         )?;
         let dungeons: Vec<String> = conn
-            .prepare("SELECT DISTINCT dungeon_name FROM runs ORDER BY dungeon_name")?
-            .query_map([], |r| r.get(0))?
+            .prepare("SELECT DISTINCT dungeon_name FROM runs WHERE (?1 = '' OR character = ?1) ORDER BY dungeon_name")?
+            .query_map(params![character], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?;
         Ok(json!({ "runs": rows, "total": total, "dungeons": dungeons }))
     }
@@ -624,7 +626,7 @@ impl Db {
     }
 
     /// The players you most often ran expeditions with.
-    pub fn top_partners(&self, limit: i64) -> Result<Vec<Value>> {
+    pub fn top_partners(&self, limit: i64, character: &str) -> Result<Vec<Value>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT m.name, MAX(m.job) AS job, MAX(m.server_id) AS server_id,
@@ -632,32 +634,55 @@ impl Db {
                     MAX(r.started_at) AS last_run,
                     MAX(m.combat_power) AS combat_power,
                     (SELECT ROUND(AVG(fp.dps)) FROM fight_players fp
-                       WHERE fp.name = m.name AND fp.is_self = 0) AS avg_dps,
+                       JOIN fights f ON f.id = fp.fight_id LEFT JOIN runs r3 ON r3.id = f.run_id
+                       WHERE fp.name = m.name AND fp.is_self = 0 AND (?2 = '' OR r3.character = ?2)) AS avg_dps,
                     (SELECT r2.dungeon_name FROM run_members m2 JOIN runs r2 ON r2.id = m2.run_id
-                       WHERE m2.name = m.name GROUP BY r2.dungeon_name ORDER BY COUNT(*) DESC LIMIT 1) AS favourite
+                       WHERE m2.name = m.name AND (?2 = '' OR r2.character = ?2)
+                       GROUP BY r2.dungeon_name ORDER BY COUNT(*) DESC LIMIT 1) AS favourite
              FROM run_members m JOIN runs r ON r.id = m.run_id
-             WHERE m.is_self = 0 AND r.kind = 'expedition'
+             WHERE m.is_self = 0 AND r.kind = 'expedition' AND (?2 = '' OR r.character = ?2)
                AND m.name NOT IN (SELECT name FROM my_characters)
              GROUP BY m.name
              ORDER BY runs DESC, last_run DESC
              LIMIT ?1",
         )?;
-        let mut rows = rows_to_json(&mut stmt, params![limit])?;
+        let mut rows = rows_to_json(&mut stmt, params![limit, character])?;
+        decorate_job(&mut rows);
+        Ok(rows)
+    }
+
+    /// Your characters, most recently played first: the ones the meter saw
+    /// you log in with, and any a run was recorded on.
+    pub fn characters(&self) -> Result<Vec<Value>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT c.name, c.server_id, c.job, c.level, c.last_seen,
+                    (SELECT COUNT(*) FROM runs r WHERE r.character = c.name) AS runs
+             FROM my_characters c
+             UNION ALL
+             SELECT r.character, MAX(r.server_id), '', 0, MAX(r.started_at), COUNT(*)
+             FROM runs r
+             WHERE r.character IS NOT NULL AND r.character <> ''
+               AND r.character NOT IN (SELECT name FROM my_characters)
+             GROUP BY r.character
+             ORDER BY 5 DESC",
+        )?;
+        let mut rows = rows_to_json(&mut stmt, [])?;
         decorate_job(&mut rows);
         Ok(rows)
     }
 
     /// Your DPS on every kill of each boss, oldest first, for the trend chart.
-    pub fn boss_history(&self) -> Result<Value> {
+    pub fn boss_history(&self, character: &str) -> Result<Value> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
                     fp.dps, fp.share, fp.died, fp.job
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
-             WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> ''
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
              ORDER BY f.started_at",
         )?;
-        let rows = rows_to_json(&mut stmt, [])?;
+        let rows = rows_to_json(&mut stmt, params![character])?;
         let mut bosses: Vec<(String, Vec<Value>)> = Vec::new();
         for mut row in rows {
             let boss = row["boss"].as_str().unwrap_or_default().to_string();
@@ -677,48 +702,56 @@ impl Db {
         ))
     }
 
-    pub fn summary(&self) -> Result<Value> {
+    pub fn summary(&self, character: &str) -> Result<Value> {
+        let characters = self.characters()?;
         let conn = self.conn.lock();
+        let c = character;
         let (runs, play_ms): (i64, i64) = conn.query_row(
-            "SELECT COUNT(*), COALESCE(SUM(COALESCE(ended_at, started_at) - started_at), 0) FROM runs",
-            [],
+            "SELECT COUNT(*), COALESCE(SUM(COALESCE(ended_at, started_at) - started_at), 0) FROM runs
+             WHERE (?1 = '' OR character = ?1)",
+            params![c],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
-        let fights: i64 = conn.query_row("SELECT COUNT(*) FROM fights WHERE is_train = 0", [], |r| r.get(0))?;
+        let fights: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM fights f WHERE is_train = 0 AND (?1 = '' OR EXISTS
+               (SELECT 1 FROM fight_players fp WHERE fp.fight_id = f.id AND fp.is_self = 1 AND fp.name = ?1))",
+            params![c],
+            |r| r.get(0),
+        )?;
         let partners: i64 = conn.query_row(
-            "SELECT COUNT(DISTINCT name) FROM run_members WHERE is_self = 0
-               AND name NOT IN (SELECT name FROM my_characters)",
-            [],
+            "SELECT COUNT(DISTINCT m.name) FROM run_members m JOIN runs r ON r.id = m.run_id
+             WHERE m.is_self = 0 AND (?1 = '' OR r.character = ?1)
+               AND m.name NOT IN (SELECT name FROM my_characters)",
+            params![c],
             |r| r.get(0),
         )?;
         let mut stmt = conn.prepare(
             "SELECT dungeon_name, difficulty, COUNT(*) AS runs,
                     MIN(CASE WHEN ended_at IS NOT NULL THEN ended_at - started_at END) AS fastest_ms
-             FROM runs GROUP BY dungeon_name, difficulty ORDER BY runs DESC",
+             FROM runs WHERE (?1 = '' OR character = ?1)
+             GROUP BY dungeon_name, difficulty ORDER BY runs DESC",
         )?;
-        let per_dungeon = rows_to_json(&mut stmt, [])?;
+        let per_dungeon = rows_to_json(&mut stmt, params![c])?;
         let mut stmt = conn.prepare(
             "SELECT f.boss_name, MAX(fp.dps) AS best_dps, fp.job, COUNT(*) AS kills
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
-             WHERE fp.is_self = 1 AND f.is_train = 0
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND (?1 = '' OR fp.name = ?1)
              GROUP BY f.boss_name ORDER BY best_dps DESC LIMIT 10",
         )?;
-        let mut my_best = rows_to_json(&mut stmt, [])?;
+        let mut my_best = rows_to_json(&mut stmt, params![c])?;
         decorate_job(&mut my_best);
         let mut stmt = conn.prepare(
             "SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS runs
              FROM runs WHERE started_at >= (strftime('%s', 'now') - 30 * 86400) * 1000
+               AND (?1 = '' OR character = ?1)
              GROUP BY day ORDER BY day",
         )?;
-        let per_day = rows_to_json(&mut stmt, [])?;
+        let per_day = rows_to_json(&mut stmt, params![c])?;
         let my_deaths: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(died), 0) FROM fight_players WHERE is_self = 1",
-            [],
+            "SELECT COALESCE(SUM(died), 0) FROM fight_players WHERE is_self = 1 AND (?1 = '' OR name = ?1)",
+            params![c],
             |r| r.get(0),
         )?;
-        let mut stmt = conn.prepare("SELECT name, server_id, job, level, last_seen FROM my_characters ORDER BY last_seen DESC")?;
-        let mut characters = rows_to_json(&mut stmt, [])?;
-        decorate_job(&mut characters);
         Ok(json!({
             "runs": runs,
             "fights": fights,
@@ -767,7 +800,7 @@ mod tests {
             db.upsert_members(run, &members).unwrap();
             db.end_run(run, i as i64 * 1000 + 500).unwrap();
         }
-        let top = db.top_partners(5).unwrap();
+        let top = db.top_partners(5, "").unwrap();
         let names: Vec<_> = top.iter().map(|r| r["name"].as_str().unwrap().to_string()).collect();
         assert_eq!(names[0], "Anna");
         assert_eq!(names[1], "Bob");
@@ -819,14 +852,42 @@ mod tests {
         assert_eq!(detail["members"].as_array().unwrap().len(), 2, "fighters join the run");
         assert_eq!(detail["totals"][0]["deaths"], 1);
 
-        let history = db.boss_history().unwrap();
+        let history = db.boss_history("").unwrap();
         assert_eq!(history[0]["boss"], "Kargos");
         let kills = history[0]["kills"].as_array().unwrap();
         assert_eq!(kills.len(), 2);
         assert_eq!(kills[0]["dps"], 150.0);
         assert_eq!(kills[1]["dps"], 300.0);
         assert_eq!(kills[0]["difficulty"], "Schwer");
-        assert_eq!(db.summary().unwrap()["my_deaths"], 1);
+        assert_eq!(db.summary("").unwrap()["my_deaths"], 1);
+    }
+
+    #[test]
+    fn everything_filters_by_character() {
+        let db = Db::in_memory().unwrap();
+        db.note_my_character("Main", 1304, "검성", 45, 10).unwrap();
+        db.note_my_character("Twink", 1304, "치유성", 30, 20).unwrap();
+        let a = db.start_run(600093, 0, Some("Main"), 1304).unwrap();
+        db.upsert_members(a, &[member("Main", true), member("Anna", false)]).unwrap();
+        let b = db.start_run(600092, 1_000, Some("Twink"), 1304).unwrap();
+        db.upsert_members(b, &[member("Twink", true), member("Bob", false)]).unwrap();
+        // A character only seen on a run still shows up.
+        let c = db.start_run(600092, 2_000, Some("Alt"), 1304).unwrap();
+        db.upsert_members(c, &[member("Alt", true), member("Bob", false)]).unwrap();
+
+        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 3);
+        assert_eq!(db.list_runs(10, 0, None, "Main").unwrap()["total"], 1);
+        assert_eq!(db.list_runs(10, 0, None, "Twink").unwrap()["dungeons"].as_array().unwrap().len(), 1);
+        let names = |c: &str| -> Vec<String> {
+            db.top_partners(5, c).unwrap().iter().map(|r| r["name"].as_str().unwrap().to_string()).collect()
+        };
+        assert_eq!(names("Main"), vec!["Anna"]);
+        assert_eq!(names("Twink"), vec!["Bob"]);
+        assert_eq!(names(""), vec!["Bob", "Anna"]);
+        assert_eq!(db.summary("Twink").unwrap()["runs"], 1);
+        let chars: Vec<String> =
+            db.characters().unwrap().iter().map(|r| r["name"].as_str().unwrap().to_string()).collect();
+        assert_eq!(chars, vec!["Alt", "Twink", "Main"]);
     }
 
     #[test]
@@ -877,7 +938,7 @@ mod tests {
         let run = db.start_run(600001, 0, Some("Me"), 0).unwrap();
         db.upsert_members(run, &[member("Me", true)]).unwrap();
         db.end_run(run, 10).unwrap();
-        assert_eq!(db.list_runs(10, 0, None).unwrap()["total"], 0);
+        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 0);
     }
 
     #[test]
@@ -886,11 +947,11 @@ mod tests {
         let run = db.start_run(600092, 0, Some("Me"), 1304).unwrap();
         db.upsert_members(run, &[member("Me", true), member("Anna", false)]).unwrap();
         db.end_run(run, 60_000).unwrap();
-        let list = db.list_runs(10, 0, None).unwrap();
+        let list = db.list_runs(10, 0, None, "").unwrap();
         assert_eq!(list["total"], 1);
         assert_eq!(list["runs"][0]["difficulty"], "Normal");
         assert_eq!(list["runs"][0]["members"].as_array().unwrap().len(), 2);
-        let s = db.summary().unwrap();
+        let s = db.summary("").unwrap();
         assert_eq!(s["runs"], 1);
         assert_eq!(s["play_ms"], 60_000);
         assert!(db.run_detail(run).unwrap().is_some());
