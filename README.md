@@ -1,6 +1,6 @@
 # AION2 Meter
 
-Eigenständiger Damage Meter für **AION 2 unter Linux** (getestet als Ziel: Fedora mit KDE Plasma, Wayland).
+Eigenständiger Damage Meter für **AION 2 unter Linux** (Zielplattform: Fedora mit KDE Plasma, Wayland).
 Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und speichert jede
 **Expedition** mit Gruppe und Bosskämpfen in einer **SQLite-Datenbank**, die du im Browser auswerten kannst.
 
@@ -11,7 +11,15 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 | **Statistik** | **Top 5 Mitspieler**, mit denen du am häufigsten in Expeditionen warst, Runs pro Dungeon mit Bestzeit, deine beste DPS pro Boss, Aktivität der letzten 30 Tage. |
 | **Datenbank** | `~/.local/share/aion2-meter/meter.db` (SQLite). Ein Run beginnt beim Betreten einer Instanz und endet beim Verlassen. |
 
-Kein Discord, kein Account, nichts verlässt deinen Rechner.
+Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
+
+## Neu in 0.3.1
+
+Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regulären Beenden, korrigierte Overlay-Skalierung mit stabiler Position und Updateinstallation bei laufendem Meter. Skilldetails haben Suche, Sortierung, Durchschnitt, Anteil und Skill-DPS/HPS; zusätzliche Treffermerkmale sind auf Wunsch sichtbar. Statushilfen erklären fehlende Pakete. Laufende Runs können nicht gelöscht werden, Bossstatistiken trennen Schwierigkeitsgrade und zählen erfasste Versuche.
+
+[Releaseprüfung und Testmatrix](docs/RELEASE_REVIEW_0.3.1.md) · [Noch offene reale Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md).
+
+**Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
 ## Neu in 0.3.0
 
@@ -55,7 +63,7 @@ Das Skript
 4. legt unter KDE eine **KWin-Fensterregel** an, damit das Overlay über dem Spiel bleibt,
 5. fragt, ob es die **Tastenkürzel** einrichten soll (siehe unten).
 
-Nach einem Update (`git pull && ./scripts/install.sh`) wird `setcap` erneut ausgeführt, weil eine neu gebaute Datei die Berechtigung verliert.
+Nach einem Update (`git pull && ./scripts/install.sh`) wird `setcap` erneut ausgeführt, weil eine neu gebaute Datei die Berechtigung verliert. Beende danach die laufende alte Version und starte das Meter neu. Die Datei wird atomar ersetzt; Einstellungen und Historie bleiben in deinem Benutzerverzeichnis.
 
 ## Benutzung
 
@@ -147,7 +155,7 @@ aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de
 | Overlay verschwindet hinter dem Spiel | Spiel randlos/Fenster statt Vollbild. `./scripts/install-kwin-rule.sh` erneut ausführen, oder in *Systemeinstellungen → Fensterverwaltung → Fensterregeln* für `aion2-meter` „Ebene: Overlay“ erzwingen. Alternativ `aion2-meter --x11`. |
 | Overlay lässt sich an der Kopfzeile nicht ziehen | Meta + Linksziehen. Wenn du die KWin-Regel vor Version 0.1.1 installiert hast: `./scripts/install-kwin-rule.sh` erneut ausführen (die alte Regel verbot dem Overlay den Fokus). |
 | Overlay hat schwarzen statt transparenten Hintergrund | `aion2-meter --x11` probieren und melden. |
-| Nach einem Spiel-Patch kein Schaden mehr | Der Parser stammt aus A2Tools (siehe unten). `rev` in `Cargo.toml` auf den neuesten Commit von A2Tools setzen und neu installieren. |
+| Nach einem Spiel-Patch kein Schaden mehr | Der Parser stammt aus A2Tools (siehe unten). einen für den Spiel-Patch geprüften Parser-Stand verwenden und neu installieren; ein beliebiger neuer Commit ist kein Korrektheitsnachweis. |
 
 ## Wie es funktioniert
 
@@ -213,3 +221,27 @@ npm test
 Node.js (ab Version 20) und Playwright werden ausschließlich für die Browserprüfungen benötigt. Die Anwendung selbst bleibt eine Rust-Binary mit eingebettetem HTML. `Cargo.lock` und `package-lock.json` gehören zum Repo.
 
 Der HTTP-Server akzeptiert `localhost`, Loopback-IP-Adressen und die gebundene IP mit dem richtigen Port. Bei `--listen 0.0.0.0` sind IP-Adressen im Netzwerk erlaubt. Beliebige Domainnamen werden zum Schutz gegen DNS-Rebinding abgewiesen.
+
+
+### Zeitfenster und Messgrenzen
+
+DPS/HPS verwenden die Zeit vom ersten bis zum letzten erfassten Schaden am Ziel, mindestens eine Sekunde. Leerlauf danach vergrößert dieses Fenster nicht. Run-Gesamt-DPS verwenden die Summe dieser gemeinsamen Kampfzeitfenster; nicht teilgenommene Kämpfe zählen mit null Schaden. Die persönliche DPS in der Run-Liste ist ausdrücklich der Durchschnitt der einzelnen Kämpfe. Burst ist eine eigene gleitende Fünfsekunden-Kennzahl.
+
+Heilung umfasst erfasste Heilung seit Parser-Reset, mit der angezeigten Ziel-Kampfdauer als HPS-Nenner; Overheal wird nicht abgezogen. Buffs beruhen auf Anwendung und gemeldeter Dauer. Frühes Entfernen bleibt unbekannt. Fehlende Treffermerkmale erscheinen als „—“; dies beweist keine null Prozent.
+
+### Zusätzliche Releaseprüfungen
+
+```bash
+python3 scripts/test-validation.py
+python3 scripts/test-installer.py
+node scripts/test-real-web.cjs
+# Benötigt Xvfb, xdotool und Python Pillow; keine echte Spielsitzung.
+python3 scripts/test-native.py
+python3 scripts/benchmark-history.py
+# Nach scripts/package-linux.sh (RPM-Prüfung benötigt rpm):
+python3 scripts/test-packages.py
+```
+
+Das Installer-Testskript simuliert den privilegierten setcap-Schritt. Reale Paketinstallation und Capture-Rechte müssen zusätzlich auf dem Zielsystem geprüft werden. Der Kurzbenchmark erzeugt eine isolierte synthetische Historie; er ist kein Langzeit- oder Ingame-Performancebeweis.
+
+Deinstallation: Systempakete mit dem Paketmanager entfernen. Für die Benutzerinstallation zuerst das Meter beenden, mit `./scripts/install-shortcuts.sh --remove` die KDE-Kürzel entfernen und Binary sowie die drei installierten Desktop-/Icon-Dateien unter dem gewählten Prefix löschen. `~/.local/share/aion2-meter/` enthält deine Daten und bleibt erhalten; vor bewusstem Löschen sichern. KWin-Regeln bei Bedarf in der Fensterverwaltung entfernen.

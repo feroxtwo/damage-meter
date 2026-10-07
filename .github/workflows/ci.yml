@@ -19,8 +19,11 @@ jobs:
       - run: cargo build --release --locked
       - run: python3 scripts/test-headless.py
       - run: python3 scripts/test-validation.py
-      - run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: sudo apt-get update && sudo apt-get install -y rpm xvfb xdotool python3-pil desktop-file-utils xfonts-base libegl1-mesa libgl1-mesa-dri libxkbcommon0
+      - run: python3 scripts/test-installer.py
+      - run: python3 scripts/test-native.py
       - run: ./scripts/package-linux.sh
+      - run: python3 scripts/test-packages.py
       - uses: actions/upload-artifact@v4
         with:
           name: aion2-meter-linux-packages

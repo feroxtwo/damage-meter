@@ -1,5 +1,7 @@
 # Kampfanalyse und QoL in 0.2.0
 
+> Historische Prüfung/Funktionsbeschreibung. Den aktuellen Teststand und spätere Änderungen dokumentiert [Releaseprüfung 0.3.1](RELEASE_REVIEW_0.3.1.md).
+
 Aufbauend auf Dashboard-Modernisierung und dem aktuellen `main`-Stand `854533c`. Die Änderungen zur Wiedererkennung der Verbindung, nachträglichen Bossbenennung, Aufzeichnung über Neustarts und den nativen Overlay-Schaltflächen bleiben enthalten.
 
 ## Umsetzung
