@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use a2tools_dps_meter_lib::entity::fight_record::FightRecord;
@@ -124,6 +124,7 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
         "INTEGER NOT NULL DEFAULT 0",
     ),
     ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
+    ("runs", "favorite", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
 /// SQLite's `lower()` folds ASCII only, so a search for "kälte" would miss
@@ -141,7 +142,52 @@ fn register_functions(conn: &Connection) -> Result<()> {
                 .unwrap_or_default())
         },
     )?;
+    set_world_mob_check(conn, |_| false)
+}
+
+/// `world_mob(mob_code)` is true for known monsters that are neither bosses
+/// (field bosses included) nor training dummies, i.e. ordinary world mobs and
+/// trash. Unknown codes count as notable so nothing vanishes from the list.
+fn set_world_mob_check(
+    conn: &Connection,
+    is_world_mob: impl Fn(i32) -> bool + Send + 'static,
+) -> Result<()> {
+    use rusqlite::functions::FunctionFlags;
+    conn.create_scalar_function(
+        "world_mob",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let code = ctx.get::<Option<i64>>(0)?.unwrap_or(0);
+            Ok(code > 0 && is_world_mob(code as i32))
+        },
+    )?;
     Ok(())
+}
+
+/// Which saved fights a fight search returns.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FightKind {
+    #[default]
+    All,
+    /// Bosses, field bosses, training and unknown targets.
+    Boss,
+    /// Ordinary world mobs and trash, see `world_mob()`.
+    Mob,
+}
+
+/// Filters of the dashboard's fight library.
+#[derive(Debug, Clone, Default)]
+pub struct FightSearch {
+    pub query: String,
+    pub character: String,
+    pub from: i64,
+    pub to: i64,
+    pub favorites: bool,
+    pub kind: FightKind,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -678,6 +724,14 @@ impl Db {
         Ok(count > 0)
     }
 
+    pub fn set_run_favorite(&self, run_id: i64, favorite: bool) -> Result<bool> {
+        let count = self.conn.lock().execute(
+            "UPDATE runs SET favorite = ?2 WHERE id = ?1",
+            params![run_id, favorite],
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn set_run_note(&self, run_id: i64, note: &str) -> Result<bool> {
         let count = self.conn.lock().execute(
             "UPDATE runs SET note = ?2 WHERE id = ?1",
@@ -696,12 +750,13 @@ impl Db {
         offset: i64,
         dungeon: Option<&str>,
         character: &str,
+        favorites: bool,
     ) -> Result<Value> {
         let conn = self.conn.lock();
         let filter = dungeon.unwrap_or("");
         let mut stmt = conn.prepare(
             "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
-                    r.character, r.note,
+                    r.character, r.note, r.favorite,
                     (SELECT COUNT(*) FROM fights f WHERE f.run_id = r.id AND f.is_train = 0) AS fights,
                     (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
@@ -709,9 +764,13 @@ impl Db {
                        WHERE f.run_id = r.id AND f.is_train = 0 AND fp.is_self = 1) AS my_dps
              FROM runs r
              WHERE (?3 = '' OR r.dungeon_name = ?3) AND (?4 = '' OR r.character = ?4)
+               AND (?5 = 0 OR r.favorite = 1)
              ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2",
         )?;
-        let mut rows = rows_to_json(&mut stmt, params![limit, offset, filter, character])?;
+        let mut rows = rows_to_json(
+            &mut stmt,
+            params![limit, offset, filter, character, favorites],
+        )?;
         for row in &mut rows {
             let mut members: Vec<Value> =
                 serde_json::from_str(row["members"].as_str().unwrap_or("[]"))?;
@@ -719,8 +778,9 @@ impl Db {
             row["members"] = Value::Array(members);
         }
         let total: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1) AND (?2 = '' OR character = ?2)",
-            params![filter, character],
+            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1) AND (?2 = '' OR character = ?2)
+               AND (?3 = 0 OR favorite = 1)",
+            params![filter, character, favorites],
             |r| r.get(0),
         )?;
         let dungeons: Vec<String> = conn
@@ -941,16 +1001,20 @@ impl Db {
         }
         Ok(exists)
     }
-    pub fn search_fights(
-        &self,
-        query: &str,
-        character: &str,
-        from: i64,
-        to: i64,
-        favorites: bool,
-        offset: i64,
-    ) -> Result<Value> {
+    /// Tells the database which mob codes are ordinary world mobs.
+    pub fn set_world_mob_check(&self, is_world_mob: impl Fn(i32) -> bool + Send + 'static) {
+        if let Err(e) = set_world_mob_check(&self.conn.lock(), is_world_mob) {
+            tracing::error!("Registering world mob check failed: {e:#}");
+        }
+    }
+
+    pub fn search_fights(&self, s: &FightSearch) -> Result<Value> {
         let conn = self.conn.lock();
+        let kind = match s.kind {
+            FightKind::All => 0,
+            FightKind::Boss => 1,
+            FightKind::Mob => 2,
+        };
         let sql="SELECT f.id,f.boss_name,f.dungeon_id,f.started_at,f.duration_ms,f.total_damage,f.is_train,
           COALESCE(a.favorite,0) AS favorite,COALESCE(a.note,'') AS note,COALESCE(a.tags,'') AS tags,
           (SELECT p.dps FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 LIMIT 1) AS my_dps
@@ -958,13 +1022,24 @@ impl Db {
           WHERE (instr(fold(f.boss_name||' '||COALESCE(a.note,'')||' '||COALESCE(a.tags,'')),fold(?1))>0)
            AND (?2='' OR EXISTS(SELECT 1 FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 AND p.name=?2))
            AND f.started_at>=?3 AND f.started_at<=?4 AND (?5=0 OR a.favorite=1)
-          ORDER BY f.started_at DESC LIMIT 101 OFFSET ?6";
+           AND (?8=0 OR (f.is_train=0 AND world_mob(f.mob_code))=(?8=2))
+          ORDER BY f.started_at DESC LIMIT ?7 OFFSET ?6";
         let mut rows = rows_to_json(
             &mut conn.prepare(sql)?,
-            params![query, character, from, to, favorites, offset],
+            params![
+                s.query,
+                s.character,
+                s.from,
+                s.to,
+                s.favorites,
+                s.offset,
+                s.limit + 1,
+                kind
+            ],
         )?;
-        let more = rows.len() > 100;
-        rows.truncate(100);
+        // One extra row tells the dashboard whether a next page exists.
+        let more = rows.len() as i64 > s.limit;
+        rows.truncate(s.limit.max(0) as usize);
         for r in &mut rows {
             r["difficulty"] = json!(names::dungeon_difficulty(
                 r["dungeon_id"].as_i64().unwrap_or(0) as i32
@@ -1247,7 +1322,7 @@ mod tests {
         dummy.is_train = true;
         db.save_fights(&[boss, dummy], 0, &["Me".into()], None, &HashSet::new())
             .unwrap();
-        let list = db.list_runs(10, 0, None, "").unwrap();
+        let list = db.list_runs(10, 0, None, "", false).unwrap();
         let row = list["runs"]
             .as_array()
             .unwrap()
@@ -1312,7 +1387,7 @@ mod tests {
         db.upsert_members(run, &[member("名;|\"<>&", false)])
             .unwrap();
         assert_eq!(
-            db.list_runs(10, 0, None, "").unwrap()["runs"][0]["members"][0]["name"],
+            db.list_runs(10, 0, None, "", false).unwrap()["runs"][0]["members"][0]["name"],
             "名;|\"<>&"
         );
         assert!(!db.delete_run(run).unwrap());
@@ -1479,10 +1554,22 @@ mod tests {
         db.upsert_members(c, &[member("Alt", true), member("Bob", false)])
             .unwrap();
 
-        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 3);
-        assert_eq!(db.list_runs(10, 0, None, "Main").unwrap()["total"], 1);
+        assert_eq!(db.list_runs(10, 0, None, "", false).unwrap()["total"], 3);
+        let first = db.list_runs(10, 0, None, "", false).unwrap()["runs"][0]["id"]
+            .as_i64()
+            .unwrap();
+        assert!(db.set_run_favorite(first, true).unwrap());
+        assert!(!db.set_run_favorite(-1, true).unwrap());
+        let favorites = db.list_runs(10, 0, None, "", true).unwrap();
+        assert_eq!(favorites["total"], 1);
+        assert_eq!(favorites["runs"][0]["id"], first);
+        assert_eq!(favorites["runs"][0]["favorite"], 1);
         assert_eq!(
-            db.list_runs(10, 0, None, "Twink").unwrap()["dungeons"]
+            db.list_runs(10, 0, None, "Main", false).unwrap()["total"],
+            1
+        );
+        assert_eq!(
+            db.list_runs(10, 0, None, "Twink", false).unwrap()["dungeons"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -1568,7 +1655,7 @@ mod tests {
         let run = db.start_run(600001, 0, Some("Me"), 0).unwrap();
         db.upsert_members(run, &[member("Me", true)]).unwrap();
         db.end_run(run, 10).unwrap();
-        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 0);
+        assert_eq!(db.list_runs(10, 0, None, "", false).unwrap()["total"], 0);
     }
 
     #[test]
@@ -1578,7 +1665,7 @@ mod tests {
         db.upsert_members(run, &[member("Me", true), member("Anna", false)])
             .unwrap();
         db.end_run(run, 60_000).unwrap();
-        let list = db.list_runs(10, 0, None, "").unwrap();
+        let list = db.list_runs(10, 0, None, "", false).unwrap();
         assert_eq!(list["total"], 1);
         assert_eq!(list["runs"][0]["difficulty"], "Normal");
         assert_eq!(list["runs"][0]["members"].as_array().unwrap().len(), 2);
@@ -1629,35 +1716,104 @@ mod tests {
         assert_eq!(detail["favorite"], true);
         assert_eq!(detail["analytics"]["partial"], true);
         assert_eq!(
-            db.search_fights("rotation", "Me", 0, 2000, true, 0)
-                .unwrap()["fights"]
+            db.search_fights(&FightSearch {
+                query: "rotation".into(),
+                character: "Me".into(),
+                from: 0,
+                to: 2000,
+                favorites: true,
+                limit: 100,
+                ..Default::default()
+            })
+            .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .len(),
             1
         );
         assert!(
-            db.search_fights("rotation", "Other", 0, 2000, true, 0)
-                .unwrap()["fights"]
+            db.search_fights(&FightSearch {
+                query: "rotation".into(),
+                character: "Other".into(),
+                from: 0,
+                to: 2000,
+                favorites: true,
+                limit: 100,
+                ..Default::default()
+            })
+            .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .is_empty()
         );
         assert!(
-            db.search_fights("", "Me", 2000, 3000, false, 0).unwrap()["fights"]
+            db.search_fights(&FightSearch {
+                query: "".into(),
+                character: "Me".into(),
+                from: 2000,
+                to: 3000,
+                favorites: false,
+                limit: 100,
+                ..Default::default()
+            })
+            .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .is_empty()
         );
         assert_eq!(
-            db.search_fights("AUSRÜSTUNG", "", 0, 2000, false, 0)
-                .unwrap()["fights"]
+            db.search_fights(&FightSearch {
+                query: "AUSRÜSTUNG".into(),
+                character: "".into(),
+                from: 0,
+                to: 2000,
+                favorites: false,
+                limit: 100,
+                ..Default::default()
+            })
+            .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .len(),
             1
         );
         assert!(!db.annotate("missing", true, "", "").unwrap());
+    }
+
+    #[test]
+    fn fight_library_separates_world_mobs_and_pages() {
+        let db = Db::in_memory().unwrap();
+        let mut fights = Vec::new();
+        for (id, code, start) in [("boss", 7, 1000), ("mob1", 8, 2000), ("mob2", 8, 3000)] {
+            let mut f = record(id, start, 1500);
+            f.mob_code = code;
+            fights.push(f);
+        }
+        db.save_fights(&fights, 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        db.set_world_mob_check(|code| code == 8);
+        let ids = |kind, limit, offset| {
+            let found = db
+                .search_fights(&FightSearch {
+                    to: i64::MAX,
+                    kind,
+                    limit,
+                    offset,
+                    ..Default::default()
+                })
+                .unwrap();
+            let ids: Vec<String> = found["fights"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| f["id"].as_str().unwrap().to_string())
+                .collect();
+            (ids, found["more"].as_bool().unwrap())
+        };
+        assert_eq!(ids(FightKind::Boss, 10, 0), (vec!["boss".into()], false));
+        assert_eq!(ids(FightKind::Mob, 1, 0), (vec!["mob2".into()], true));
+        assert_eq!(ids(FightKind::Mob, 1, 1), (vec!["mob1".into()], false));
+        assert_eq!(ids(FightKind::All, 10, 0).0.len(), 3);
     }
     #[test]
     fn healing_only_actor_is_retained_and_old_records_are_readable() {

@@ -331,6 +331,12 @@ impl Engine {
                 .unwrap_or_default()
                 .into_iter()
                 .collect();
+        let lookup = npcs.clone();
+        db.set_world_mob_check(move |code| {
+            !lookup.get_npc_name(code).is_empty()
+                && !lookup.is_boss(code)
+                && !lookup.is_training_dummy(code)
+        });
         let named = db.fill_missing_boss_names(|code| npcs.get_npc_name(code));
         if let Ok(n @ 1..) = named {
             tracing::info!("Named {n} saved fight(s)");
