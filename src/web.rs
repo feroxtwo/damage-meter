@@ -61,12 +61,22 @@ fn display(engine: &Engine, mut value: Value) -> Value {
 }
 async fn skill_icon(Path(name): Path<String>) -> Response {
     match crate::skills::icon(&name) {
-        Some(bytes) => ([(header::CONTENT_TYPE, "image/webp")], bytes).into_response(),
+        // Bundled into the binary, so they only change with an update. The OBS
+        // overlay redraws its rows every 500 ms; without this every class icon
+        // was fetched again on each redraw and flickered.
+        Some(bytes) => (
+            [
+                (header::CONTENT_TYPE, "image/webp"),
+                (header::CACHE_CONTROL, "public, max-age=86400"),
+            ],
+            bytes,
+        )
+            .into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
-async fn skill_catalog() -> Json<Value> {
-    Json(crate::skills::all())
+async fn skill_catalog() -> Json<&'static Value> {
+    Json(&crate::skills::ALL)
 }
 async fn qol_js() -> impl IntoResponse {
     (
@@ -461,10 +471,9 @@ async fn local_request(State(addr): State<SocketAddr>, request: Request, next: N
     }
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert(
-        header::CACHE_CONTROL,
-        axum::http::HeaderValue::from_static("no-store"),
-    );
+    headers
+        .entry(header::CACHE_CONTROL)
+        .or_insert(axum::http::HeaderValue::from_static("no-store"));
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         axum::http::HeaderValue::from_static("nosniff"),
@@ -645,6 +654,10 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CONTENT_TYPE], "image/webp");
+        assert_eq!(
+            response.headers()[header::CACHE_CONTROL],
+            "public, max-age=86400"
+        );
         let bytes = to_bytes(response.into_body(), 100_000).await.unwrap();
         assert!(bytes.starts_with(b"RIFF"));
         assert_eq!(&bytes[8..12], b"WEBP");

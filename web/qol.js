@@ -101,7 +101,7 @@ async function reportImages(exp) {
   return images;
 }
 function reportBlocks(exp,curves,images=new Map()) {
-  const drawIcon=(ctx,url,x,y,size=22)=>{const img=images.get(url);if(img)ctx.drawImage(img,x,y,size,size);};
+  const drawIcon=(ctx,url,x,y,size=22)=>{const img=images.get(url);if(img)ctx.drawImage(img,x,y,size,size);return Boolean(img);};
   const W=1400,X=40,blocks=[],font=(ctx,size,weight='')=>{ctx.font=`${weight} ${size}px system-ui, sans-serif`.trim();};
   const text=(ctx,s,x,y,color=reportInk.text,size=16,weight='',align='left',max=W-2*X)=>{font(ctx,size,weight);ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(fitText(ctx,s,max),x,y);ctx.textAlign='left';};
   const bar=(ctx,x,y,w,h,color)=>{ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,Math.max(2,w),h,[0,4,4,0]);ctx.fill();};
@@ -120,8 +120,8 @@ function reportBlocks(exp,curves,images=new Map()) {
     blocks.push(heading('Gruppe · DPS'));
     for(const [i,p] of players.entries())blocks.push({h:34,draw:(ctx,y)=>{
       const c=i<reportColors.length?reportColors[i]:reportInk.faint;
-      drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X,y+5);
-      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+28,y+22,reportInk.text,16,'',`left`,300);
+      const classShift=drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X,y+5)?28:0;
+      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+classShift,y+22,reportInk.text,16,'',`left`,300);
       bar(ctx,360,y+6,(Number(p.dps)||0)/maxDps*700,22,c);
       text(ctx,`${num(p.dps)} DPS · ${num(p.damage)} · ${total>0?pct(p.damage*100/total):'—'}`,1080,y+22,reportInk.text,16,'','left',280);
     }});
@@ -151,8 +151,8 @@ function reportBlocks(exp,curves,images=new Map()) {
     const color=i<reportColors.length?reportColors[i]:reportInk.faint;
     blocks.push({h:86,draw:(ctx,y)=>{
       ctx.fillStyle=reportInk.panel;ctx.fillRect(X-16,y+14,W-2*X+32,64);ctx.fillStyle=color;ctx.fillRect(X-16,y+14,6,64);
-      drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X+4,y+22,28);
-      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+42,y+42,'#f4d8a7',22,'600',`left`,560);
+      const headShift=drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X+4,y+22,28)?38:0;
+      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+4+headShift,y+42,'#f4d8a7',22,'600',`left`,560);
       const kpis=[['Schaden',num(p.damage)],['DPS',num(p.dps)],['Heilung',num(p.heal||0)],['HPS',num(p.hps||0)],['Erlitten',num(p.damage_received||0)]];
       kpis.forEach(([k,v],j)=>{const x=640+j*144;text(ctx,v,x,y+44,reportInk.text,22,'600','left',140);text(ctx,k,x,y+66,reportInk.muted,13,'','left',140);});
     }});

@@ -337,7 +337,8 @@ impl Overlay {
                 format!("{}  {:>3.0}%", short_number(value), value * 100.0 / total)
             };
             let font = FontId::proportional(12.5);
-            if let Some(texture) = self.class_icons.get(row.class_key) {
+            let icon = self.class_icons.get(row.class_key);
+            if let Some(texture) = icon {
                 let icon_rect = Rect::from_center_size(
                     inner.left_center() + Vec2::new(14.0, 0.0),
                     Vec2::splat(18.0),
@@ -356,7 +357,7 @@ impl Overlay {
                 .x;
             name_rect.set_right((inner.right() - right_width - 16.0).max(inner.left()));
             p.with_clip_rect(name_rect).text(
-                inner.left_center() + Vec2::new(28.0, 0.0),
+                inner.left_center() + Vec2::new(if icon.is_some() { 28.0 } else { 6.0 }, 0.0),
                 Align2::LEFT_CENTER,
                 format!("{}. {}{}", i + 1, if row.dead { "† " } else { "" }, name),
                 font.clone(),
