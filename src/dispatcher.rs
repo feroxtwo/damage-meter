@@ -166,9 +166,11 @@ fn prune_captures(dir: &std::path::Path, keep: u64) {
 /// Packet recordings (`aion2-meter ctl record`): the game connection's raw
 /// TCP payloads, for working out packets no meter decodes yet.
 ///
-/// File: `A2MCAP2\n`, then `u32 LE JSON byte length` and one JSON packet.
-/// Packets retain timestamp, direction, endpoints, interface, TCP sequence,
-/// acknowledgement and raw bytes. The reader also accepts legacy v1 captures.
+/// File: `A2MCAP3\n`, then per packet `u32 LE header length`, a JSON header
+/// (timestamp, direction, endpoints, interface, TCP sequence and
+/// acknowledgement), `u32 LE payload length` and the raw payload. Version 2
+/// wrote the payload into the JSON as a number array, three to four times its
+/// size; the reader still accepts v1 and v2.
 pub struct Recorder {
     out: BufWriter<File>,
     path: PathBuf,
@@ -176,7 +178,7 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub const MAGIC: &'static [u8] = b"A2MCAP2\n";
+    pub const MAGIC: &'static [u8] = b"A2MCAP3\n";
 
     pub fn create(dir: &std::path::Path, now: i64) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
@@ -201,11 +203,21 @@ impl Recorder {
         from_server: bool,
         cap: &CapturedPayload,
     ) -> std::io::Result<()> {
-        let packet = serde_json::json!({"ms":now,"from_server":from_server,"src_port":cap.src_port,"dst_port":cap.dst_port,
-          "src_ip":cap.src_ip,"dst_ip":cap.dst_ip,"device":cap.device_name,"seq":cap.tcp_seq,"ack":cap.tcp_ack,"data":cap.data});
-        let data = serde_json::to_vec(&packet)?;
-        self.out.write_all(&(data.len() as u32).to_le_bytes())?;
-        self.out.write_all(&data)?;
+        let header = serde_json::to_vec(&serde_json::json!({
+            "ms": now,
+            "from_server": from_server,
+            "src_port": cap.src_port,
+            "dst_port": cap.dst_port,
+            "src_ip": cap.src_ip,
+            "dst_ip": cap.dst_ip,
+            "device": cap.device_name,
+            "seq": cap.tcp_seq,
+            "ack": cap.tcp_ack,
+        }))?;
+        self.out.write_all(&(header.len() as u32).to_le_bytes())?;
+        self.out.write_all(&header)?;
+        self.out.write_all(&(cap.data.len() as u32).to_le_bytes())?;
+        self.out.write_all(&cap.data)?;
         if now - self.last_flush >= 1000 {
             self.out.flush()?;
             self.last_flush = now;

@@ -1,4 +1,4 @@
-//! Offline, deterministic decoder for v1 and v2 meter captures.
+//! Offline, deterministic decoder for v1, v2 and v3 meter captures.
 use crate::{db::Db, dispatcher::EffectScanner, engine::Engine, tcp::TcpOrder};
 use a2tools_dps_meter_lib::capture::{
     captured_payload::CapturedPayload, stream_assembler::StreamAssembler,
@@ -21,6 +21,8 @@ struct Packet {
     device: Option<String>,
     seq: u32,
     ack: u32,
+    /// In the JSON only in v2; v3 stores it raw after the header.
+    #[serde(default)]
     data: Vec<u8>,
 }
 struct ClockGuard;
@@ -44,10 +46,14 @@ pub fn run(path: &Path) -> Result<Value> {
     let mut reader = BufReader::new(std::fs::File::open(path)?);
     let mut magic = [0; 8];
     reader.read_exact(&mut magic)?;
-    let legacy = &magic == b"A2MCAP1\n";
-    if !legacy && &magic != b"A2MCAP2\n" {
-        bail!("Unsupported capture format");
-    }
+    let version = match &magic {
+        b"A2MCAP1\n" => 1,
+        b"A2MCAP2\n" => 2,
+        b"A2MCAP3\n" => 3,
+        _ => bail!("Unsupported capture format"),
+    };
+    let legacy = version == 1;
+    let mut clock_steps_back = 0u64;
     let engine = Engine::new(Db::in_memory()?, "de", std::env::temp_dir());
     let _guard = ClockGuard;
     let mut flows: HashMap<String, (TcpOrder, StreamAssembler, StreamProcessor, EffectScanner)> =
@@ -57,7 +63,7 @@ pub fn run(path: &Path) -> Result<Value> {
     let mut sampled_at = 0;
     let mut last_ms = 0;
     loop {
-        let packet = if legacy {
+        let mut packet = if legacy {
             let Some(h) = read_record(&mut reader, 15)? else {
                 break;
             };
@@ -98,10 +104,31 @@ pub fn run(path: &Path) -> Result<Value> {
             }
             let mut data = vec![0; len];
             reader.read_exact(&mut data)?;
-            serde_json::from_slice::<Packet>(&data)?
+            let mut packet = serde_json::from_slice::<Packet>(&data)?;
+            if version == 3 {
+                let mut len = [0; 4];
+                reader
+                    .read_exact(&mut len)
+                    .context("Truncated capture record")?;
+                let len = u32::from_le_bytes(len) as usize;
+                if len > 2 << 20 {
+                    bail!("Capture payload too large");
+                }
+                packet.data = vec![0; len];
+                reader
+                    .read_exact(&mut packet.data)
+                    .context("Truncated capture record")?;
+            }
+            packet
         };
-        if packet.ms < 0 || packet.ms < last_ms || packet.data.len() > 2 << 20 {
+        if packet.ms < 0 || packet.data.len() > 2 << 20 {
             bail!("Invalid capture timestamp or payload size");
+        }
+        // The wall clock can step back (NTP); keep time monotonic instead of
+        // rejecting the rest of the recording.
+        if packet.ms < last_ms {
+            clock_steps_back += 1;
+            packet.ms = last_ms;
         }
         last_ms = packet.ms;
         packets += 1;
@@ -171,7 +198,7 @@ pub fn run(path: &Path) -> Result<Value> {
     }
     engine.replay_tick();
     let mut report = engine.replay_report();
-    report["capture"] = json!({"version":if legacy{1}else{2},"packets":packets,"legacy_metadata_limited":legacy,"pending_bytes":flows.values().map(|(o,_,_,_)|o.pending_bytes()).sum::<usize>(),
+    report["capture"] = json!({"version":version,"packets":packets,"clock_steps_back":clock_steps_back,"legacy_metadata_limited":legacy,"pending_bytes":flows.values().map(|(o,_,_,_)|o.pending_bytes()).sum::<usize>(),
         "duplicates":flows.values().map(|(o,_,_,_)|o.duplicates).sum::<u64>(),"gaps":flows.values().map(|(o,_,_,_)|o.gaps).sum::<u64>()});
     Ok(report)
 }
@@ -198,6 +225,9 @@ mod tests {
         rec.write(1001, true, &cap).unwrap();
         let path = rec.path().to_path_buf();
         drop(rec);
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"A2MCAP3\n"));
+        assert!(bytes.ends_with(&[3, 0, 0, 0, 1, 2, 3]));
         let report = run(&path).unwrap();
         assert_eq!(report["capture"]["packets"], 2);
         assert_eq!(report["capture"]["duplicates"], 1);

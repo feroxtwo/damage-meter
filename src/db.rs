@@ -126,6 +126,24 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
+/// SQLite's `lower()` folds ASCII only, so a search for "kälte" would miss
+/// "Kälte"; `fold()` lowercases with Rust's Unicode rules instead.
+fn register_functions(conn: &Connection) -> Result<()> {
+    use rusqlite::functions::FunctionFlags;
+    conn.create_scalar_function(
+        "fold",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            Ok(ctx
+                .get::<Option<String>>(0)?
+                .map(|s| s.to_lowercase())
+                .unwrap_or_default())
+        },
+    )?;
+    Ok(())
+}
+
 fn migrate(conn: &Connection) -> Result<()> {
     for (table, column, decl) in MIGRATIONS {
         let exists: bool = conn.query_row(
@@ -229,6 +247,7 @@ impl Db {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
+        register_functions(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -238,6 +257,7 @@ impl Db {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
+        register_functions(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -817,7 +837,7 @@ impl Db {
           COALESCE(a.favorite,0) AS favorite,COALESCE(a.note,'') AS note,COALESCE(a.tags,'') AS tags,
           (SELECT p.dps FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 LIMIT 1) AS my_dps
           FROM fights f LEFT JOIN fight_annotations a ON a.fight_id=f.id
-          WHERE (instr(lower(f.boss_name||' '||COALESCE(a.note,'')||' '||COALESCE(a.tags,'')),lower(?1))>0)
+          WHERE (instr(fold(f.boss_name||' '||COALESCE(a.note,'')||' '||COALESCE(a.tags,'')),fold(?1))>0)
            AND (?2='' OR EXISTS(SELECT 1 FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 AND p.name=?2))
            AND f.started_at>=?3 AND f.started_at<=?4 AND (?5=0 OR a.favorite=1)
           ORDER BY f.started_at DESC LIMIT 101 OFFSET ?6";
@@ -1286,7 +1306,10 @@ mod tests {
             &HashSet::new(),
         )
         .unwrap();
-        assert!(db.annotate("qol", true, "new gear", "rotation").unwrap());
+        assert!(
+            db.annotate("qol", true, "Neue Ausrüstung", "rotation")
+                .unwrap()
+        );
         db.save_analytics("qol", &json!({"points":[],"partial":true}))
             .unwrap();
         db.save_fights(
@@ -1326,6 +1349,14 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .is_empty()
+        );
+        assert_eq!(
+            db.search_fights("AUSRÜSTUNG", "", 0, 2000, false, 0)
+                .unwrap()["fights"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
         );
         assert!(!db.annotate("missing", true, "", "").unwrap());
     }
