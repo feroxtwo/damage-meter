@@ -14,7 +14,7 @@ ctx.exportPlayers=(ps,anonymous)=>ps.map((p,i)=>({...p,name:anonymous?'Spieler '
 const skill={code:11170000,name:'Old stored name',names:{de:'Abwärtsschlag',en:'Overhead Slam'},icon:'/assets/icons/skill-11170000.webp',damage:12345,hits:7,dps:456,hit_timestamps:[100,300]};
 ctx.sample=skill;
 assert.match(vm.runInContext('skillTable([sample])',ctx),/Abwärtsschlag/);
-ctx.settings.skill_language='en';assert.match(vm.runInContext('skillTable([sample])',ctx),/Overhead Slam/);
+ctx.settings.skill_language='en';ctx.latestLive={overlay:{skill_language:'de'}};assert.equal(vm.runInContext('skillName(sample)',ctx),'Overhead Slam');ctx.latestLive=null;assert.match(vm.runInContext('skillTable([sample])',ctx),/Overhead Slam/);
 assert.match(vm.runInContext('hitTimeline([sample],1000)',ctx),/<image href="\/assets\/icons\/skill-11170000.webp"/);
 assert.doesNotMatch(vm.runInContext('hitTimeline([sample],1000)',ctx),/<title><span/);
 assert.match(vm.runInContext('skillLabel({code:99999999})',ctx),/#99999999/);

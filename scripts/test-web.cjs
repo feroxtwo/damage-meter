@@ -189,7 +189,7 @@ const server = http.createServer((req,res) => {
       await page.setViewportSize({width:390,height:844});
       for(const width of [320,390]) {
       await page.setViewportSize({width,height:844});
-      for(const tab of ['Live','Runs','Statistik','Overlay']) {
+      for(const tab of ['Live','Runs','Statistik','Fähigkeiten','Overlay']) {
         await page.getByRole('button',{name:tab,exact:true}).click(); await delay(100);
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab);
       }

@@ -109,7 +109,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
 .skip:focus { top: 8px; }
 @media (max-width: 850px) {
   header { padding: 14px 20px; gap: 12px 20px; }
-  nav { order: 3; width: 100%; } nav button { flex: 1; justify-content: center; padding: 9px 6px; }
+  nav { order: 3; width: 100%; flex-wrap: wrap; } nav button { flex: 1 1 90px; min-width: 0; justify-content: center; padding: 9px 6px; }
   #status { max-width: 220px; }
   main { padding: 24px 20px; }
   .grid > .card { margin-bottom: 0; }
@@ -274,7 +274,7 @@ const api = (path, opts = {}) => fetch(path, { signal: AbortSignal.timeout(6000)
   .then(r => { if (!r.ok) throw new Error(r.status); return r.status === 204 ? null : r.json(); });
 let latestLive = null;
 // Local artwork and display names only. No requests to third-party sites.
-function skillLanguage(){return (settingsDirty||settingsSaving?settings?.skill_language:latestLive?.overlay?.skill_language)||settings?.skill_language||'de';}
+function skillLanguage(){return settings?.skill_language||latestLive?.overlay?.skill_language||'de';}
 function skillName(s={}){return s.names?.[skillLanguage()]||s.names?.en||s.names?.de||s.name||'#'+(s.code??s.id??'?');}
 function iconUrl(s={}){return /^\/assets\/icons\/[a-z0-9-]+\.webp$/.test(s.icon||'')?s.icon:'';}
 function skillLabel(s={}){const url=iconUrl(s);return `<span class="skill-label">${url?`<img class="game-icon" src="${url}" alt="" loading="lazy">`:'<span class="unknown-skill" aria-hidden="true">?</span>'}<span>${esc(skillName(s))}</span></span>`;}

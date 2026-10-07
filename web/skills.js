@@ -1,5 +1,6 @@
 let skillCatalog=null;
 async function loadSkillCatalog(){
+  if(!settings)await loadSettings();
   if(!skillCatalog)skillCatalog=await api('/api/skills');
   if(!Array.isArray(skillCatalog.skills)){skillCatalog=null;throw new Error('Skillkatalog fehlt');}
   renderSkillCatalog();
