@@ -9,7 +9,7 @@
   --cleric: #ececec; --elementalist: #966ee6; --chanter: #5ad2c8; --fighter: #dc5050; --unknown: #787882; }
 html, body { margin: 0; background: transparent; color: #edf3fb; font: 13px system-ui, sans-serif; text-shadow: 0 1px 2px #000; }
 .box { width: 360px; border: 1px solid #7898b633; border-radius: 10px; overflow: hidden; transform-origin: top left; }
-.head { padding: 9px 10px; background: #101c2c80; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #edc57b; }
+.head { padding: 9px 10px; background: var(--header,#101c2c80); display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--title,#edc57b); }
 #t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .hp { height: 4px; margin: 0 10px 6px; background: #0005; border-radius: 3px; overflow: hidden; } .hp div { height: 100%; background: #ff7d89; }
 .row { position: relative; min-height: 26px; margin: 3px 6px; background: #0003; border-radius: 4px; overflow: hidden; }
@@ -19,7 +19,8 @@ html, body { margin: 0; background: transparent; color: #edf3fb; font: 13px syst
 .row .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .n { font-family: ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
 .empty { padding: 10px; text-align: center; font-size: 12px; color: #a0afc3; }
-.foot { padding: 6px 10px; display: flex; justify-content: space-between; color: #a0afc3; font-size: 10px; background: #101c2c80; }
+.foot { padding: 6px 10px; display: flex; justify-content: space-between; color: #a0afc3; font-size: 10px; background: var(--header,#101c2c80); }
+.compact .row {min-height:22px;margin:2px 6px} .compact .row .t {padding:2px 7px}
 </style>
 </head>
 <body>
@@ -32,6 +33,13 @@ const num = (v) => v >= 1e6 ? (v/1e6).toFixed(2) + 'M' : v >= 1e3 ? (v/1e3).toFi
 const dur = (ms) => { const s = Math.max(0, Math.round((ms || 0) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const masked = name => { const c = Array.from(name || ''); return c.length <= 2 ? '*'.repeat(c.length) : c[0] + '*'.repeat(Math.min(c.length - 2, 4)) + c[c.length - 1]; };
 const el = id => document.getElementById(id);
+function appearance(s) {
+  const colors={midnight:['11,16,24','#edc57b','16,28,44'],aether:['8,26,32','#b8eee7','16,41,48'],ember:['25,17,21','#f4d8a7','42,29,36']}[s.theme]||['11,16,24','#edc57b','16,28,44'];
+  el('box').style.background=`rgba(${colors[0]},${clamp(s.opacity,0,1)})`;
+  document.documentElement.style.setProperty('--title',colors[1]);
+  document.documentElement.style.setProperty('--header',`rgba(${colors[2]},.7)`);
+  document.documentElement.classList.toggle('compact',Boolean(s.compact));
+}
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 async function tick() {
   try {
@@ -39,7 +47,7 @@ async function tick() {
     if (!response.ok) throw new Error(response.status);
     const l = await response.json(), s = l.overlay;
     el('box').hidden = !s.visible;
-    el('box').style.background = `rgba(11,16,24,${clamp(s.opacity, 0, 1)})`;
+    appearance(s);
     el('box').style.transform = `scale(${clamp(s.scale, .6, 2.5)})`;
     el('t').textContent = (s.metric==='heal'?'Heilung · ':s.metric==='damage_received'?'Erlitten · ':'')+(l.target_name || 'Kein Ziel');
     el('hpTrack').title=l.hp_estimated?'HP geschätzt':'Gemeldete HP';

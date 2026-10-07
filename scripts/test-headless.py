@@ -44,6 +44,13 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
                 time.sleep(.05)
         with urllib.request.urlopen(base, timeout=2) as response:
             assert "Gruppen-DPS" in response.read().decode()
+        # Release lookup must also be guarded, so a foreign page cannot initiate it.
+        request = urllib.request.Request(base + "/api/update-check", method="POST")
+        try:
+            urllib.request.urlopen(request, timeout=2)
+            raise AssertionError("Release lookup without action header was accepted")
+        except urllib.error.HTTPError as error:
+            assert error.code == 403
         request = urllib.request.Request(base + "/api/reset", method="POST")
         try:
             urllib.request.urlopen(request, timeout=2)
@@ -69,12 +76,12 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             request = urllib.request.Request(base + path, json.dumps(body).encode(), headers={"x-a2m":"1", "Content-Type":"application/json"}, method="POST")
             with urllib.request.urlopen(request, timeout=2) as response:
                 return response.status
-        for asset, mime in [("/enhancements.js", "text/javascript"), ("/enhancements.css", "text/css")]:
+        for asset, mime in [("/enhancements.js", "text/javascript"), ("/enhancements.css", "text/css"), ("/qol.js", "text/javascript")]:
             with urllib.request.urlopen(base + asset, timeout=2) as response:
                 assert mime in response.headers["Content-Type"]
                 assert response.read()
         settings = get("/api/overlay")
-        settings.update({"position":[123,456], "hide_names":True, "metric":"heal", "max_rows":2})
+        settings.update({"theme":"ember","compact":True,"idle_reset_seconds":30,"wipe_reset":True,"position":[123,456], "hide_names":True, "metric":"heal", "max_rows":2})
         post("/api/overlay", settings)
         post("/api/overlay/profile", {"key":"Main", "save":True})
         post("/api/training", {"seconds":180})
@@ -92,6 +99,9 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
                     raise AssertionError("Restart failed")
                 time.sleep(.05)
         assert restored["position"] == [123,456]
+        assert restored["theme"] == "ember" and restored["compact"]
+        assert restored["idle_reset_seconds"] == 30 and restored["wipe_reset"]
+        assert get("/api/version")["parser_version"] == "2.0.52"
         assert restored["hide_names"] and restored["metric"] == "heal"
         post("/api/overlay/profile", {"key":"Main", "save":False})
         # Legacy captures remain readable without permissions or a running game.

@@ -1,0 +1,25 @@
+name: Linux Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  packages:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify tag matches package version
+        run: |
+          version=$(sed -n 's/^version = "\([0-9.]*\)"/\1/p' Cargo.toml | head -1)
+          test "$GITHUB_REF_NAME" = "v$version"
+      - run: cargo test --locked && cargo build --release --locked
+      - run: python3 scripts/test-headless.py && python3 scripts/test-validation.py
+      - run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: ./scripts/package-linux.sh
+      - name: Prepare draft release for maintainer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --generate-notes

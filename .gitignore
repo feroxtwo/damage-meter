@@ -3,3 +3,6 @@
 *.db-*
 
 /node_modules
+
+/dist
+/scripts/__pycache__

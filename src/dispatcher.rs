@@ -491,6 +491,7 @@ impl Dispatcher {
                             *effects = EffectScanner::default();
                             self.engine.capture_gap();
                         }
+                        let _gate = self.engine.combat_gate.lock();
                         processor.set_override_timestamp(Some(packet.captured_at_ms));
                         for chunk in ordered {
                             assembler.process_chunk(&chunk, processor);
@@ -536,6 +537,7 @@ impl Dispatcher {
                 *effects = EffectScanner::default();
                 self.engine.capture_gap();
             }
+            let _gate = self.engine.combat_gate.lock();
             for chunk in chunks {
                 if assembler.process_chunk(&chunk, processor) {
                     last_parsed_ms = now;

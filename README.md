@@ -13,6 +13,14 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 
 Kein Discord, kein Account, nichts verlässt deinen Rechner.
 
+## Neu in 0.3.0
+
+Aktualisierter A2Tools-Parser 2.0.52, optionale Leerlauf-/Wipe-Resets mit vorherigem Speichern, PNG-Berichte und Chatzeilen, zwei Spieler nebeneinander, gemeinsame Gruppen-DPS-Kurven, zusätzliche Treffermerkmale und drei Designs mit kompakter Ansicht. [Funktionsgrenzen und Ingame-Messvergleich](docs/QOL_0.3.0.md).
+
+Fertige Linux-Pakete entstehen in GitHub Actions als `aion2-meter-linux-packages`. Nach Freigabe durch den Maintainer erscheinen sie unter [Releases](https://github.com/feroxtwo/damage-meter/releases). Für Ubuntu/Debian: `.deb`, Fedora: `.rpm`, Bazzite: `.rpm` per `rpm-ostree install` und Neustart. Alternativ das Linux-Archiv entpacken und `./scripts/install-binary.sh` ausführen, ohne Rust/Node. Einstellungen und Kämpfe bleiben beim Update erhalten. KWin-/Shortcut-Einrichtung für Systempakete siehe Funktionsdokumentation.
+
+Im Dashboard unter **Overlay → Version und Updates** lässt sich GitHub auf Klick prüfen. Ohne veröffentlichtes Release gibt es noch keinen Download über diesen Weg.
+
 ## Installation (Fedora / KDE)
 
 **Fedora Workstation / KDE Spin:**

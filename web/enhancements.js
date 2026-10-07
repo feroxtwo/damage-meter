@@ -1,7 +1,7 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
 let latestLive = null, fightOffset = 0, fightSearchRequest = 0, fightSearchBusy = false, detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
-const pct = v => (Number(v) || 0).toFixed(1).replace('.', ',') + '%';
+const pct = v => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(1).replace('.', ',') + '%';
 const metricKey = () => $('#liveMetric').value;
 function metricRows(rows) {
   const metric = metricKey();
@@ -25,11 +25,13 @@ function renderEnhancedLive(l) {
   $(".ranking-head span").textContent=metricKey()==="heal"?"Heilung · HPS · Anteil":metricKey()==="damage_received"?"Erlittener Schaden · pro Sekunde · Anteil":"Schaden · DPS · Anteil";
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";
   $('#metricHint').textContent=metricKey()==='heal' ? 'Heilung seit Parser-Reset. HPS nutzt die angezeigte Kampfdauer. Overheal wird nicht abgezogen.' : metricKey()==='damage_received' ? 'Erlittener Schaden aus erfassten NPC-Treffern.' : 'Spieler anklicken für Skilldetails. Burst-DPS: gleitende 5 Sekunden, Beobachtung alle 500 ms.';
+  if(window.applyAppearance)applyAppearance(l.overlay);
   const t=l.training?.state && l.training.state!=='idle' ? l.training : lastTraining;
   if(t) {
     const state={armed:'Bereit. Warte auf ersten Treffer.',running:`Training läuft: ${dur(t.elapsed_ms)} / ${dur(t.seconds*1000)}`,interrupted:'Training unterbrochen: Zielwechsel, Reset oder Verbindung beendet.',finished:`Training abgeschlossen: ${esc(t.target||'')} · ${dur(t.elapsed_ms)}${t.personal_best?' · Neuer persönlicher Bestwert':''}`}[t.state] || '';
     $('#trainingResult').innerHTML=`<p>${state}</p>${(t.rows||[]).map(r=>`<div>${esc(r.name)}: <b>${num(r.dps)}/s</b> · ${num(r.damage)} Schaden</div>`).join('')}${t.best_dps!=null?`<p class="muted">Persönlicher Bestwert: ${num(t.best_dps)}/s</p>`:''}`;
   }
+  if(l.reset_notice && l.reset_notice!==window.lastResetNotice){window.lastResetNotice=l.reset_notice;toast(l.reset_notice);}
   const player=new URLSearchParams(location.search).get('player');
   if(player && l.rows.some(r=>String(r.id)===player)) { history.replaceState(null,'',location.pathname+location.hash);task(openLivePlayer(Number(player))); }
 }
@@ -96,7 +98,7 @@ $('#fightDialog').addEventListener('cancel',invalidateDetails);
 
 function skillTable(skills,heal=false) {
   if(!skills?.length)return '<p class="muted">Keine Skilldaten vorhanden.</p>';
-  return `<div class="table-scroll"><table><thead><tr><th>Skill</th><th>${heal?'Heilung':'Schaden'}</th><th>Treffer / Ticks</th>${heal?'':'<th>Krit</th><th>Rücken</th><th>Frontal</th><th>Perfekt</th><th>Double</th><th>Pariert</th><th>Multihit</th><th>Max</th>'}</tr></thead><tbody>${skills.map(s=>`<tr><td>${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}</td><td class="num">${num(s.damage)}</td><td>${s.hits||0}</td>${heal?'':`<td>${pct(s.crit_rate)}</td><td>${pct(s.back_rate)}</td><td>${pct(s.frontal_rate)}</td><td>${pct(s.perfect_rate)}</td><td>${pct(s.double_rate)}</td><td>${pct(s.parry_rate)}</td><td title="${num(s.multi_hit_damage)} zusätzlicher Schaden">${s.multi_hit_count||0}</td><td>${num(s.max)}</td>`}</tr>`).join('')}</tbody></table></div>`;
+  return `<p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt. — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>${heal?'Heilung':'Schaden'}</th><th>Treffer / Ticks</th>${heal?'':'<th>Krit</th><th>Rücken</th><th>Frontal</th><th>Perfekt</th><th>Double</th><th>Pariert</th><th>Multihit</th><th>Block</th><th>Perfektblock</th><th>Ausdauer</th><th>Regeneration</th><th>Verfehlt</th><th>Effekt resistiert</th><th>Min</th><th>Max</th>'}</tr></thead><tbody>${skills.map(s=>`<tr><td>${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}</td><td class="num">${num(s.damage)}</td><td>${s.hits||0}</td>${heal?'':`<td>${pct(s.crit_rate)}</td><td>${pct(s.back_rate)}</td><td>${pct(s.frontal_rate)}</td><td>${pct(s.perfect_rate)}</td><td>${pct(s.double_rate)}</td><td>${pct(s.parry_rate)}</td><td title="${num(s.multi_hit_damage)} zusätzlicher Schaden">${s.multi_hit_count??'—'}</td><td>${pct(s.block_rate)}</td><td>${pct(s.perfect_block_rate)}</td><td>${pct(s.endurance_rate)}</td><td>${pct(s.regeneration_rate)}</td><td>${s.miss_count??'—'}</td><td>${s.resist_count??'—'}</td><td>${s.min>0?num(s.min):'—'}</td><td>${s.max>0?num(s.max):'—'}</td>`}</tr>`).join('')}</tbody></table></div>`;
 }
 function svgCurve(points,value,label) {
   if(!points.length)return '<p class="muted">Für diesen Kampf wurden keine Verlaufsdaten gespeichert.</p>';
@@ -111,14 +113,14 @@ function damageCurve(f,actor=null) {
   const curves=points.map((p,i)=>{const prev=points[i-1];return {ms:p.ms,dps:Math.max(0,total(p)-(prev?total(prev):0))*1000/Math.max(500,p.ms-(prev?prev.ms:0))};});
   return svgCurve(curves,p=>p.dps,'beobachtete Intervall-DPS');
 }
-function hitTimeline(skills,ms) {
+function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';
-  const end=Math.max(ms,1000),W=900,L=210,H=rows.length*25+30;
+  const end=Math.max(ms,1000),L=W<600?120:210,H=rows.length*25+30;
   return `<p class="analysis-note">Trefferzeitpunkte, keine Cast-Anzahl. DoT und Multihit können mehrere Treffer pro Skill-Ausführung erzeugen. Pro Skill werden höchstens 250 Marker gezeichnet.</p><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="Skill-Trefferzeitlinie">${rows.map((s,i)=>`<text x="0" y="${i*25+18}">${esc(s.name.slice(0,28))}</text><path d="M${L},${i*25+14}H${W}" stroke="#7898b622"/>${s.hit_timestamps.filter((_,j)=>j%Math.max(1,Math.ceil(s.hit_timestamps.length/250))===0).map(t=>`<circle cx="${L+Math.min(end,Math.max(0,t))/end*(W-L)}" cy="${i*25+14}" r="3" fill="#edc57b"><title>${esc(s.name)} · ${(t/1000).toFixed(2)} s</title></circle>`).join('')}`).join('')}</svg>`;
 }
-function effectTimeline(f,actor) {
+function effectTimeline(f,actor,W=900) {
   const effects=(f.analytics?.effects||[]).filter(e=>e.target===actor);if(!effects.length)return '';
-  const keys=[...new Set(effects.map(e=>e.code))],W=900,L=210,end=Math.max(1000,f.duration_ms);
+  const keys=[...new Set(effects.map(e=>e.code))],L=W<600?120:210,end=Math.max(1000,f.duration_ms);
   const names=Object.fromEntries([...(f.boss_debuffs||[]),...f.players.flatMap(p=>p.buffs||[])].map(e=>[e.code,e.name]));
   return `<h4>Buff-Zeitlinie</h4><p class="analysis-note">Aus beobachteter Anwendung und gemeldeter Dauer. Vorzeitiges Entfernen wird derzeit nicht erkannt.</p><svg class="timeline" viewBox="0 0 ${W} ${keys.length*24+20}" role="img" aria-label="Buff-Zeitlinie">${keys.map((code,i)=>`<text x="0" y="${i*24+17}">${esc((names[code]||'#'+code).slice(0,28))}</text>${effects.filter(e=>e.code===code).map(e=>`<rect x="${L+e.start_ms/end*(W-L)}" y="${i*24+5}" width="${Math.max(1,(e.end_ms-e.start_ms)/end*(W-L))}" height="13" rx="3" fill="#966ee6"><title>${esc(names[code]||code)} · ${(e.start_ms/1000).toFixed(1)}–${(e.end_ms/1000).toFixed(1)} s</title></rect>`).join('')}`).join('')}</svg>`;
 }
@@ -131,6 +133,7 @@ async function openLivePlayer(id) {
   const row=latestLive?.rows.find(r=>r.id===id);
   $('#dialogTitle').textContent=row?.name||'Spielerdetails';
   $('#fightContent').innerHTML=`<p class="analysis-note">Aktueller Stand. ${num(row?.burst_dps||0)}/s Burst über 5 Sekunden. Heilung seit Parser-Reset.</p><button class="btn" id="refreshPlayer">Aktualisieren</button><h3>Schaden</h3>${skillTable(p.skills)}<h3>Heilung</h3>${skillTable(p.heal_skills,true)}${hitTimeline(p.skills,p.duration_ms)}`;
+  if(window.installLiveComparison)installLiveComparison(p,row);
   $('#refreshPlayer').onclick=()=>task(openLivePlayer(id));if(!$('#fightDialog').open)$('#fightDialog').showModal();
 }
 async function openFight(id) {
@@ -138,8 +141,8 @@ async function openFight(id) {
   const request=++detailRequest;const f=await api('/api/fights/'+encodeURIComponent(id));if(request!==detailRequest)return;
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
-    <p class="analysis-note">${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':'unbekannt'}.</p>
-    <div class="row fight-tools"><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><label><input type="checkbox" id="anonFight" checked> Namen anonymisieren</label></div>
+    <p class="analysis-note">${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
+    <div class="row fight-tools"><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
     <h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
     <h3>Gruppen-DPS im Kampfverlauf</h3>${damageCurve(f)}<h3>Ping-Verlauf</h3>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}
@@ -149,6 +152,7 @@ async function openFight(id) {
   $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,exportPlayers(f.players,$('#anonFight').checked),f.duration_ms)));
   $('#jsonFight').onclick=()=>download('aion2-kampf.json',JSON.stringify(fightExport(f,$('#anonFight').checked),null,2),'application/json');
   $('#csvFight').onclick=()=>{const exp=fightExport(f,$('#anonFight').checked);download('aion2-kampf.csv','\uFEFF'+[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])].map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
+  if(window.installFightQol)installFightQol(f);
   $('#compareBtn').onclick=()=>task(compareFight());
   $('#compareFight').onchange=()=>{comparisonRequest++;$('#comparison').textContent='';};
   try {const data=await api('/api/fights?query='+encodeURIComponent(f.boss_name||'')+'&character='+encodeURIComponent(f.players.find(p=>p.is_self)?.name||''));if(request!==detailRequest)return;

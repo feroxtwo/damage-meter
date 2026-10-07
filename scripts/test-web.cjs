@@ -5,9 +5,9 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-const settings = {visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false,pin_self:true,metric:"damage"};
+const settings = {theme:"midnight",compact:false,idle_reset_seconds:0,wipe_reset:false,visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false,pin_self:true,metric:"damage"};
 const live = {
-  target_name:'Kargos', dungeon:'Ferocious Horn Den', character:'FeroxTOO',
+  target_id:9,target_started_at:1000,target_name:'Kargos', dungeon:'Ferocious Horn Den', character:'FeroxTOO',
   battle_time_ms:90000, total_damage:9450000, target_hp:.38, target_mode:'bossTargets', ping_ms:42,
   overlay:settings, capture:{permission:true, game_running:true, locked_port:13328, device:'eth0'},
   rows:[
@@ -29,7 +29,7 @@ const profiles=new Map();
 let annotations=[],trainingStarts=[];
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -47,13 +47,15 @@ const server = http.createServer((req,res) => {
   await context.route('**/api/**', async route => {
     const req = route.request(), u = new URL(req.url());
     let data = {};
-    if (u.pathname === '/api/live') data = live;
+    if(u.pathname==='/api/version')data={version:'0.3.0',parser_version:'2.0.52'};
+    else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
+    else if (u.pathname === '/api/live') data = live;
     else if(u.pathname==='/api/fights')data={fights:[fight,comparison,comparison2],more:false};
     else if(u.pathname==='/api/fights/f1')data=fight;
     else if(u.pathname==='/api/fights/f2'){if(slowComparison)await delay(350);data=comparison;}
     else if(u.pathname==='/api/fights/f3')data=comparison2;
     else if(u.pathname==='/api/fights/f1/annotation'){annotations.push(req.postDataJSON());}
-    else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};}
+    else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={target_id:9,start_time:1000,skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};}
     else if(u.pathname==='/api/training'){if(req.method()==='POST')trainingStarts.push(req.postDataJSON());data=null;}
     else if(u.pathname==='/api/overlay/profile'){
       const body=req.postDataJSON();
@@ -280,6 +282,56 @@ const server = http.createServer((req,res) => {
       await overlay.goto(base+'/overlay');await overlay.locator('#rows .row').waitFor();
       assert.match(await overlay.locator('#rows').textContent(),/3. FeroxTOO/);
       live.rows[0].damage=original;await overlay.close();
+    });
+    await check('appearance, idle reset and update controls persist with settings',async()=>{
+      await page.getByRole('button',{name:'Overlay',exact:true}).click();
+      await page.selectOption('[data-k="theme"]','ember');await page.locator('[data-k="compact"]').check();
+      await page.selectOption('[data-k="idle_reset_seconds"]','30');await page.locator('[data-k="wipe_reset"]').check();
+      await delay(900);assert.equal(settings.theme,'ember');assert.equal(settings.compact,true);assert.equal(settings.idle_reset_seconds,30);
+      await page.waitForFunction(()=>document.documentElement.dataset.theme==='ember');
+      await page.locator('#checkUpdate').click();await page.waitForFunction(()=>document.querySelector('#updateInfo').textContent.includes('v0.4.0'));
+      assert.equal(await page.locator('#updateInfo a').getAttribute('href'),'https://github.com/feroxtwo/damage-meter/releases');
+      await page.getByRole('button',{name:'Live',exact:true}).click();
+    });
+    await check('live player pinning and escaping target changes',async()=>{
+      await page.locator('#liveRows .bar').first().click();await page.locator('#fightDialog[open]').waitFor();
+      await page.locator('#livePairButton').click();await page.locator('#livePairResult .player-pair').waitFor();
+      assert.equal(await page.locator('#livePairResult .player-pair>div').count(),2);
+      live.target_started_at=2000;await page.waitForFunction(()=>latestLive.target_started_at===2000);
+      await page.locator('#livePairButton').click();await page.waitForFunction(()=>document.querySelector('#livePairResult').textContent.includes('geändert'));
+      live.target_started_at=1000;
+      await page.locator('#closeDialog').click();
+    });
+    await check('pair comparison, all-player chart and PNG report include hidden skill rows',async()=>{
+      await page.evaluate(()=>openFight('f1'));await page.locator('#pairCompare').click();
+      assert.equal(await page.locator('#playerPair .player-pair>div').count(),2);
+      assert.equal(await page.locator('svg[aria-label="DPS-Verlauf aller Spieler"] path[stroke-width="2"]').count(),3);
+      await page.locator('#anonFight').check();
+      const [png]=await Promise.all([page.waitForEvent('download'),page.locator('#pngFight').click()]);
+      const file=await png.path();const bytes=fs.readFileSync(file);assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.ok(bytes.length>5000);
+      if(process.env.SCREENSHOT_DIR) {await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'player-comparison.png'),fullPage:true});fs.copyFileSync(file,path.join(process.env.SCREENSHOT_DIR,'fight-report.png'));}
+      await page.selectOption('#pairB','1');await page.locator('#pairCompare').click();assert.match(await page.locator('#playerPair').textContent(),/unterschiedliche/);
+      await page.locator('#closeDialog').click();
+    });
+    await check('PNG anonymization and page splitting retain all skill rows',async()=>{
+      const downloads=[];const receive=d=>downloads.push(d);page.on('download',receive);
+      await page.evaluate(async()=>{
+        const original=CanvasRenderingContext2D.prototype.fillText;window.pngTexts=[];
+        CanvasRenderingContext2D.prototype.fillText=function(text,...args){window.pngTexts.push(text);return original.call(this,text,...args);};
+        try {const f={...fightExport({boss_name:'Boss',duration_ms:90000,players:[]},true),boss_name:'Boss',players:[{name:'PrivateName',skills:Array.from({length:70},(_,i)=>({name:'Skill '+i,damage:100,hits:1})),heal_skills:[],buffs:[]}]};await exportPng(f,true);}
+        finally{CanvasRenderingContext2D.prototype.fillText=original;}
+      });
+      await delay(200);page.off('download',receive);assert.equal(downloads.length,2);
+      const text=await page.evaluate(()=>pngTexts.join(' '));assert.ok(!text.includes('PrivateName'));assert.match(text,/Skill 69/);assert.match(text,/Spieler 1/);
+      assert.equal(downloads[1].suggestedFilename(),'aion2-kampf-2.png');
+    });
+    await check('chat output is one line, bounded, ordered and anonymized',async()=>{
+      const line=await page.evaluate(()=>chatLine('Boss\nwith separator |',exportPlayers(metricRows(latestLive.rows),true),90000));
+      assert.ok(!line.includes('\n'));assert.ok(Array.from(line).length<=200);assert.ok(!line.includes('FeroxTOO'));assert.match(line,/Spieler 1/);
+    });
+    await check('missing hit-quality values render dashes rather than fake zero rates',async()=>{
+      const html=await page.evaluate(()=>skillTable([{name:'Skill',damage:100,hits:1,crit_rate:null,block_rate:null}]));
+      assert.ok(html.includes('—'));assert.ok(!html.includes('0,0%'));assert.match(html,/keine Skill-Aktivierungen/);
     });
     await check('empty combat state gives guidance and zero personal DPS',async()=>{
       live.rows=[]; live.total_damage=0; live.battle_time_ms=0;

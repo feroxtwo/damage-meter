@@ -175,7 +175,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <div class="card kpi"><div class="l">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div>
       <div class="card kpi"><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div>
     </div>
-    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><label><input type="checkbox" id="anonymousExport"> Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="liveRows"></div><div id="livePlayer"></div></div>
+    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><label><input type="checkbox" id="anonymousExport"> Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="liveRows"></div><div id="livePlayer"></div></div>
     <div class="card"><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
   </section>
 
@@ -214,6 +214,11 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Overlay anpassen</h2><p>So kompakt und dezent, wie du es im Spiel brauchst.</p></div><span class="tag">AION 2 · LINUX</span></div>
     <div class="card">
       <h2>Overlay</h2>
+      <label class="set">Design <select data-k="theme"><option value="midnight">Midnight</option><option value="aether">Aether</option><option value="ember">Ember</option></select></label>
+      <label class="set">Kompakte Zeilen <input type="checkbox" data-k="compact"></label>
+      <label class="set">Reset nach Leerlauf <select data-k="idle_reset_seconds"><option value="0">Aus</option><option value="15">15 Sekunden</option><option value="30">30 Sekunden</option><option value="60">60 Sekunden</option><option value="120">2 Minuten</option></select></label>
+      <label class="set">Wipe automatisch zurücksetzen <input type="checkbox" data-k="wipe_reset"></label>
+      <p class="analysis-note">Vor jedem Reset wird der Versuch gespeichert. Wipe-Erkennung braucht mindestens zwei erfasste Spieler einschließlich dir, alle als tot erfasst, fünf Sekunden ohne Treffer und einen gemeldeten Boss-HP-Reset. Geschätzte HP lösen keinen Wipe aus. Während Training bleibt Auto-Reset aus.</p>
       <label class="set">Sichtbar <input type="checkbox" data-k="visible"></label>
       <label class="set">Gesperrt (Klicks gehen durch ans Spiel) <input type="checkbox" data-k="locked"></label>
       <label class="set">Hintergrund-Deckkraft <input type="range" min="0" max="1" step="0.05" data-k="opacity"><output class="setting-value" data-for="opacity"></output></label>
@@ -228,6 +233,9 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <p class="muted">Der Mitschnitt hilft, Ausweichen und nDPS zu entschlüsseln. Die Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
     </div>
     <div class="card"><h2>Profile</h2><p class="muted">Einstellungen und Position werden automatisch lokal gespeichert. Profile lassen sich zum Beispiel für Charaktere oder OBS anlegen.</p><div class="row"><input id="profileName" maxlength="100" placeholder="Profilname / Charakter" aria-label="Profilname"><button class="btn" id="saveProfile">Profil speichern</button><button class="btn" id="loadProfile">Profil laden</button><button class="btn" id="recoverOverlay">Overlay zurückholen</button></div></div>
+    <div class="card">
+      <h2>Version und Updates</h2><p id="versionInfo" class="muted">Version wird geladen …</p><button class="btn" id="checkUpdate">Nach Update suchen</button><p id="updateInfo" class="muted" role="status">Nur auf Klick wird GitHub kontaktiert. Keine automatische Installation.</p>
+    </div>
     <div class="card">
       <h2>Tastenkürzel unter KDE</h2>
       <p class="muted">Wayland erlaubt Apps keine eigenen globalen Hotkeys. <code>./scripts/install-shortcuts.sh</code> aus dem Repo registriert sie direkt bei KDE:</p>
@@ -550,7 +558,7 @@ function saveSettings() {
 $('#retrySettings').onclick = () => saveSettings().catch(() => {});
 document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
   if (!settings) return;
-  settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? i.value : Number(i.value);
+  settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? (i.dataset.k === 'idle_reset_seconds' ? Number(i.value) : i.value) : Number(i.value);
   settingsValues(); settingsDirty = true; settingsRequest++;
   settingsStatus('Änderungen noch nicht gespeichert …');
   clearTimeout(settingsTimer); settingsTimer = setTimeout(() => saveSettings().catch(() => {}), 180);
@@ -561,5 +569,6 @@ window.addEventListener('resize', () => { if (tab === 'stats') drawBoss(); });
 show(tab);
 </script>
 <script src="/enhancements.js"></script>
+<script src="/qol.js"></script>
 </body>
 </html>

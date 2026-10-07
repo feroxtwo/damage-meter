@@ -34,6 +34,22 @@ fn db_error(e: anyhow::Error) -> StatusCode {
     StatusCode::INTERNAL_SERVER_ERROR
 }
 
+async fn version() -> Json<Value> {
+    Json(crate::updates::info())
+}
+async fn update_check(headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
+    guard(&headers)?;
+    crate::updates::check().await.map(Json).map_err(|e| {
+        tracing::warn!("Release check: {e}");
+        StatusCode::BAD_GATEWAY
+    })
+}
+async fn qol_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../web/qol.js"),
+    )
+}
 async fn index() -> Html<&'static str> {
     Html(include_str!("../web/index.html"))
 }
@@ -426,6 +442,9 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
                 )
             }),
         )
+        .route("/qol.js", get(qol_js))
+        .route("/api/version", get(version))
+        .route("/api/update-check", post(update_check))
         .route("/api/live", get(live))
         .route("/api/runs", get(runs))
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
