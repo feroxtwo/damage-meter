@@ -460,6 +460,7 @@ const server = http.createServer((req,res) => {
       await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('en');
       await page.waitForFunction(()=>settings.skill_language==='en'&&!settingsDirty&&!settingsSaving);assert.equal(settings.skill_language,'en');
       await page.evaluate(()=>show('live'));await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();
+      await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
       assert.match(await page.locator('.skill-browser').first().textContent(),/Strike/);assert.ok(await page.locator('.skill-browser .game-icon').count()>0);
       const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'Spieler 1');
       await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
