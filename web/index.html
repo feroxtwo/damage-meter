@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AION2 Meter</title>
+<link rel="icon" href="data:,">
 <style>
 :root {
   color-scheme: dark;
@@ -18,6 +19,7 @@ button, input, select { accent-color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 button:disabled { opacity: .5; cursor: wait; }
 a { color: var(--accent); }
+main section { scroll-margin-top: 96px; }
 header { display: flex; align-items: center; gap: 28px; padding: 16px 32px; background: #0e1624f5; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #edc57b55; color: var(--gold); border-radius: 12px; background: #edc57b0a; }
@@ -96,8 +98,8 @@ code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-siz
 .empty p { margin: 0 auto; max-width: 450px; }
 .table-scroll { overflow-x: auto; }
 .table-scroll table { min-width: 680px; }
-.setting-value { min-width: 42px; color: var(--accent); font-variant-numeric: tabular-nums; text-align: right; }
-label.set input[type=range] { width: min(34vw, 240px); }
+.setting-value { min-width: 48px; color: var(--accent); font-variant-numeric: tabular-nums; text-align: right; }
+label.set input[type=range] { width: min(34vw, 240px); margin-left: auto; }
 label.set input[type=checkbox] { width: 18px; height: 18px; }
 #settings .card { max-width: 820px; }
 #toast { position: fixed; bottom: 24px; right: 24px; z-index: 20; max-width: min(420px, calc(100vw - 32px)); padding: 14px 18px; border: 1px solid var(--accent); border-radius: 12px; background: var(--panel); box-shadow: 0 12px 40px #0008; }
