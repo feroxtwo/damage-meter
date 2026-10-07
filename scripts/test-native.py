@@ -35,11 +35,21 @@ try:
     def post(s):
         req=urllib.request.Request(base+'/api/overlay',json.dumps(s).encode(),headers={'x-a2m':'1','Content-Type':'application/json'},method='POST')
         urllib.request.urlopen(req,timeout=2).close()
-    time.sleep(.5)
+    def wait_geometry(width,height,position=(40,40)):
+        # Creating the X11 window precedes Mesa shader initialization on cold CI.
+        # Observe the requested result instead of assuming a fixed render latency.
+        deadline=time.monotonic()+15
+        while time.monotonic()<deadline:
+            if p.poll() is not None: raise RuntimeError((Path(workspace.name)/'native.log').read_text())
+            g=geometry()
+            if abs(int(g['WIDTH'])-round(width))<=1 and abs(int(g['HEIGHT'])-round(height))<=1 and (int(g['X']),int(g['Y']))==position:
+                return g
+            time.sleep(.1)
+        raise AssertionError(f'Expected {width}x{height} at {position}, observed {g}')
     print('Native start:',geometry(),flush=True)
     for scale in [1,1.5,2,2.5,.6,1]:
-        s=get();s.update(scale=scale,compact=True,theme='aether');post(s);time.sleep(.8)
-        g=geometry();print('Scale',scale,g,flush=True)
+        s=get();s.update(scale=scale,compact=True,theme='aether');post(s)
+        g=wait_geometry(360*scale,88*scale);print('Scale',scale,g,flush=True)
         assert abs(int(g['WIDTH'])-round(360*scale)) <= 1,g
         assert abs(int(g['HEIGHT'])-round(88*scale)) <= 1,g
         assert (int(g['X']),int(g['Y']))==(40,40),g
@@ -48,19 +58,27 @@ try:
     g=geometry(); hidden=ImageGrab.grab(xdisplay=env['DISPLAY']).crop((int(g['X']),int(g['Y']),int(g['X'])+int(g['WIDTH']),int(g['Y'])+int(g['HEIGHT'])))
     assert hidden.getbbox() is None,'Hidden overlay still paints content'
     print('Hidden:',g,flush=True)
-    s.update(visible=True,locked=False,position=[150,200]);post(s);time.sleep(.5)
-    assert (int(geometry()['X']),int(geometry()['Y']))==(150,200)
+    s.update(visible=True,locked=False,position=[150,200]);post(s)
+    wait_geometry(360,88,(150,200))
     print('Restored:',geometry(),flush=True)
     ImageGrab.grab(xdisplay=env['DISPLAY']).save(output/'native-restored.png')
     p.terminate();p.wait(timeout=5);assert p.returncode==0,p.returncode
     p=subprocess.Popen([binary,'--x11','--db',str(Path(workspace.name)/'native.db'),'--port','8796'],env=env,stdout=log,stderr=log)
-    time.sleep(1)
-    r=subprocess.run([str(root/'bin/xdotool'),'search','--name','AION2 Meter'],env=env,capture_output=True,text=True,check=True)
+    for _ in range(100):
+        if p.poll() is not None: raise RuntimeError((Path(workspace.name)/'native.log').read_text())
+        r=subprocess.run([str(root/'bin/xdotool'),'search','--name','AION2 Meter'],env=env,capture_output=True,text=True)
+        if r.returncode==0: break
+        time.sleep(.1)
+    assert r.returncode==0,r.stderr
     window=r.stdout.strip().splitlines()[-1]
-    assert (int(geometry()['X']),int(geometry()['Y']))==(150,200)
-    assert int(geometry()['HEIGHT'])==88
+    wait_geometry(360,88,(150,200))
     p.terminate();p.wait(timeout=5);assert p.returncode==0
     print('PASS native X11 start, appearance controls, visibility and graceful termination',flush=True)
+except Exception:
+    log.flush();xlog.flush()
+    print('Native log:',(Path(workspace.name)/'native.log').read_text(),flush=True)
+    print('Xvfb log:',(Path(workspace.name)/'xvfb.log').read_text(),flush=True)
+    raise
 finally:
     if p and p.poll() is None:p.kill();p.wait()
     x.terminate();x.wait(timeout=5)
