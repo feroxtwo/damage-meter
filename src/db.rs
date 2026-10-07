@@ -124,6 +124,7 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
         "INTEGER NOT NULL DEFAULT 0",
     ),
     ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
+    ("runs", "favorite", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
 /// SQLite's `lower()` folds ASCII only, so a search for "kälte" would miss
@@ -723,6 +724,14 @@ impl Db {
         Ok(count > 0)
     }
 
+    pub fn set_run_favorite(&self, run_id: i64, favorite: bool) -> Result<bool> {
+        let count = self.conn.lock().execute(
+            "UPDATE runs SET favorite = ?2 WHERE id = ?1",
+            params![run_id, favorite],
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn set_run_note(&self, run_id: i64, note: &str) -> Result<bool> {
         let count = self.conn.lock().execute(
             "UPDATE runs SET note = ?2 WHERE id = ?1",
@@ -741,12 +750,13 @@ impl Db {
         offset: i64,
         dungeon: Option<&str>,
         character: &str,
+        favorites: bool,
     ) -> Result<Value> {
         let conn = self.conn.lock();
         let filter = dungeon.unwrap_or("");
         let mut stmt = conn.prepare(
             "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
-                    r.character, r.note,
+                    r.character, r.note, r.favorite,
                     (SELECT COUNT(*) FROM fights f WHERE f.run_id = r.id AND f.is_train = 0) AS fights,
                     (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
@@ -754,9 +764,13 @@ impl Db {
                        WHERE f.run_id = r.id AND f.is_train = 0 AND fp.is_self = 1) AS my_dps
              FROM runs r
              WHERE (?3 = '' OR r.dungeon_name = ?3) AND (?4 = '' OR r.character = ?4)
+               AND (?5 = 0 OR r.favorite = 1)
              ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2",
         )?;
-        let mut rows = rows_to_json(&mut stmt, params![limit, offset, filter, character])?;
+        let mut rows = rows_to_json(
+            &mut stmt,
+            params![limit, offset, filter, character, favorites],
+        )?;
         for row in &mut rows {
             let mut members: Vec<Value> =
                 serde_json::from_str(row["members"].as_str().unwrap_or("[]"))?;
@@ -764,8 +778,9 @@ impl Db {
             row["members"] = Value::Array(members);
         }
         let total: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1) AND (?2 = '' OR character = ?2)",
-            params![filter, character],
+            "SELECT COUNT(*) FROM runs WHERE (?1 = '' OR dungeon_name = ?1) AND (?2 = '' OR character = ?2)
+               AND (?3 = 0 OR favorite = 1)",
+            params![filter, character, favorites],
             |r| r.get(0),
         )?;
         let dungeons: Vec<String> = conn
@@ -1307,7 +1322,7 @@ mod tests {
         dummy.is_train = true;
         db.save_fights(&[boss, dummy], 0, &["Me".into()], None, &HashSet::new())
             .unwrap();
-        let list = db.list_runs(10, 0, None, "").unwrap();
+        let list = db.list_runs(10, 0, None, "", false).unwrap();
         let row = list["runs"]
             .as_array()
             .unwrap()
@@ -1372,7 +1387,7 @@ mod tests {
         db.upsert_members(run, &[member("名;|\"<>&", false)])
             .unwrap();
         assert_eq!(
-            db.list_runs(10, 0, None, "").unwrap()["runs"][0]["members"][0]["name"],
+            db.list_runs(10, 0, None, "", false).unwrap()["runs"][0]["members"][0]["name"],
             "名;|\"<>&"
         );
         assert!(!db.delete_run(run).unwrap());
@@ -1539,10 +1554,22 @@ mod tests {
         db.upsert_members(c, &[member("Alt", true), member("Bob", false)])
             .unwrap();
 
-        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 3);
-        assert_eq!(db.list_runs(10, 0, None, "Main").unwrap()["total"], 1);
+        assert_eq!(db.list_runs(10, 0, None, "", false).unwrap()["total"], 3);
+        let first = db.list_runs(10, 0, None, "", false).unwrap()["runs"][0]["id"]
+            .as_i64()
+            .unwrap();
+        assert!(db.set_run_favorite(first, true).unwrap());
+        assert!(!db.set_run_favorite(-1, true).unwrap());
+        let favorites = db.list_runs(10, 0, None, "", true).unwrap();
+        assert_eq!(favorites["total"], 1);
+        assert_eq!(favorites["runs"][0]["id"], first);
+        assert_eq!(favorites["runs"][0]["favorite"], 1);
         assert_eq!(
-            db.list_runs(10, 0, None, "Twink").unwrap()["dungeons"]
+            db.list_runs(10, 0, None, "Main", false).unwrap()["total"],
+            1
+        );
+        assert_eq!(
+            db.list_runs(10, 0, None, "Twink", false).unwrap()["dungeons"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -1628,7 +1655,7 @@ mod tests {
         let run = db.start_run(600001, 0, Some("Me"), 0).unwrap();
         db.upsert_members(run, &[member("Me", true)]).unwrap();
         db.end_run(run, 10).unwrap();
-        assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 0);
+        assert_eq!(db.list_runs(10, 0, None, "", false).unwrap()["total"], 0);
     }
 
     #[test]
@@ -1638,7 +1665,7 @@ mod tests {
         db.upsert_members(run, &[member("Me", true), member("Anna", false)])
             .unwrap();
         db.end_run(run, 60_000).unwrap();
-        let list = db.list_runs(10, 0, None, "").unwrap();
+        let list = db.list_runs(10, 0, None, "", false).unwrap();
         assert_eq!(list["total"], 1);
         assert_eq!(list["runs"][0]["difficulty"], "Normal");
         assert_eq!(list["runs"][0]["members"].as_array().unwrap().len(), 2);

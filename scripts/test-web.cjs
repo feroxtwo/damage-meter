@@ -26,7 +26,7 @@ const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',st
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
 const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
 const profiles=new Map();
-let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set();
+let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),runFavorites=[],runQueries=[];
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
@@ -74,10 +74,13 @@ const server = http.createServer((req,res) => {
     else if (u.pathname === '/api/runs') {
       if (failRuns) { await route.fulfill({status:500,body:'error'}); return; }
       if (slowMain && u.searchParams.get('character') === 'FeroxTOO') await delay(250);
+      runQueries.push(u.searchParams.get('favorites'));
       const offset = Number(u.searchParams.get('offset') || 0), limit = Number(u.searchParams.get('limit') || 50), total = 12;
       const ids = Array.from({length:Math.max(0,Math.min(limit,total-offset))},(_,i)=>offset+i+1);
-      data = {runs:ids.map(id=>({...run, id, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name})), total, dungeons:[run.dungeon_name]};
+      if (u.searchParams.get('favorites') === 'true') data = {runs:[{...run, id:2, favorite:1}], total:1, dungeons:[run.dungeon_name]};
+      else data = {runs:ids.map(id=>({...run, id, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name})), total, dungeons:[run.dungeon_name]};
     }
+    else if (/^\/api\/runs\/\d+\/favorite$/.test(u.pathname)) { runFavorites.push({id:u.pathname.split('/')[3],...req.postDataJSON()}); data = null; }
     else if (/^\/api\/runs\/\d+$/.test(u.pathname)) data = {...run, id:Number(u.pathname.split('/').pop()), totals:[], fights:[]};
     else if (u.pathname === '/api/stats/summary') data = summary;
     else if (u.pathname === '/api/stats/partners') data = [{name:'Moon', class_key:'gladiator',class_name:'Gladiator',runs:10}];
@@ -124,6 +127,21 @@ const server = http.createServer((req,res) => {
       await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='11–12 von 12');
       await page.locator('#runPrev').click();
       await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='1–10 von 12');
+    });
+    await check('runs can be starred in the list and filtered to favorites',async()=>{
+      const star=page.locator('#runRows [data-fav-run="2"]');
+      assert.equal(await star.getAttribute('aria-pressed'),'false');
+      await star.click();
+      await page.waitForFunction(()=>document.querySelector('#runRows [data-fav-run="2"]').getAttribute('aria-pressed')==='true');
+      assert.deepEqual(runFavorites.at(-1),{id:'2',favorite:true});
+      assert.ok(await page.locator('#runDetail').isHidden());
+      await page.locator('#runFavorites').check();
+      await page.waitForFunction(()=>document.querySelectorAll('#runRows tr.click').length===1);
+      assert.equal(runQueries.at(-1),'true');
+      assert.ok(await page.locator('#runPager').isHidden());
+      await page.locator('#runFavorites').uncheck();
+      await page.waitForFunction(()=>document.querySelectorAll('#runRows tr.click').length===10);
+      assert.equal(runQueries.at(-1),'false');
     });
     await check('fight library pages separately from the run history',async()=>{
       await page.waitForFunction(()=>document.querySelector('#fightPage').textContent==='Seite 1 · 1–3');

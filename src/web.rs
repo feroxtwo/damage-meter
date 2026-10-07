@@ -110,6 +110,8 @@ struct RunsQuery {
     offset: Option<i64>,
     dungeon: Option<String>,
     character: Option<String>,
+    #[serde(default)]
+    favorites: bool,
 }
 
 async fn runs(
@@ -121,7 +123,7 @@ async fn runs(
     let dungeon = q.dungeon.filter(|d| !d.is_empty());
     let character = q.character.unwrap_or_default();
     blocking(engine, move |e| {
-        e.db.list_runs(limit, offset, dungeon.as_deref(), &character)
+        e.db.list_runs(limit, offset, dungeon.as_deref(), &character, q.favorites)
     })
     .await?
     .map(Json)
@@ -171,6 +173,27 @@ async fn run_note(
     let saved = engine
         .db
         .set_run_note(id, body.note.trim())
+        .map_err(db_error)?;
+    if !saved {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct FavoriteBody {
+    favorite: bool,
+}
+
+async fn run_favorite(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<FavoriteBody>,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    let saved = blocking(engine, move |e| e.db.set_run_favorite(id, body.favorite))
+        .await?
         .map_err(db_error)?;
     if !saved {
         return Err(StatusCode::NOT_FOUND);
@@ -540,6 +563,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/runs", get(runs))
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
         .route("/api/runs/{id}/note", post(run_note))
+        .route("/api/runs/{id}/favorite", post(run_favorite))
         .route("/api/fights", get(search_fights))
         .route("/api/fights/{id}", get(fight_detail))
         .route("/api/fights/{id}/annotation", post(annotate))
@@ -824,6 +848,12 @@ mod tests {
                 format!("/api/fights?query={}", "a".repeat(501)),
                 "".into(),
                 StatusCode::BAD_REQUEST,
+            ),
+            (
+                "POST",
+                "/api/runs/999/favorite".into(),
+                json!({"favorite":true}).to_string(),
+                StatusCode::NOT_FOUND,
             ),
             (
                 "POST",

@@ -191,7 +191,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:10px">
           <h2 style="margin:0">Expeditionen</h2>
-          <select id="dungeonFilter" aria-label="Dungeon filtern"><option value="">Alle Dungeons</option></select>
+          <div class="row"><label><input id="runFavorites" type="checkbox"> Nur Favoriten</label><select id="dungeonFilter" aria-label="Dungeon filtern"><option value="">Alle Dungeons</option></select></div>
         </div>
         <div class="table-scroll"><table><thead><tr><th>Datum</th><th>Dungeon</th><th>Dauer</th><th>Bosse</th><th>Gruppe</th><th>Meine DPS</th></tr></thead>
         <tbody id="runRows"></tbody></table></div><p class="analysis-note">Meine DPS: arithmetischer Mittelwert der eigenen gespeicherten Kampf-DPS.</p>
@@ -408,6 +408,27 @@ loadCharacters(); setInterval(loadCharacters, 60000);
 
 // Shows one page of RUN_PAGE runs. reset jumps back to the newest page;
 // otherwise the current page is reloaded (e.g. after returning from a run).
+// Favorite star shared by runs and fights; the caller wires the click.
+const favLabel = fav => fav ? 'Favorit entfernen' : 'Als Favorit markieren';
+function favButton(fav, attr, id, name) {
+  return `<button class="fav-toggle${fav ? ' on' : ''}" ${attr}="${esc(id)}" aria-pressed="${!!fav}" aria-label="${favLabel(fav)}: ${esc(name)}" title="${favLabel(fav)}">${fav ? '★' : '☆'}</button>`;
+}
+function setFavButton(button, fav, name) {
+  button.classList.toggle('on', fav); button.textContent = fav ? '★' : '☆'; button.title = favLabel(fav);
+  button.setAttribute('aria-pressed', String(fav)); button.setAttribute('aria-label', `${favLabel(fav)}: ${name}`);
+}
+async function toggleRunFavorite(button, run) {
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await api(`/api/runs/${run.id}/favorite`, { method: 'POST', body: JSON.stringify({ favorite: !run.favorite }) });
+    run.favorite = run.favorite ? 0 : 1;
+    setFavButton(button, !!run.favorite, run.dungeon_name);
+    // With "Nur Favoriten" an unstarred run leaves the list.
+    if ($('#runFavorites').checked && !run.favorite && $('#runList').style.display !== 'none') loadRuns(false);
+  } finally { button.disabled = false; }
+}
+
 async function loadRuns(reset) {
   $('#runDetail').style.display = 'none'; $('#runList').style.display = 'block';
   const request = ++runsRequest;
@@ -416,7 +437,7 @@ async function loadRuns(reset) {
   $('#runRows').innerHTML = '<tr><td colspan="6" class="empty">Runs werden geladen …</td></tr>';
   const dungeon = $('#dungeonFilter').value;
   let data;
-  try { data = await api(`/api/runs?limit=${RUN_PAGE}&offset=${runPage * RUN_PAGE}&dungeon=${encodeURIComponent(dungeon)}&${charQ()}`); }
+  try { data = await api(`/api/runs?limit=${RUN_PAGE}&offset=${runPage * RUN_PAGE}&dungeon=${encodeURIComponent(dungeon)}&favorites=${$('#runFavorites').checked}&${charQ()}`); }
   catch (e) { if (request === runsRequest) { $('#runRows').innerHTML = '<tr><td colspan="6" class="empty">Runs konnten nicht geladen werden. Bitte erneut versuchen.</td></tr>'; $('#runPager').hidden = true; } throw e; }
   if (request !== runsRequest) return;
   // A deleted run can leave the current page empty: step back to the last page.
@@ -425,18 +446,21 @@ async function loadRuns(reset) {
   sel.innerHTML = '<option value="">Alle Dungeons</option>' + data.dungeons.map(d => `<option>${esc(d)}</option>`).join('');
   sel.value = cur;
   const html = data.runs.map(r => `<tr class="click" data-id="${r.id}">
-    <td>${date(r.started_at)}</td><td><b>${esc(r.dungeon_name)}</b>${badge(r.difficulty)}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</td>
+    <td>${date(r.started_at)}</td><td>${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}<b>${esc(r.dungeon_name)}</b>${badge(r.difficulty)}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</td>
     <td class="num">${r.ended_at ? dur(r.ended_at - r.started_at) : '<span style="color:var(--green)">läuft</span>'}</td>
     <td class="num">${r.fights}</td><td>${r.members.map(chip).join('')}</td><td class="num">${r.my_dps ? num(r.my_dps) : '–'}</td></tr>`).join('');
-  $('#runRows').innerHTML = html || `<tr><td colspan="6" class="empty">Noch keine Runs gespeichert. Betritt eine Expedition mit laufendem Meter.</td></tr>`;
+  $('#runRows').innerHTML = html || `<tr><td colspan="6" class="empty">${$('#runFavorites').checked ? 'Noch keine Favoriten. Markiere Runs mit dem Stern.' : 'Noch keine Runs gespeichert. Betritt eine Expedition mit laufendem Meter.'}</td></tr>`;
   const first = runPage * RUN_PAGE;
   $('#runPager').hidden = data.total <= RUN_PAGE;
   $('#runPage').textContent = `${data.runs.length ? first + 1 : 0}–${first + data.runs.length} von ${data.total}`;
   $('#runPrev').disabled = runPage === 0;
   $('#runNext').disabled = first + data.runs.length >= data.total;
-  document.querySelectorAll('#runRows tr.click').forEach(tr => {tr.tabIndex=0;tr.setAttribute('role','button');tr.setAttribute('aria-label','Run öffnen: '+tr.cells[1].textContent);tr.onclick=()=>task(openRun(tr.dataset.id));tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tr.click();}};});
+  const byId = new Map(data.runs.map(r => [String(r.id), r]));
+  document.querySelectorAll('#runRows [data-fav-run]').forEach(b => { b.onclick = e => { e.stopPropagation(); task(toggleRunFavorite(b, byId.get(b.dataset.favRun))); }; b.onkeydown = e => e.stopPropagation(); });
+  document.querySelectorAll('#runRows tr.click').forEach(tr => {tr.tabIndex=0;tr.setAttribute('role','button');tr.setAttribute('aria-label','Run öffnen: '+byId.get(tr.dataset.id).dungeon_name);tr.onclick=()=>task(openRun(tr.dataset.id));tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tr.click();}};});
 }
 $('#dungeonFilter').onchange = () => loadRuns(true);
+$('#runFavorites').onchange = () => task(loadRuns(true));
 // Buttons stay disabled while a page loads, so double clicks cannot skip pages.
 $('#runPrev').onclick = () => { runPage = Math.max(0, runPage - 1); task(loadRuns(false)); };
 $('#runNext').onclick = () => { runPage++; task(loadRuns(false)); };
@@ -449,7 +473,7 @@ async function openRun(id) {
   const el = $('#runDetail'); el.style.display = 'block';
   el.innerHTML = `<button class="btn back" id="backBtn">← Zurück</button>
   <div class="card"><div class="row" style="justify-content:space-between">
-    <div><div style="font-size:20px;font-weight:700">${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
+    <div><div style="font-size:20px;font-weight:700">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
     <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} Bosskämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
     <div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
     <button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Löschen</button></div></div>
@@ -460,6 +484,7 @@ async function openRun(id) {
     <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
     ${bars(f.players)}<div class="skills" id="sk-${esc(f.id)}"></div></details></div>`).join('')}`;
   $('#backBtn').onclick = () => loadRuns(false);
+  const star = el.querySelector('[data-fav-run]'); star.onclick = () => task(toggleRunFavorite(star, r));
   $('#noteBtn').onclick = async () => { await api(`/api/runs/${id}/note`, { method: 'POST', body: JSON.stringify({ note: $('#noteIn').value }) }); toast('Notiz gespeichert.'); };
   $('#delBtn').onclick = async () => { if (confirm('Diesen Run wirklich löschen?')) { await api('/api/runs/' + id, { method: 'DELETE' }); loadRuns(false); } };
   el.querySelectorAll('[data-fight]').forEach(b => b.onclick = (e) => { e.preventDefault(); b.closest('details').open = true; openSkills(b.dataset.fight); });

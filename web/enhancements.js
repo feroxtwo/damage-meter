@@ -133,8 +133,7 @@ function fightFilters() {
   return q;
 }
 function fightRow(f) {
-  const fav=!!f.favorite;
-  return `<tr><td>${date(f.started_at)}</td><td><button class="fav-toggle${fav?' on':''}" data-fav-fight="${esc(f.id)}" aria-pressed="${fav}" aria-label="${fav?'Favorit entfernen':'Als Favorit markieren'}: ${esc(f.boss_name)}" title="${fav?'Favorit entfernen':'Als Favorit markieren'}">${fav?'★':'☆'}</button><button class="btn" data-open-fight="${esc(f.id)}">${esc(f.boss_name)}${f.is_train?' · Training':''}</button>${badge(f.difficulty)}<div class="muted">${esc(f.tags||'')}</div></td><td>${dur(f.duration_ms)}</td><td>${num(f.my_dps)}/s</td></tr>`;
+  return `<tr><td>${date(f.started_at)}</td><td>${favButton(f.favorite,'data-fav-fight',f.id,f.boss_name)}<button class="btn" data-open-fight="${esc(f.id)}">${esc(f.boss_name)}${f.is_train?' · Training':''}</button>${badge(f.difficulty)}<div class="muted">${esc(f.tags||'')}</div></td><td>${dur(f.duration_ms)}</td><td>${num(f.my_dps)}/s</td></tr>`;
 }
 // Shows one page of a list. reset jumps back to the newest page; otherwise the
 // current page is reloaded (e.g. after saving a note). Without a kind both lists load.
@@ -171,9 +170,7 @@ async function toggleFavorite(button,kind) {
     if(currentFight?.id===f.id){currentFight.favorite=!!f.favorite;if($('#favoriteFight'))$('#favoriteFight').checked=!!f.favorite;}
     // With "Nur Favoriten" an unstarred fight leaves the list.
     if($('#fightFavorites').checked)return loadFights(false,kind);
-    const fav=!!f.favorite,label=fav?'Favorit entfernen':'Als Favorit markieren';
-    button.classList.toggle('on',fav);button.textContent=fav?'★':'☆';button.title=label;
-    button.setAttribute('aria-pressed',String(fav));button.setAttribute('aria-label',`${label}: ${f.boss_name}`);
+    setFavButton(button,!!f.favorite,f.boss_name);
   } finally {button.disabled=false;}
 }
 window.loadFights=loadFights;
