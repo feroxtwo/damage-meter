@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::db::{FightKind, FightSearch};
 use axum::extract::{Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::middleware::{self, Next};
@@ -359,6 +360,8 @@ struct FightQuery {
     limit: Option<i64>,
     #[serde(default)]
     offset: i64,
+    #[serde(default)]
+    kind: FightKind,
 }
 async fn search_fights(
     State(e): State<AppState>,
@@ -368,14 +371,16 @@ async fn search_fights(
         return Err(StatusCode::BAD_REQUEST);
     }
     blocking(e, move |e| {
-        e.db.search_fights(
-            &q.query,
-            &q.character,
-            q.from.unwrap_or(0),
-            q.to.unwrap_or(i64::MAX),
-            q.favorites,
-            (q.limit.unwrap_or(100).clamp(1, 500), q.offset.max(0)),
-        )
+        e.db.search_fights(&FightSearch {
+            query: q.query,
+            character: q.character,
+            from: q.from.unwrap_or(0),
+            to: q.to.unwrap_or(i64::MAX),
+            favorites: q.favorites,
+            kind: q.kind,
+            limit: q.limit.unwrap_or(100).clamp(1, 500),
+            offset: q.offset.max(0),
+        })
     })
     .await?
     .map(Json)

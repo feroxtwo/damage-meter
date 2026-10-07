@@ -26,7 +26,7 @@ const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',st
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
 const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
 const profiles=new Map();
-let annotations=[],trainingStarts=[],fightLimits=new Set();
+let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set();
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
@@ -54,12 +54,14 @@ const server = http.createServer((req,res) => {
     else if (u.pathname === '/api/live') data = live;
     else if(u.pathname==='/api/fights'){
       fightLimits.add(u.searchParams.get('limit'));
-      data=Number(u.searchParams.get('offset'))>=10?{fights:[{...fight,id:'f4',boss_name:'Älterer Boss'}],more:false}:{fights:[fight,comparison,comparison2],more:true};
+      fightKinds.add(u.searchParams.get('kind'));
+      if(u.searchParams.get('kind')==='mob')data={fights:[{...fight,id:'m1',boss_name:'Wildschwein',difficulty:null,note:'alt',tags:'farm'}],more:false};
+      else data=Number(u.searchParams.get('offset'))>=10?{fights:[{...fight,id:'f4',boss_name:'Älterer Boss'}],more:false}:{fights:[fight,comparison,comparison2],more:true};
     }
     else if(u.pathname==='/api/fights/f1')data=fight;
     else if(u.pathname==='/api/fights/f2'){if(slowComparison)await delay(350);data=comparison;}
     else if(u.pathname==='/api/fights/f3')data=comparison2;
-    else if(u.pathname==='/api/fights/f1/annotation'){annotations.push(req.postDataJSON());}
+    else if(/^\/api\/fights\/\w+\/annotation$/.test(u.pathname)){annotations.push({id:u.pathname.split('/')[3],...req.postDataJSON()});}
     else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={target_id:9,start_time:1000,skills:[skill],heal_skills:[{...skill,name:'Heilung',names:{de:'Heilung',en:'Healing'}}],duration_ms:90000};}
     else if(u.pathname==='/api/training'){if(req.method()==='POST')trainingStarts.push(req.postDataJSON());data=null;}
     else if(u.pathname==='/api/overlay/profile'){
@@ -133,6 +135,19 @@ const server = http.createServer((req,res) => {
       await page.locator('#fightPrev').click();
       await page.waitForFunction(()=>document.querySelector('#fightPage').textContent==='Seite 1 · 1–3');
       assert.deepEqual([...fightLimits],['10']);
+      assert.deepEqual([...fightKinds].sort(),['boss','mob']);
+    });
+    await check('world mobs sit in their own list and fights can be starred in place',async()=>{
+      assert.match(await page.locator('#mobResults').textContent(),/Wildschwein/);
+      assert.doesNotMatch(await page.locator('#fightResults').textContent(),/Wildschwein/);
+      assert.ok(await page.locator('#mobPager').isHidden());
+      const star=page.locator('#mobResults [data-fav-fight="m1"]');
+      assert.equal(await star.getAttribute('aria-pressed'),'false');
+      await star.click();
+      await page.waitForFunction(()=>document.querySelector('#mobResults [data-fav-fight="m1"]').getAttribute('aria-pressed')==='true');
+      assert.deepEqual(annotations.at(-1),{id:'m1',favorite:true,note:'alt',tags:'farm'});
+      assert.equal(await star.textContent(),'★');
+      assert.equal(await page.locator('#fightDialog[open]').count(),0);
     });
     await check('late character requests cannot overwrite current filter',async()=>{
       slowMain=true;
@@ -289,7 +304,7 @@ const server = http.createServer((req,res) => {
       assert.match(await page.locator('#comparison').textContent(),/25.0%/);
       assert.ok(await page.locator('#fightContent svg').count()>=3);
       await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
-      await delay(100);assert.deepEqual(annotations.at(-1),{favorite:true,note:'neues Gear',tags:'rotation'});
+      await delay(100);assert.deepEqual(annotations.at(-1),{id:'f1',favorite:true,note:'neues Gear',tags:'rotation'});
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'combat-analysis.png'),fullPage:true});
     });
     await check('late comparisons cannot replace the last chosen fight',async()=>{

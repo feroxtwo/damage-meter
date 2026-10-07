@@ -81,7 +81,8 @@ h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); text-transform: u
 button.btn, select, input[type=text] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font: inherit; cursor: pointer; }
 button.btn:hover { border-color: var(--accent); } button.danger:hover { border-color: var(--red); color: var(--red); }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.pager { justify-content: center; margin-top: 12px; } .pager span { color: var(--muted); min-width: 110px; text-align: center; }
+.pager { justify-content: center; margin-top: 12px; }
+.fav-toggle { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 6px; cursor: pointer; vertical-align: middle; } .fav-toggle.on { color: var(--gold); } .fav-toggle:disabled { opacity: .5; cursor: wait; } .pager span { color: var(--muted); min-width: 110px; text-align: center; }
 .partner { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .partner:last-child { border: 0; }
 .rank { font-size: 22px; font-weight: 800; color: var(--gold); text-align: center; }
@@ -198,6 +199,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       </div>
     </div>
     <div id="runDetail" style="display:none"></div>
+    <div class="card" id="mobLibrary"><h2>Welt-Mobs</h2><p class="muted">Normale Gegner ohne Boss-Status, zum Beispiel beim Farmen in der offenen Welt. Feldbosse stehen oben in der Kampfbibliothek. Suche und Filter der Kampfbibliothek gelten auch hier.</p><div id="mobResults"></div><div class="row pager" id="mobPager" hidden><button class="btn" id="mobPrev">Zurück</button><span id="mobPage" role="status"></span><button class="btn" id="mobNext">Weiter</button></div></div>
   </section>
 
   <section id="stats">

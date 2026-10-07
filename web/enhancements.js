@@ -1,6 +1,6 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
 const FIGHT_PAGE = 10;
-let fightPage = 0, fightSearchRequest = 0, detailRequest = 0;
+let detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
 const pct = v => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(1).replace('.', ',') + '%';
 const metricKey = () => $('#liveMetric').value;
@@ -106,34 +106,71 @@ function fightExport(f,anonymous) {
   return {boss:f.boss_name,difficulty:f.difficulty,started_at:f.started_at,duration_ms:f.duration_ms,healing_scope:f.healing_scope,numeric_limited:!!f.numeric_limited,players};
 }
 
-// Shows one page of FIGHT_PAGE fights. reset jumps back to the newest page;
-// otherwise the current page is reloaded (e.g. after saving a note).
-async function loadFights(reset=true) {
-  if($('#fightFrom').value&&$('#fightTo').value&&$('#fightFrom').value>$('#fightTo').value){toast('Das Von-Datum muss vor dem Bis-Datum liegen.',true);return;}
-  const request=++fightSearchRequest;
-  if(reset)fightPage=0;
-  $('#fightResults').textContent='Kämpfe werden geladen …';
-  $('#fightPrev').disabled=$('#fightNext').disabled=true;
-  const q=new URLSearchParams({query:$('#fightSearch').value,character, favorites:String($('#fightFavorites').checked),limit:String(FIGHT_PAGE),offset:String(fightPage*FIGHT_PAGE)});
+// The fight library has two lists with the same filters: bosses (field
+// bosses, training and unknown targets included) and, at the very bottom of
+// the page, ordinary world mobs. Each shows FIGHT_PAGE fights and pages on its own.
+const fightLists={
+  boss:{el:'#fightResults',pager:'#fightPager',label:'#fightPage',prev:'#fightPrev',next:'#fightNext',page:0,request:0,empty:'Keine passenden Kämpfe.'},
+  mob:{el:'#mobResults',pager:'#mobPager',label:'#mobPage',prev:'#mobPrev',next:'#mobNext',page:0,request:0,empty:'Keine passenden Welt-Mobs.'},
+};
+const shownFights=new Map();
+function fightFilters() {
+  const q=new URLSearchParams({query:$('#fightSearch').value,character,favorites:String($('#fightFavorites').checked),limit:String(FIGHT_PAGE)});
   if($('#fightFrom').value)q.set('from',String(new Date($('#fightFrom').value+'T00:00:00').getTime()));
   if($('#fightTo').value)q.set('to',String(new Date($('#fightTo').value+'T23:59:59.999').getTime()));
+  return q;
+}
+function fightRow(f) {
+  const fav=!!f.favorite;
+  return `<tr><td>${date(f.started_at)}</td><td><button class="fav-toggle${fav?' on':''}" data-fav-fight="${esc(f.id)}" aria-pressed="${fav}" aria-label="${fav?'Favorit entfernen':'Als Favorit markieren'}: ${esc(f.boss_name)}" title="${fav?'Favorit entfernen':'Als Favorit markieren'}">${fav?'★':'☆'}</button><button class="btn" data-open-fight="${esc(f.id)}">${esc(f.boss_name)}${f.is_train?' · Training':''}</button>${badge(f.difficulty)}<div class="muted">${esc(f.tags||'')}</div></td><td>${dur(f.duration_ms)}</td><td>${num(f.my_dps)}/s</td></tr>`;
+}
+// Shows one page of a list. reset jumps back to the newest page; otherwise the
+// current page is reloaded (e.g. after saving a note). Without a kind both lists load.
+async function loadFights(reset=true,kind) {
+  if($('#fightFrom').value&&$('#fightTo').value&&$('#fightFrom').value>$('#fightTo').value){toast('Das Von-Datum muss vor dem Bis-Datum liegen.',true);return;}
+  if(!kind)return Promise.all(Object.keys(fightLists).map(k=>loadFights(reset,k)));
+  const list=fightLists[kind],request=++list.request;
+  if(reset)list.page=0;
+  $(list.el).textContent='Kämpfe werden geladen …';
+  $(list.prev).disabled=$(list.next).disabled=true;
+  const q=fightFilters();q.set('kind',kind);q.set('offset',String(list.page*FIGHT_PAGE));
   try {
-    const data=await api('/api/fights?'+q);if(request!==fightSearchRequest)return;
-    const rows=(data.fights||[]).map(f=>`<tr><td>${date(f.started_at)}</td><td><button class="btn" data-open-fight="${esc(f.id)}">${f.favorite?'★ ':''}${esc(f.boss_name)}${f.is_train?' · Training':''}</button>${badge(f.difficulty)}<div class="muted">${esc(f.tags||'')}</div></td><td>${dur(f.duration_ms)}</td><td>${num(f.my_dps)}/s</td></tr>`).join('');
+    const data=await api('/api/fights?'+q);if(request!==list.request)return;
+    const fights=data.fights||[];
     // A page emptied by a changed filter result steps back to the first page.
-    if(!rows&&fightPage>0){fightPage=0;return loadFights(false);}
-    $('#fightResults').innerHTML=rows?`<div class="table-scroll"><table><thead><tr><th>Datum</th><th>Kampf</th><th>Dauer</th><th>Meine DPS</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">Keine passenden Kämpfe.</p>';
-    const first=fightPage*FIGHT_PAGE,count=(data.fights||[]).length;
-    $('#fightPager').hidden=fightPage===0&&!data.more;
-    $('#fightPage').textContent=`Seite ${fightPage+1} · ${count?first+1:0}–${first+count}`;
-    $('#fightPrev').disabled=fightPage===0;$('#fightNext').disabled=!data.more;
-    $('#fightResults').querySelectorAll('[data-open-fight]').forEach(b=>b.onclick=()=>task(openFight(b.dataset.openFight)));
-  }catch(e){if(request===fightSearchRequest){$('#fightResults').textContent='Kampfliste konnte nicht geladen werden.';$('#fightPager').hidden=true;}throw e;}
+    if(!fights.length&&list.page>0){list.page=0;return loadFights(false,kind);}
+    for(const f of fights)shownFights.set(f.id,f);
+    $(list.el).innerHTML=fights.length?`<div class="table-scroll"><table><thead><tr><th>Datum</th><th>Kampf</th><th>Dauer</th><th>Meine DPS</th></tr></thead><tbody>${fights.map(fightRow).join('')}</tbody></table></div>`:`<p class="muted">${list.empty}</p>`;
+    const first=list.page*FIGHT_PAGE;
+    $(list.pager).hidden=list.page===0&&!data.more;
+    $(list.label).textContent=`Seite ${list.page+1} · ${fights.length?first+1:0}–${first+fights.length}`;
+    $(list.prev).disabled=list.page===0;$(list.next).disabled=!data.more;
+    $(list.el).querySelectorAll('[data-open-fight]').forEach(b=>b.onclick=()=>task(openFight(b.dataset.openFight)));
+    $(list.el).querySelectorAll('[data-fav-fight]').forEach(b=>b.onclick=()=>task(toggleFavorite(b,kind)));
+  }catch(e){if(request===list.request){$(list.el).textContent='Kampfliste konnte nicht geladen werden.';$(list.pager).hidden=true;}throw e;}
+}
+// Star directly in the list; keeps the fight's note and tags.
+async function toggleFavorite(button,kind) {
+  const f=shownFights.get(button.dataset.favFight);if(!f||button.disabled)return;
+  button.disabled=true;
+  try {
+    await api('/api/fights/'+encodeURIComponent(f.id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:!f.favorite,note:f.note||'',tags:f.tags||''})});
+    f.favorite=f.favorite?0:1;
+    if(currentFight?.id===f.id){currentFight.favorite=!!f.favorite;if($('#favoriteFight'))$('#favoriteFight').checked=!!f.favorite;}
+    // With "Nur Favoriten" an unstarred fight leaves the list.
+    if($('#fightFavorites').checked)return loadFights(false,kind);
+    const fav=!!f.favorite,label=fav?'Favorit entfernen':'Als Favorit markieren';
+    button.classList.toggle('on',fav);button.textContent=fav?'★':'☆';button.title=label;
+    button.setAttribute('aria-pressed',String(fav));button.setAttribute('aria-label',`${label}: ${f.boss_name}`);
+  } finally {button.disabled=false;}
 }
 window.loadFights=loadFights;
 $('#searchFights').onclick=()=>task(loadFights());
 // Buttons stay disabled while a page loads, so double clicks cannot skip pages.
-$('#fightPrev').onclick=()=>{fightPage=Math.max(0,fightPage-1);task(loadFights(false));};$('#fightNext').onclick=()=>{fightPage++;task(loadFights(false));};
+for(const [kind,list] of Object.entries(fightLists)){
+  $(list.prev).onclick=()=>{list.page=Math.max(0,list.page-1);task(loadFights(false,kind));};
+  $(list.next).onclick=()=>{list.page++;task(loadFights(false,kind));};
+}
 $('#fightSearch').onkeydown=e=>{if(e.key==='Enter')task(loadFights());};
 $('#fightFavorites').onchange=()=>task(loadFights());
 $('#clearFightFilters').onclick=()=>{$('#fightSearch').value='';$('#fightFrom').value='';$('#fightTo').value='';$('#fightFavorites').checked=false;task(loadFights());};
