@@ -211,7 +211,7 @@ const server = http.createServer((req,res) => {
       settings.visible=true;settings.hide_names=false;settings.max_rows=3;live.rows[1].name='<img src=x onerror=alert(1)>';
       await overlay.locator('#box').waitFor({state:'visible'});
       await overlay.waitForFunction(()=>document.querySelector('#rows').textContent.includes('<img'));
-      assert.equal(await overlay.locator('#rows img').count(),0);await overlay.close();
+      const icons=await overlay.locator('#rows img').evaluateAll(es=>es.map(e=>({src:e.getAttribute('src'),handler:e.hasAttribute('onerror'),alt:e.getAttribute('alt')})));assert.equal(icons.length,3);assert.ok(icons.every(i=>/^\/assets\/icons\/class-(cleric|gladiator|assassin)\.webp$/.test(i.src)&&!i.handler&&i.alt===''));await overlay.close();
     });
     await check('healing, live skill details and training controls',async()=>{
       await page.setViewportSize({width:1440,height:1000});
