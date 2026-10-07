@@ -304,7 +304,8 @@ async fn annotate(
     Json(a): Json<Annotation>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    if a.note.len() > 4000 || a.tags.len() > 500 {
+    // Characters, like the inputs' maxlength; umlauts and Hangul take several bytes.
+    if a.note.chars().count() > 4000 || a.tags.chars().count() > 500 {
         return Err(StatusCode::BAD_REQUEST);
     }
     if e.db
@@ -330,7 +331,7 @@ async fn profile(
     Json(p): Json<ProfileBody>,
 ) -> Result<Json<OverlaySettings>, StatusCode> {
     guard(&headers)?;
-    if p.key.trim().is_empty() || p.key.len() > 100 {
+    if p.key.trim().is_empty() || p.key.chars().count() > 100 {
         return Err(StatusCode::BAD_REQUEST);
     }
     e.profile(&p.key, p.save)
