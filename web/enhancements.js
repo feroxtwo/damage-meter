@@ -77,7 +77,7 @@ $('#stopTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON
 api('/api/training').then(t=>{lastTraining=t;if(latestLive)renderEnhancedLive(latestLive);}).catch(()=>{});
 
 function exportPlayers(players,anonymous) {
-  return players.map((p,i)=>({...p,name:anonymous?'Spieler '+(i+1):p.name,
+  return players.map((p,i)=>({...p,name:anonymous&&!p.is_self?'Spieler '+(i+1):p.name,
     skills:p.skills||[],heal_skills:p.heal_skills||[]}));
 }
 async function copyText(text) {
@@ -98,6 +98,18 @@ function download(name,body,type) {
 }
 // Spreadsheet formula injection is escaped in addition to RFC 4180 quoting.
 function csvCell(value) {let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
+// Export scope in the fight dialog: the whole group, or one player picked by actor id.
+function exportScopeOptions(f) {
+  return `<option value="">Export: ganze Gruppe</option>${f.players.map(p=>`<option value="${Number(p.actor_id)}">Export: nur ${esc(p.name)}</option>`).join('')}`;
+}
+function exportScopeIndex(f) {
+  const v=$('#exportScope')?.value;if(!v)return null;
+  const i=f.players.findIndex(p=>String(p.actor_id)===v);return i<0?null:i;
+}
+// Anonymize before filtering so a single exported player keeps the group numbering ("Spieler 2").
+function scopedPlayers(f,players) {const i=exportScopeIndex(f);return i==null?players:[players[i]];}
+function scopedExport(f,anonymous) {const exp=fightExport(f,anonymous);return {...exp,players:scopedPlayers(f,exp.players)};}
+function exportSuffix(f) {const i=exportScopeIndex(f);return i==null?'':'-spieler-'+(i+1);}
 function fightExport(f,anonymous) {
   // Deliberately allowlist fields: notes, network addresses and database IDs stay local.
   const players=exportPlayers(f.players,anonymous).map(p=>({name:p.name,class_name:localizedClass(p),class_key:p.class_key,damage:p.damage,dps:p.dps,heal:p.heal,hps:p.hps,damage_received:p.damage_received,
@@ -221,7 +233,7 @@ async function openFight(id) {
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
-    <div class="row fight-tools"><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Namen anonymisieren</label></div>
+    <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
     <h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
     <h3>Gruppen-DPS im Kampfverlauf</h3>${damageCurve(f)}<h3>Ping-Verlauf</h3>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}
@@ -229,9 +241,12 @@ async function openFight(id) {
   bindPlayerReports(f);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights());}));
-  $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,exportPlayers(f.players,$('#anonFight').checked),f.duration_ms)));
-  $('#jsonFight').onclick=()=>download('aion2-kampf.json',JSON.stringify(fightExport(f,$('#anonFight').checked),null,2),'application/json');
-  $('#csvFight').onclick=()=>{const exp=fightExport(f,$('#anonFight').checked);download('aion2-kampf.csv','\uFEFF'+[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])].map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
+  $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,scopedPlayers(f,exportPlayers(f.players,$('#anonFight').checked)),f.duration_ms)));
+  $('#jsonFight').onclick=()=>download(`aion2-kampf${exportSuffix(f)}.json`,JSON.stringify(scopedExport(f,$('#anonFight').checked),null,2),'application/json');
+  $('#csvFight').onclick=()=>{const exp=scopedExport(f,$('#anonFight').checked),rows=[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])];
+    // A single-player export also lists that player's skills below the summary row.
+    if(exportScopeIndex(f)!=null){const p=exp.players[0];rows.push([],['Skill','Art','Wert','Treffer/Ticks','Krit %','Min','Max']);for(const [kind,list] of [['Schaden',p.skills],['Heilung',p.heal_skills]])for(const sk of list||[])rows.push([sk.name,kind,sk.damage,sk.hits,sk.crit_rate,sk.min,sk.max]);}
+    download(`aion2-kampf${exportSuffix(f)}.csv`,'\uFEFF'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
   if(window.installFightQol)installFightQol(f);
   $('#compareBtn').onclick=()=>task(compareFight());
   $('#compareFight').onchange=()=>{comparisonRequest++;$('#comparison').textContent='';};

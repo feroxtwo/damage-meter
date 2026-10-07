@@ -245,7 +245,7 @@ const server = http.createServer((req,res) => {
       await page.selectOption('#liveMetric','heal');await page.locator('#copyLive').click();
       let text=await page.evaluate(()=>window.copiedRanking);
       assert.match(text.split('\n')[1],/Spieler 1 \| 3,00M Heilung \| 33,3K HPS/);
-      assert.ok(!text.includes('FeroxTOO')&&!text.includes('Moon'));
+      assert.ok(text.includes('FeroxTOO')&&!text.includes('Moon'),'own character stays named, others are anonymized');
       await page.locator('#anonymousExport').uncheck();
       await page.selectOption('#liveMetric','damage_received');await page.locator('#copyLive').click();
       text=await page.evaluate(()=>window.copiedRanking);
@@ -279,7 +279,7 @@ const server = http.createServer((req,res) => {
     });
     await check('anonymous JSON and CSV exports do not leak names or formulas',async()=>{
       const exp=await page.evaluate(()=>fightExport(currentFight,true));
-      assert.ok(!JSON.stringify(exp).includes('FeroxTOO'));assert.ok(!JSON.stringify(exp).includes('Moon'));assert.equal(exp.players[0].name,'Spieler 1');
+      assert.equal(exp.players[0].name,'FeroxTOO','own character stays named');assert.ok(!JSON.stringify(exp).includes('Moon'));assert.equal(exp.players[1].name,'Spieler 2');
       assert.equal(await page.evaluate(()=>csvCell('=HYPERLINK("evil")')),'"\'=HYPERLINK(""evil"")"');
       const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
       assert.equal(download.suggestedFilename(),'aion2-kampf.csv');
@@ -322,6 +322,27 @@ const server = http.createServer((req,res) => {
       assert.deepEqual(await page.evaluate(()=>reportBuffs([{name:'Wachtschild',uptime:11.5},{name:'Wachtschild',uptime:9},{name:'Fury',uptime:99}]).map(b=>b.name+' '+b.uptime)),['Fury 99','Wachtschild 11.5']);
       assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),1000);
       await page.locator('#anonFight').check();
+      assert.equal(await page.locator('#exportScope').inputValue(),'','exports default to the whole group');
+      const pngTexts=async value=>{await page.selectOption('#exportScope',value);return page.evaluate(async actor=>{
+        const original=CanvasRenderingContext2D.prototype.fillText,texts=[],keep=window.download;window.download=()=>{};
+        CanvasRenderingContext2D.prototype.fillText=function(text,...args){texts.push(text);return original.call(this,text,...args);};
+        try{await exportPng(currentFight,document.querySelector('#anonFight').checked,actor||null);}finally{CanvasRenderingContext2D.prototype.fillText=original;window.download=keep;}
+        return texts;},value);};
+      let texts=await pngTexts('1');
+      assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,1);assert.ok(texts.some(t=>t.startsWith('FeroxTOO')));assert.ok(!texts.some(t=>t.includes('Moon')));
+      await page.locator('#anonFight').uncheck();texts=await pngTexts('2');
+      assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,1);assert.ok(texts.some(t=>t.startsWith('Moon · ')));
+      texts=await pngTexts('');assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,3);
+      await page.selectOption('#exportScope','2');
+      const [single]=await Promise.all([page.waitForEvent('download'),page.locator('#jsonFight').click()]);
+      assert.equal(single.suggestedFilename(),'aion2-kampf-spieler-2.json');const one=JSON.parse(fs.readFileSync(await single.path(),'utf8'));
+      assert.equal(one.players.length,1);assert.equal(one.players[0].name,'Moon');
+      await page.locator('#anonFight').check();
+      const [csv]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
+      const csvText=fs.readFileSync(await csv.path(),'utf8');assert.match(csvText,/"Spieler 2"/);assert.ok(!csvText.includes('Moon'));assert.match(csvText,/"Skill";"Art"/);assert.ok(!csvText.includes('FeroxTOO'));
+      await page.locator('#copyFight').click();
+      assert.equal((await page.evaluate(()=>window.copiedRanking)).split('\n').length,2);
+      await page.selectOption('#exportScope','');
       const [png]=await Promise.all([page.waitForEvent('download'),page.locator('#pngFight').click()]);
       const file=await png.path();const bytes=fs.readFileSync(file);assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.ok(bytes.length>5000);
       if(process.env.SCREENSHOT_DIR) {await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'player-comparison.png'),fullPage:true});fs.copyFileSync(file,path.join(process.env.SCREENSHOT_DIR,'fight-report.png'));}
@@ -342,7 +363,7 @@ const server = http.createServer((req,res) => {
     });
     await check('chat output is one line, bounded, ordered and anonymized',async()=>{
       const line=await page.evaluate(()=>chatLine('Boss\nwith separator |',exportPlayers(metricRows(latestLive.rows),true),90000));
-      assert.ok(!line.includes('\n'));assert.ok(Array.from(line).length<=200);assert.ok(!line.includes('FeroxTOO'));assert.match(line,/Spieler 1/);
+      assert.ok(!line.includes('\n'));assert.ok(Array.from(line).length<=200);assert.ok(!line.includes('Moon'));assert.match(line,/FeroxTOO/);assert.match(line,/Spieler 2/);
     });
     await check('missing hit-quality values render dashes rather than fake zero rates',async()=>{
       const html=await page.evaluate(()=>skillTable([{name:'Skill',damage:100,hits:1,crit_rate:null,block_rate:null}]));
@@ -462,7 +483,7 @@ const server = http.createServer((req,res) => {
       await page.evaluate(()=>show('live'));await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();
       await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
       assert.match(await page.locator('.skill-browser').first().textContent(),/Strike/);assert.ok(await page.locator('.skill-browser .game-icon').count()>0);
-      const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'Spieler 1');
+      const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'FeroxTOO');assert.equal(exported.players[1].name,'Spieler 2');
       await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
     });
     assert.deepEqual(errors,[]);
