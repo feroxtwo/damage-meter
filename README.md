@@ -131,7 +131,7 @@ deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zei
 - **Kampfbibliothek:** Unter Runs nach Boss, Notiz, Tags, Datum und Charakter suchen. Kämpfe als Favoriten markieren. Auch Trainingskämpfe und Kämpfe ohne Run-Zuordnung erscheinen hier.
 - **Vergleich:** Zwei Kämpfe desselben Bosses und derselben Schwierigkeit vergleichen. Eigene DPS, Dauer, Skill-Schaden, Kritrate und Buff-Uptime werden bei gleichem Charakter und gleicher Klasse gegenübergestellt.
 - **Zeitlinien:** Trefferzeitpunkte, Buff-Intervalle, Ping und beobachtete DPS-Kurven. Schaden wird alle 500 ms beobachtet, nicht künstlich auf einzelne Treffer verteilt. Alte Kämpfe ohne gespeicherte Zeitdaten bleiben lesbar.
-- **Teilen:** Rangliste kopieren, CSV/JSON herunterladen. Kampffile-Exporte anonymisieren Namen standardmäßig und enthalten keine Notizen, Netzwerkadressen oder internen Charakter-IDs.
+- **Teilen:** Rangliste kopieren, CSV/JSON herunterladen, PNG-Bericht für die ganze Gruppe oder einen ausgewählten Spieler (Standard: dein Charakter). Kampffile-Exporte anonymisieren die Namen der anderen Spieler standardmäßig (dein eigener Charakter bleibt benannt) und enthalten keine Notizen, Netzwerkadressen oder internen Charakter-IDs.
 - **Training:** 1/3/5 Minuten, Start beim ersten Treffer nach dem Reset, Abschlussbericht und persönliche Bestwerte je Charakter, Ziel und Testdauer. Die tatsächlich beobachtete Dauer wird angezeigt. Zielwechsel, Reset oder Verbindungsende unterbrechen das Training.
 
 **Offline-Replay**, ohne Spiel, Overlay oder Capture-Berechtigung:
