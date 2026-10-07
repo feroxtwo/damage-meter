@@ -42,8 +42,7 @@ cd damage-meter
 ./scripts/install.sh
 ```
 
-**Bazzite, Kinoite, Silverblue (rpm-ostree):** `dnf` funktioniert dort nicht. Rust kommt ohne root über rustup,
-der Rest ist schon an Bord:
+**Bazzite, Kinoite, Silverblue (rpm-ostree):** `dnf` funktioniert dort nicht. Am einfachsten ist das fertige `.rpm` oder das Linux-Archiv (siehe oben). Zum Selbstbauen kommt Rust ohne root über rustup; fehlt ein C-Compiler, nennt das Skript den Toolbox-Weg:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

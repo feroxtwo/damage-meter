@@ -155,6 +155,57 @@ fn migrate(conn: &Connection) -> Result<()> {
             conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
         }
     }
+    repair_masked_names_once(conn)
+}
+
+/// Periodic boss saves used to keep the upstream upload masking ("Mo****t")
+/// for everyone but you, which split partners into a full and a masked entry.
+/// Where the run's roster names exactly one member with that mask, use the name.
+fn repair_masked_names_once(conn: &Connection) -> Result<()> {
+    use a2tools_dps_meter_lib::entity::fight_record::obscure_nickname;
+    const KEY: &str = "repair_masked_names_v1";
+    let done: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM meta WHERE key = ?1)",
+        params![KEY],
+        |r| r.get(0),
+    )?;
+    if done {
+        return Ok(());
+    }
+    let masked: Vec<(i64, String)> = conn
+        .prepare(
+            "SELECT run_id, name FROM run_members WHERE instr(name, '*') > 0
+             UNION
+             SELECT f.run_id, p.name FROM fight_players p JOIN fights f ON f.id = p.fight_id
+             WHERE f.run_id IS NOT NULL AND instr(p.name, '*') > 0",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let tx = conn.unchecked_transaction()?;
+    for (run_id, mask) in masked {
+        let full: Vec<String> = tx
+            .prepare("SELECT name FROM run_members WHERE run_id = ?1 AND instr(name, '*') = 0")?
+            .query_map(params![run_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?
+            .into_iter()
+            .filter(|n| obscure_nickname(n) == mask)
+            .collect();
+        let [name] = full.as_slice() else { continue };
+        tx.execute(
+            "UPDATE fight_players SET name = ?3
+             WHERE name = ?2 AND fight_id IN (SELECT id FROM fights WHERE run_id = ?1)",
+            params![run_id, mask, name],
+        )?;
+        tx.execute(
+            "DELETE FROM run_members WHERE run_id = ?1 AND name = ?2",
+            params![run_id, mask],
+        )?;
+    }
+    tx.execute(
+        "INSERT INTO meta(key, value) VALUES (?1, '1')",
+        params![KEY],
+    )?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -651,7 +702,7 @@ impl Db {
                     (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
                     (SELECT ROUND(AVG(fp.dps)) FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
-                       WHERE f.run_id = r.id AND fp.is_self = 1) AS my_dps
+                       WHERE f.run_id = r.id AND f.is_train = 0 AND fp.is_self = 1) AS my_dps
              FROM runs r
              WHERE (?3 = '' OR r.dungeon_name = ?3) AND (?4 = '' OR r.character = ?4)
              ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2",
@@ -1131,6 +1182,76 @@ mod tests {
             ]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn masked_partner_names_from_older_saves_are_repaired_once() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        db.upsert_members(
+            run,
+            &[
+                member("Me", true),
+                member("Moonlight", false),
+                member("Moonbeam", false),
+                member("Mo****t", false),
+            ],
+        )
+        .unwrap();
+        let mut rec = record("f", 1000, 100);
+        rec.actors[1].nickname = "Mo****t".into();
+        db.save_fights(&[rec], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        // A mask that matches no roster name stays untouched.
+        db.upsert_members(run, &[member("Xy****m", false)]).unwrap();
+        let conn = db.conn.lock();
+        conn.execute("DELETE FROM meta WHERE key = 'repair_masked_names_v1'", [])
+            .unwrap();
+        repair_masked_names_once(&conn).unwrap();
+        let members: Vec<String> = conn
+            .prepare("SELECT name FROM run_members WHERE run_id = ?1 ORDER BY name")
+            .unwrap()
+            .query_map(params![run], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(members, ["Me", "Moonbeam", "Moonlight", "Xy****m"]);
+        let player: String = conn
+            .query_row(
+                "SELECT name FROM fight_players WHERE fight_id = 'f' AND actor_id = 2",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(player, "Moonlight");
+        drop(conn);
+        let top: Vec<_> = db
+            .top_partners(5, "")
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
+        assert!(!top.iter().any(|n| n == "Mo****t"));
+    }
+
+    #[test]
+    fn run_list_dps_ignores_training_dummies_like_the_fight_count() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        let boss = record("boss", 1000, 100_000); // 10 s: 10 000 DPS
+        let mut dummy = record("dummy", 20_000, 1_000_000);
+        dummy.is_train = true;
+        db.save_fights(&[boss, dummy], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        let list = db.list_runs(10, 0, None, "").unwrap();
+        let row = list["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == run)
+            .unwrap();
+        assert_eq!(row["fights"], 1);
+        assert_eq!(row["my_dps"], 10_000.0);
     }
 
     #[test]

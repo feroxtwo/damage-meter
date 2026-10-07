@@ -515,6 +515,9 @@ $('#bossSel').onchange = drawBoss;
 // Settings
 let settings = null, settingsTimer, settingsSaving = false, settingsDirty = false;
 let settingsSavePromise = null, settingsRequest = 0;
+// Only fields changed here are sent, so a position the overlay saved after
+// this page loaded (drag, shortcut lock) is never written back stale.
+let settingsChanged = new Set();
 function settingsStatus(message, error = false) {
   $('#settingsStatus').textContent = message;
   $('#settingsStatus').classList.toggle('save-error', error);
@@ -544,7 +547,11 @@ function saveSettings() {
   settingsSavePromise = (async () => {
     while (settingsDirty) {
       settingsDirty = false;
-      await api('/api/overlay', { method: 'POST', body: JSON.stringify(settings) });
+      const keys = [...settingsChanged];
+      settingsChanged = new Set();
+      try {
+        await api('/api/overlay', { method: 'POST', body: JSON.stringify(Object.fromEntries(keys.map(k => [k, settings[k]]))) });
+      } catch (e) { keys.forEach(k => settingsChanged.add(k)); throw e; }
     }
     settingsStatus('Einstellungen gespeichert.');
   })().catch(e => {
@@ -558,6 +565,7 @@ $('#retrySettings').onclick = () => saveSettings().catch(() => {});
 document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
   if (!settings) return;
   settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? (i.dataset.k === 'idle_reset_seconds' ? Number(i.value) : i.value) : Number(i.value);
+  settingsChanged.add(i.dataset.k);
   settingsValues(); settingsDirty = true; settingsRequest++;
   settingsStatus('Änderungen noch nicht gespeichert …');
   clearTimeout(settingsTimer); settingsTimer = setTimeout(() => saveSettings().catch(() => {}), 180);

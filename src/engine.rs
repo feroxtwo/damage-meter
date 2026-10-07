@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use a2tools_dps_meter_lib::combat::data_storage::DataStorage;
 use a2tools_dps_meter_lib::combat::dps_calculator::DpsCalculator;
 use a2tools_dps_meter_lib::combat::ping_tracker::PingTracker;
+use a2tools_dps_meter_lib::entity::details_context::DetailsContext;
 use a2tools_dps_meter_lib::entity::dps_data::DpsData;
 use a2tools_dps_meter_lib::entity::fight_record::FightRecord;
 use a2tools_dps_meter_lib::i18n::lookup::{NpcLookup, SkillLookup};
@@ -71,6 +72,9 @@ pub struct CaptureStatus {
     pub stream_gaps: u64,
     pub packets: u64,
     pub last_packet_ms: Option<i64>,
+    /// The running executable while capture permission is missing, so the
+    /// help can name the exact `setcap` target. Diagnostics never include it.
+    pub binary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -145,6 +149,34 @@ impl Default for OverlaySettings {
 }
 
 impl OverlaySettings {
+    /// These settings with every field of `patch` that has the right type.
+    /// Unknown keys and values of the wrong type are skipped one by one, so a
+    /// damaged or older settings record keeps its valid fields, and a partial
+    /// dashboard update cannot reset the overlay's position or lock state.
+    pub fn merged(&self, patch: &Value) -> Self {
+        let mut fields = match serde_json::to_value(self) {
+            Ok(Value::Object(fields)) => fields,
+            _ => return self.clone(),
+        };
+        if let Some(patch) = patch.as_object() {
+            for (key, value) in patch {
+                if !fields.contains_key(key) {
+                    continue;
+                }
+                let previous = fields.insert(key.clone(), value.clone());
+                if serde_json::from_value::<Self>(Value::Object(fields.clone())).is_err()
+                    && let Some(previous) = previous
+                {
+                    fields.insert(key.clone(), previous);
+                }
+            }
+        }
+        let mut merged: Self =
+            serde_json::from_value(Value::Object(fields)).unwrap_or_else(|_| self.clone());
+        merged.normalize();
+        merged
+    }
+
     fn normalize(&mut self) {
         self.opacity = if self.opacity.is_finite() {
             self.opacity.clamp(0.0, 1.0)
@@ -174,6 +206,9 @@ impl OverlaySettings {
         }
     }
 }
+
+/// Name, server, class, level and when that row was written.
+type NotedCharacter = (String, u16, String, u32, i64);
 
 struct RunState {
     run_id: Option<i64>,
@@ -206,6 +241,9 @@ pub struct Engine {
     reset_notice: RwLock<Option<String>>,
     stopping: AtomicBool,
     shutdown_saved: AtomicBool,
+    /// The character row last written and when, so the heartbeat does not
+    /// rewrite an unchanged row every two seconds.
+    noted_character: Mutex<Option<NotedCharacter>>,
 }
 
 fn load_lookups(language: &str) -> (SkillLookup, NpcLookup) {
@@ -252,13 +290,13 @@ impl Engine {
             tracing::warn!("Could not close old runs: {e}");
         }
 
-        let mut overlay: OverlaySettings = db
+        let overlay = db
             .meta("overlay")
             .ok()
             .flatten()
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+            .map(|saved| OverlaySettings::default().merged(&saved))
             .unwrap_or_default();
-        overlay.normalize();
         let target_mode = db
             .meta("target_mode")
             .ok()
@@ -298,6 +336,7 @@ impl Engine {
             reset_notice: RwLock::new(None),
             stopping: AtomicBool::new(false),
             shutdown_saved: AtomicBool::new(false),
+            noted_character: Mutex::new(None),
         });
 
         if engine.db.meta(RECORD_SETTING).ok().flatten().as_deref() == Some("1") {
@@ -353,7 +392,12 @@ impl Engine {
     }
 
     pub fn set_permission(&self, ok: bool) {
-        self.status.write().permission = ok;
+        let mut status = self.status.write();
+        status.permission = ok;
+        status.binary = (!ok)
+            .then(std::env::current_exe)
+            .and_then(Result::ok)
+            .map(|p| p.display().to_string());
     }
 
     pub fn capture_gap(&self) {
@@ -364,11 +408,17 @@ impl Engine {
     }
     pub fn replay_tick(&self) {
         self.process_reset();
-        let dps = self.calc.lock().get_dps();
-        self.observe();
-        let live = self.build_live(&dps);
-        self.automatic_reset(&live);
+        let (dps, context) = self.snapshot();
+        self.observe(&context);
+        let live = self.build_live(&dps, &context);
+        self.automatic_reset(&live, &context);
         *self.live.write() = live;
+    }
+    /// One consistent parser view per heartbeat, shared by the curve, the live
+    /// numbers and the reset monitor instead of three separate snapshots.
+    fn snapshot(&self) -> (DpsData, DetailsContext) {
+        let mut calc = self.calc.lock();
+        (calc.get_dps(), calc.get_details_context())
     }
     pub fn replay_report(&self) -> Value {
         self.save_fights(true);
@@ -516,6 +566,10 @@ impl Engine {
         *settings = body.clone();
         Ok(body)
     }
+    /// Apply only the fields a client sent, against the current settings.
+    pub fn patch_overlay(&self, patch: &Value) -> anyhow::Result<OverlaySettings> {
+        self.modify_overlay(|s| *s = s.merged(patch))
+    }
     pub fn modify_overlay(
         &self,
         f: impl FnOnce(&mut OverlaySettings),
@@ -540,7 +594,7 @@ impl Engine {
                 .db
                 .meta(&key)?
                 .ok_or_else(|| anyhow::anyhow!("Profil nicht vorhanden"))?;
-            self.update_overlay(serde_json::from_str(&s)?)
+            self.update_overlay(OverlaySettings::default().merged(&serde_json::from_str(&s)?))
         }
     }
     pub fn player_details(&self, id: i32) -> Value {
@@ -560,11 +614,10 @@ impl Engine {
     pub fn cancel_training(&self) {
         *self.training.lock() = json!({"state":"idle"});
     }
-    fn observe(&self) {
-        let context = self.calc.lock().get_details_context();
+    fn observe(&self, context: &DetailsContext) {
         let now = now_ms();
         let mut series = self.series.lock();
-        for target in context.targets {
+        for target in &context.targets {
             if now - target.last_damage_time > 10_000 {
                 continue;
             }
@@ -574,8 +627,8 @@ impl Engine {
                 now - start,
                 target
                     .actor_damage
-                    .into_iter()
-                    .map(|(id, d)| (id, i64::from(d)))
+                    .iter()
+                    .map(|(&id, &d)| (id, i64::from(d)))
                     .collect(),
             );
         }
@@ -674,6 +727,32 @@ impl Engine {
         }
     }
 
+    /// The upstream boss snapshot masks every name but the local player's
+    /// ("Mo****t") because its records are meant for uploading. This history is
+    /// local and joins partners by name, so put back the name the parser knows,
+    /// but only where it is exactly the masked form of that name.
+    fn unmask_actor_names(&self, records: &mut [FightRecord]) {
+        use a2tools_dps_meter_lib::entity::fight_record::obscure_nickname;
+        for record in records {
+            for actor in &mut record.actors {
+                let Some(name) = self
+                    .storage
+                    .get_nickname(actor.actor_id)
+                    .filter(|n| !n.trim().is_empty())
+                else {
+                    continue;
+                };
+                if actor.nickname != name
+                    && (actor.nickname.is_empty()
+                        || actor.nickname == format!("#{}", actor.actor_id)
+                        || obscure_nickname(&name) == actor.nickname)
+                {
+                    actor.nickname = name;
+                }
+            }
+        }
+    }
+
     /// The live target's name, or a placeholder when its spawn was missed.
     fn target_name(&self, dps: &DpsData) -> String {
         if !dps.target_name.is_empty() || dps.target_id <= 0 {
@@ -765,6 +844,7 @@ impl Engine {
             )
         };
         self.name_fights(&mut records);
+        self.unmask_actor_names(&mut records);
         for record in &mut records {
             for skill in record
                 .details
@@ -825,7 +905,10 @@ impl Engine {
                     record.start_time_ms,
                     record.start_time_ms + record.duration_ms,
                 );
-                data["effects_partial"] = json!(self.buffs.partial());
+                data["effects_partial"] = json!(self.buffs.partial_between(
+                    record.start_time_ms,
+                    record.start_time_ms + record.duration_ms.max(1),
+                ));
                 data["parser_rev"] = json!(crate::updates::PARSER_REV);
                 data["outcome"] = json!(if self.storage.is_entity_dead(record.target_id) {
                     "kill"
@@ -859,13 +942,23 @@ impl Engine {
                 .class
                 .map(|c| c.class_name().to_string())
                 .unwrap_or_default();
-            let _ = self.db.note_my_character(
-                name,
-                profile.server_id,
-                &job,
-                profile.level.unwrap_or(0),
-                now,
-            );
+            let level = profile.level.unwrap_or(0);
+            let mut noted = self.noted_character.lock();
+            let unchanged = noted.as_ref().is_some_and(|(n, server, j, l, at)| {
+                n == name
+                    && *server == profile.server_id
+                    && *j == job
+                    && *l == level
+                    && now - at < 60_000
+            });
+            if !unchanged
+                && self
+                    .db
+                    .note_my_character(name, profile.server_id, &job, level, now)
+                    .is_ok()
+            {
+                *noted = Some((name.clone(), profile.server_id, job, level, now));
+            }
         }
 
         let mut run = self.run.lock();
@@ -949,14 +1042,14 @@ impl Engine {
         }
     }
 
-    fn build_live(&self, dps: &DpsData) -> Live {
+    fn build_live(&self, dps: &DpsData, context: &DetailsContext) -> Live {
         let profile = self.storage.local_profile();
         let me = profile
             .name
             .clone()
             .or_else(|| self.storage.local_character_name());
         let dead = self.storage.get_dead_entities();
-        let context = self.calc.lock().get_details_context();
+
         let start = context
             .targets
             .iter()
@@ -1111,7 +1204,7 @@ impl Engine {
         }
     }
 
-    fn automatic_reset(&self, live: &Live) {
+    fn automatic_reset(&self, live: &Live, context: &DetailsContext) {
         if live.total_damage <= 0.0
             || live.target_id <= 0
             || live.target_mode == "trainTargets"
@@ -1119,7 +1212,7 @@ impl Engine {
         {
             return;
         }
-        let context = self.calc.lock().get_details_context();
+
         let Some(target) = context
             .targets
             .iter()
@@ -1228,10 +1321,10 @@ impl Engine {
 
             self.process_reset();
 
-            let dps = self.calc.lock().get_dps();
-            self.observe();
-            let live = self.build_live(&dps);
-            self.automatic_reset(&live);
+            let (dps, context) = self.snapshot();
+            self.observe(&context);
+            let live = self.build_live(&dps, &context);
+            self.automatic_reset(&live, &context);
             self.tick_training(&live);
             *self.live.write() = live;
 
@@ -1577,6 +1670,21 @@ mod tests {
         assert_eq!(e.overlay.read().opacity, 0.72);
     }
     #[test]
+    fn saved_settings_with_one_damaged_field_keep_position_and_profiles() {
+        let db = Db::in_memory().unwrap();
+        db.set_meta(
+            "overlay",
+            r#"{"scale":"oops","position":[640,360],"theme":"ember","locked":true,"unknown_old_key":1}"#,
+        )
+        .unwrap();
+        let e = Engine::new(db, "de", std::env::temp_dir());
+        let s = e.overlay.read().clone();
+        assert_eq!(s.position, Some([640.0, 360.0]));
+        assert_eq!(s.theme, "ember");
+        assert!(s.locked);
+        assert_eq!(s.scale, 1.0);
+    }
+    #[test]
     fn live_healing_and_burst_follow_real_aggregates_and_decay_when_idle() {
         use a2tools_dps_meter_lib::entity::damage_packet::ParsedDamagePacket;
         let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
@@ -1605,6 +1713,61 @@ mod tests {
             e.live().rows.iter().find(|r| r.is_self).unwrap().burst_dps,
             0.0
         );
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
+    fn saved_boss_fights_keep_full_partner_names_for_history_and_partners() {
+        use a2tools_dps_meter_lib::combat::data_storage::PartyMember;
+        use a2tools_dps_meter_lib::entity::damage_packet::ParsedDamagePacket;
+        let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
+        e.storage.set_local_player_id(Some(2259));
+        e.storage.append_mob(50_000, 2000412); // a boss in the NPC table
+        e.storage.set_party_roster(
+            vec![
+                (
+                    "Me".into(),
+                    PartyMember {
+                        slot: 1,
+                        dbid: 11,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    "Moonlight".into(),
+                    PartyMember {
+                        slot: 2,
+                        dbid: 22,
+                        ..Default::default()
+                    },
+                ),
+            ],
+            true,
+        );
+        for ts in (1000..=21000).step_by(1000) {
+            a2tools_dps_meter_lib::clock::set_override(Some(ts));
+            for (actor, name) in [(2259, "Me"), (2260, "Moonlight")] {
+                let mut p = ParsedDamagePacket::new();
+                p.set_actor_id(actor);
+                p.set_target_id(50_000);
+                p.set_skill_code(11010000);
+                p.set_damage(100);
+                e.storage.append_damage(p);
+                e.storage.append_nickname_authoritative(actor, name);
+            }
+            e.replay_tick();
+        }
+        // The periodic upstream snapshot path, which masks names for uploads.
+        assert!(e.save_fights(false));
+        let f = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        let mut names: Vec<_> = f["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["Me", "Moonlight"]);
         a2tools_dps_meter_lib::clock::set_override(None);
     }
 }
