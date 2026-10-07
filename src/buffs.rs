@@ -209,6 +209,21 @@ impl BuffTracker {
         inner.retain(|_, e| !e.is_empty());
     }
 
+    pub fn timeline(&self, from: i64, to: i64) -> serde_json::Value {
+        let mut rows = Vec::new();
+        for (&target, effects) in self.inner.lock().iter() {
+            for (&(code, caster), list) in effects {
+                for i in list {
+                    let start = i.start.max(from);
+                    let end = i.end.min(to);
+                    if end > start {
+                        rows.push(serde_json::json!({"target":target,"code":code,"caster":caster,"start_ms":start-from,"end_ms":end-from}));
+                    }
+                }
+            }
+        }
+        serde_json::json!(rows)
+    }
     pub fn prune_old(&self, now_ms: i64) {
         Self::prune(&mut self.inner.lock(), now_ms);
     }

@@ -5,23 +5,30 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-const settings = {visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false};
+const settings = {visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false,pin_self:true,metric:"damage"};
 const live = {
   target_name:'Kargos', dungeon:'Ferocious Horn Den', character:'FeroxTOO',
   battle_time_ms:90000, total_damage:9450000, target_hp:.38, target_mode:'bossTargets', ping_ms:42,
   overlay:settings, capture:{permission:true, game_running:true, locked_port:13328, device:'eth0'},
   rows:[
-    {name:'FeroxTOO', class_key:'cleric', class_name:'Kleriker', damage:4500000, dps:50000, share:47.6, is_self:true},
-    {name:'Moon', class_key:'gladiator', class_name:'Gladiator', damage:3000000, dps:33333, share:31.8},
-    {name:'Al', class_key:'assassin', class_name:'Assassine', damage:1950000, dps:21667, share:20.6}
+    {id:1,heal:2000000,hps:22222,burst_dps:65000,name:'FeroxTOO', class_key:'cleric', class_name:'Kleriker', damage:4500000, dps:50000, share:47.6, is_self:true},
+    {id:2,heal:0,hps:0,burst_dps:40000,name:'Moon', class_key:'gladiator', class_name:'Gladiator', damage:3000000, dps:33333, share:31.8},
+    {id:3,heal:0,hps:0,name:'Al', class_key:'assassin', class_name:'Assassine', damage:1950000, dps:21667, share:20.6}
   ]
 };
 const characters = [{name:'FeroxTOO', class_name:'Kleriker', runs:12}, {name:'Alt', class_name:'Gladiator', runs:1}];
 const run = {id:1, started_at:Date.now()-3600000, ended_at:Date.now()-3000000, dungeon_name:'Ferocious Horn Den', difficulty:'Schwer', fights:2, members:[{name:'FeroxTOO',is_self:1,class_key:'cleric'}], my_dps:50000, note:'Test-Run'};
 const summary = {runs:12,fights:24,play_ms:7200000,partners:8,my_deaths:2,characters,per_dungeon:[{dungeon_name:run.dungeon_name,difficulty:'Schwer',runs:12,fastest_ms:600000}],my_best:[{boss_name:'Kargos',best_dps:50000,kills:12,class_key:'cleric'}],per_day:[]};
+const skill={code:11,name:'Hieb',damage:4500000,hits:10,crit_rate:50,back_rate:25,perfect_rate:10,parry_rate:0,double_rate:20,frontal_rate:30,multi_hit_count:3,max:500000,hit_timestamps:[100,500,1000]};
+const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',started_at:run.started_at,duration_ms:90000,total_damage:9450000,
+ players:live.rows.map(r=>({...r,actor_id:r.id,job:r.class_key,skills:[{...skill,damage:r.damage}],heal_skills:r.is_self?[{...skill,name:'Heilung',damage:r.heal}]:[],buffs:[{code:42,name:'Buff',uptime:50}]})),
+ analytics:{resolution_ms:500,partial:false,points:[{ms:500,damage:{1:1000,2:500}},{ms:1000,damage:{1:3000,2:1000}}],effects:[{target:1,code:42,start_ms:100,end_ms:1000}]},ping_history:[{tsMs:500,pingMs:42},{tsMs:1000,pingMs:50}]};
+const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
+let annotations=[],trainingStarts=[];
 const server = http.createServer((req,res) => {
-  const file = req.url.split('?')[0] === '/overlay' ? 'overlay.html' : 'index.html';
-  res.setHeader('Content-Type','text/html; charset=utf-8');
+  const route=req.url.split('?')[0];
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':'index.html';
+  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
 
@@ -39,6 +46,13 @@ const server = http.createServer((req,res) => {
     const req = route.request(), u = new URL(req.url());
     let data = {};
     if (u.pathname === '/api/live') data = live;
+    else if(u.pathname==='/api/fights')data={fights:[fight,comparison],more:false};
+    else if(u.pathname==='/api/fights/f1')data=fight;
+    else if(u.pathname==='/api/fights/f2')data=comparison;
+    else if(u.pathname==='/api/fights/f1/annotation'){annotations.push(req.postDataJSON());}
+    else if(u.pathname.startsWith('/api/players/'))data={skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};
+    else if(u.pathname==='/api/training'){if(req.method()==='POST')trainingStarts.push(req.postDataJSON());data=null;}
+    else if(u.pathname==='/api/overlay/profile')data=settings;
     else if (u.pathname === '/api/characters') data = characters;
     else if (u.pathname === '/api/runs') {
       if (failRuns) { await route.fulfill({status:500,body:'error'}); return; }
@@ -134,6 +148,51 @@ const server = http.createServer((req,res) => {
       await overlay.locator('#box').waitFor({state:'visible'});
       await overlay.waitForFunction(()=>document.querySelector('#rows').textContent.includes('<img'));
       assert.equal(await overlay.locator('#rows img').count(),0);await overlay.close();
+    });
+    await check('healing, live skill details and training controls',async()=>{
+      await page.setViewportSize({width:1440,height:1000});
+      await page.selectOption('#liveMetric','heal');
+      assert.match(await page.locator('#liveRows').textContent(),/2,00M/);
+      await page.locator('#liveRows .bar').first().click();
+      await page.locator('#fightDialog[open]').waitFor();
+      assert.match(await page.locator('#fightContent').textContent(),/Double/);
+      assert.match(await page.locator('#fightContent').textContent(),/65,0K/);
+      await page.locator('#closeDialog').click();
+      await page.selectOption('#trainingDuration','180');await page.locator('#startTraining').click();
+      await delay(100);assert.deepEqual(trainingStarts.at(-1),{seconds:180});
+      await page.selectOption('#liveMetric','damage');
+    });
+    await check('fight search, comparison, notes and timeline render',async()=>{
+      await page.getByRole('button',{name:'Runs',exact:true}).click();
+      await page.locator('[data-open-fight="f1"]').click();
+      await page.locator('#fightDialog[open]').waitFor();
+      await page.locator('#compareFight option[value="f2"]').waitFor({state:'attached'});
+      await page.selectOption('#compareFight','f2');await page.locator('#compareBtn').click();
+      await page.waitForFunction(()=>document.querySelector('#comparison').textContent.includes('10,0K'));
+      assert.match(await page.locator('#comparison').textContent(),/25.0%/);
+      assert.ok(await page.locator('#fightContent svg').count()>=3);
+      await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
+      await delay(100);assert.deepEqual(annotations.at(-1),{favorite:true,note:'neues Gear',tags:'rotation'});
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'combat-analysis.png'),fullPage:true});
+    });
+    await check('anonymous JSON and CSV exports do not leak names or formulas',async()=>{
+      const exp=await page.evaluate(()=>fightExport(currentFight,true));
+      assert.ok(!JSON.stringify(exp).includes('FeroxTOO'));assert.ok(!JSON.stringify(exp).includes('Moon'));assert.equal(exp.players[0].name,'Spieler 1');
+      assert.equal(await page.evaluate(()=>csvCell('=HYPERLINK("evil")')),'"\'=HYPERLINK(""evil"")"');
+      const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
+      assert.equal(download.suggestedFilename(),'aion2-kampf.csv');
+      await page.setViewportSize({width:320,height:844});
+      assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
+      await page.locator('#closeDialog').click();
+      await page.getByRole('button',{name:'Live',exact:true}).click();
+    });
+    await check('OBS pins the local player with their actual rank',async()=>{
+      Object.assign(settings,{visible:true,hide_names:false,metric:'damage',max_rows:1,pin_self:true});
+      const original=live.rows[0].damage;live.rows[0].damage=1;
+      const overlay=await context.newPage();overlay.on('pageerror',e=>errors.push(e.message));
+      await overlay.goto(base+'/overlay');await overlay.locator('#rows .row').waitFor();
+      assert.match(await overlay.locator('#rows').textContent(),/3. FeroxTOO/);
+      live.rows[0].damage=original;await overlay.close();
     });
     await check('empty combat state gives guidance and zero personal DPS',async()=>{
       live.rows=[]; live.total_damage=0; live.battle_time_ms=0;

@@ -1,0 +1,14 @@
+dialog { background:var(--panel,#111c2c); color:var(--text,#edf3fb); border:1px solid #6686a855; border-radius:16px; width:min(1100px,calc(100vw - 32px)); max-height:90vh; padding:24px; box-sizing:border-box; }
+dialog::backdrop {background:#020610bd;backdrop-filter:blur(5px)}
+.dialog-head {justify-content:space-between;position:sticky;top:-24px;background:#111c2c;z-index:2;padding:12px 0}
+#fightContent {min-width:0} #fightContent details {margin-top:14px;padding:12px;border:1px solid #6686a833;border-radius:10px}
+#fightContent summary {cursor:pointer} #fightContent h3 {margin:20px 0 12px}
+input[type=search],input[type=date],input[type=text],input:not([type]) {background:#0b1422;color:#edf3fb;border:1px solid #7898b644;border-radius:8px;padding:10px 12px;font:inherit;max-width:100%;min-width:0;box-sizing:border-box}
+#fightLibrary .row {flex-wrap:wrap} #fightLibrary label {font-size:12px;color:var(--muted)}
+#fightResults {margin-top:16px} #fightResults button {text-align:left;white-space:normal}
+.timeline {width:100%;display:block;min-height:140px} .timeline text {fill:#aabbd0;font:11px system-ui}
+.analysis-note {font-size:12px;color:var(--muted);line-height:1.6}
+#liveRows .bar {cursor:pointer} #liveRows .bar:focus-visible {outline:2px solid var(--accent)}
+.compare-positive {color:var(--green)} .compare-negative {color:var(--red)}
+#trainingResult .row {margin-top:8px} .fight-tools {flex-wrap:wrap;margin:12px 0}
+@media(max-width:600px) {dialog {padding:14px;width:calc(100vw - 16px)} .dialog-head{top:-14px} #fightLibrary .row>*{max-width:100%} }

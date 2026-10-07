@@ -177,12 +177,7 @@ async fn set_overlay(
     Json(body): Json<OverlaySettings>,
 ) -> Result<Json<OverlaySettings>, StatusCode> {
     guard(&headers)?;
-    let mut s = engine.overlay.write();
-    *s = body;
-    s.opacity = s.opacity.clamp(0.0, 1.0);
-    s.scale = s.scale.clamp(0.6, 2.5);
-    s.max_rows = s.max_rows.clamp(1, 24);
-    Ok(Json(s.clone()))
+    engine.update_overlay(body).map(Json).map_err(db_error)
 }
 
 async fn toggle_lock(
@@ -190,8 +185,9 @@ async fn toggle_lock(
     headers: HeaderMap,
 ) -> Result<Json<Value>, StatusCode> {
     guard(&headers)?;
-    let mut s = engine.overlay.write();
-    s.locked = !s.locked;
+    let s = engine
+        .modify_overlay(|s| s.locked = !s.locked)
+        .map_err(db_error)?;
     Ok(Json(json!({ "locked": s.locked })))
 }
 
@@ -200,8 +196,9 @@ async fn toggle_visible(
     headers: HeaderMap,
 ) -> Result<Json<Value>, StatusCode> {
     guard(&headers)?;
-    let mut s = engine.overlay.write();
-    s.visible = !s.visible;
+    let s = engine
+        .modify_overlay(|s| s.visible = !s.visible)
+        .map_err(db_error)?;
     Ok(Json(json!({ "visible": s.visible })))
 }
 
@@ -266,6 +263,108 @@ async fn target_mode(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct FightQuery {
+    #[serde(default)]
+    query: String,
+    #[serde(default)]
+    character: String,
+    from: Option<i64>,
+    to: Option<i64>,
+    #[serde(default)]
+    favorites: bool,
+    #[serde(default)]
+    offset: i64,
+}
+async fn search_fights(
+    State(e): State<AppState>,
+    Query(q): Query<FightQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    e.db.search_fights(
+        &q.query,
+        &q.character,
+        q.from.unwrap_or(0),
+        q.to.unwrap_or(i64::MAX),
+        q.favorites,
+        q.offset.max(0),
+    )
+    .map(Json)
+    .map_err(db_error)
+}
+#[derive(Deserialize)]
+struct Annotation {
+    favorite: bool,
+    note: String,
+    tags: String,
+}
+async fn annotate(
+    State(e): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(a): Json<Annotation>,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    if a.note.len() > 4000 || a.tags.len() > 500 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if e.db
+        .annotate(&id, a.favorite, &a.note, &a.tags)
+        .map_err(db_error)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+async fn player(State(e): State<AppState>, Path(id): Path<i32>) -> Json<Value> {
+    Json(e.player_details(id))
+}
+#[derive(Deserialize)]
+struct ProfileBody {
+    key: String,
+    save: bool,
+}
+async fn profile(
+    State(e): State<AppState>,
+    headers: HeaderMap,
+    Json(p): Json<ProfileBody>,
+) -> Result<Json<OverlaySettings>, StatusCode> {
+    guard(&headers)?;
+    if p.key.trim().is_empty() || p.key.len() > 100 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    e.profile(&p.key, p.save)
+        .map(Json)
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+#[derive(Deserialize)]
+struct TrainingBody {
+    seconds: i64,
+}
+async fn training(
+    State(e): State<AppState>,
+    headers: HeaderMap,
+    Json(t): Json<TrainingBody>,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    if t.seconds == 0 {
+        e.cancel_training();
+    } else if [60, 180, 300].contains(&t.seconds) {
+        e.start_training(t.seconds);
+    } else {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+async fn last_training(State(e): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    Ok(Json(
+        e.db.meta("last_training")
+            .map_err(db_error)?
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or(Value::Null),
+    ))
+}
+
 // Restrict Host to the listening address or an IP literal for an all-interface
 // listener. This also blocks DNS rebinding attacks against the local API.
 async fn local_request(State(addr): State<SocketAddr>, request: Request, next: Next) -> Response {
@@ -308,11 +407,34 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/overlay", get(overlay_page))
+        .route(
+            "/enhancements.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/enhancements.js"),
+                )
+            }),
+        )
+        .route(
+            "/enhancements.css",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+                    include_str!("../web/enhancements.css"),
+                )
+            }),
+        )
         .route("/api/live", get(live))
         .route("/api/runs", get(runs))
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
         .route("/api/runs/{id}/note", post(run_note))
+        .route("/api/fights", get(search_fights))
         .route("/api/fights/{id}", get(fight_detail))
+        .route("/api/fights/{id}/annotation", post(annotate))
+        .route("/api/players/{id}", get(player))
+        .route("/api/overlay/profile", post(profile))
+        .route("/api/training", get(last_training).post(training))
         .route("/api/characters", get(characters))
         .route("/api/stats/partners", get(partners))
         .route("/api/stats/summary", get(summary))
@@ -487,5 +609,61 @@ mod tests {
         assert_eq!(data["max_rows"], 24);
         assert_eq!(data["hide_names"], true);
         assert_eq!(data["visible"], false);
+    }
+    #[tokio::test]
+    async fn new_actions_require_guard_and_training_duration_is_validated() {
+        for (path, body) in [
+            ("/api/training", r#"{"seconds":60}"#),
+            ("/api/overlay/profile", r#"{"key":"Me","save":true}"#),
+            (
+                "/api/fights/missing/annotation",
+                r#"{"favorite":true,"note":"","tags":""}"#,
+            ),
+        ] {
+            assert_eq!(
+                app()
+                    .oneshot(request("POST", path, "localhost:8787", false, body))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::FORBIDDEN
+            );
+        }
+        for (seconds, status) in [
+            (60, StatusCode::NO_CONTENT),
+            (180, StatusCode::NO_CONTENT),
+            (300, StatusCode::NO_CONTENT),
+            (0, StatusCode::NO_CONTENT),
+            (59, StatusCode::BAD_REQUEST),
+        ] {
+            assert_eq!(
+                app()
+                    .oneshot(request(
+                        "POST",
+                        "/api/training",
+                        "localhost:8787",
+                        true,
+                        &json!({"seconds":seconds}).to_string()
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                status
+            );
+        }
+        assert_eq!(
+            app()
+                .oneshot(request(
+                    "GET",
+                    "/enhancements.js",
+                    "localhost:8787",
+                    false,
+                    ""
+                ))
+                .await
+                .unwrap()
+                .headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
     }
 }

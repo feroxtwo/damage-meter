@@ -21,6 +21,7 @@ use a2tools_dps_meter_lib::capture::stream_processor::StreamProcessor;
 
 use crate::buffs;
 use crate::engine::Engine;
+use crate::tcp::TcpOrder;
 
 const COMBAT_SIGNATURES: [&[u8]; 2] = [&[0x0E, 0x00, 0x36], &[0x06, 0x00, 0x36]];
 const SIGNATURE_LOCK_THRESHOLD: u32 = 12;
@@ -93,7 +94,7 @@ fn contains_signature(data: &[u8]) -> bool {
 /// Walks the server's stream for the packets the A2Tools parser skips (buff
 /// and debuff effects), with the same framing it uses.
 #[derive(Default)]
-struct EffectScanner {
+pub(crate) struct EffectScanner {
     buffer: Vec<u8>,
 }
 
@@ -113,7 +114,7 @@ fn visit_inner(data: &[u8], depth: u8, f: &mut impl FnMut(&[u8])) {
 
 impl EffectScanner {
     /// Call `f` with each complete packet's payload (opcode first).
-    fn feed(&mut self, data: &[u8], mut f: impl FnMut(&[u8])) {
+    pub(crate) fn feed(&mut self, data: &[u8], mut f: impl FnMut(&[u8])) {
         self.buffer.extend_from_slice(data);
         let walked = framing::walk(&self.buffer);
         for frame in &walked.frames {
@@ -165,8 +166,11 @@ fn prune_captures(dir: &std::path::Path, keep: u64) {
 /// Packet recordings (`aion2-meter ctl record`): the game connection's raw
 /// TCP payloads, for working out packets no meter decodes yet.
 ///
-/// File: `A2MCAP1\n`, then per payload `u64 ms` `u8 dir (0 = from server)`
-/// `u16 server port` `u32 len` `bytes`, all little endian.
+/// File: `A2MCAP3\n`, then per packet `u32 LE header length`, a JSON header
+/// (timestamp, direction, endpoints, interface, TCP sequence and
+/// acknowledgement), `u32 LE payload length` and the raw payload. Version 2
+/// wrote the payload into the JSON as a number array, three to four times its
+/// size; the reader still accepts v1 and v2.
 pub struct Recorder {
     out: BufWriter<File>,
     path: PathBuf,
@@ -174,7 +178,7 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub const MAGIC: &'static [u8] = b"A2MCAP1\n";
+    pub const MAGIC: &'static [u8] = b"A2MCAP3\n";
 
     pub fn create(dir: &std::path::Path, now: i64) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
@@ -197,15 +201,24 @@ impl Recorder {
         &mut self,
         now: i64,
         from_server: bool,
-        port: u16,
-        data: &[u8],
+        cap: &CapturedPayload,
     ) -> std::io::Result<()> {
-        self.out.write_all(&(now as u64).to_le_bytes())?;
-        self.out.write_all(&[u8::from(!from_server)])?;
-        self.out.write_all(&port.to_le_bytes())?;
-        self.out.write_all(&(data.len() as u32).to_le_bytes())?;
-        self.out.write_all(data)?;
-        if now - self.last_flush >= 1_000 {
+        let header = serde_json::to_vec(&serde_json::json!({
+            "ms": now,
+            "from_server": from_server,
+            "src_port": cap.src_port,
+            "dst_port": cap.dst_port,
+            "src_ip": cap.src_ip,
+            "dst_ip": cap.dst_ip,
+            "device": cap.device_name,
+            "seq": cap.tcp_seq,
+            "ack": cap.tcp_ack,
+        }))?;
+        self.out.write_all(&(header.len() as u32).to_le_bytes())?;
+        self.out.write_all(&header)?;
+        self.out.write_all(&(cap.data.len() as u32).to_le_bytes())?;
+        self.out.write_all(&cap.data)?;
+        if now - self.last_flush >= 1000 {
             self.out.flush()?;
             self.last_flush = now;
         }
@@ -283,7 +296,8 @@ struct Candidate {
     last_seen: i64,
     /// Looked like TLS: never the game, nothing buffered.
     tls: bool,
-    chunks: VecDeque<Vec<u8>>,
+    chunks: VecDeque<CapturedPayload>,
+    order: TcpOrder,
     bytes: usize,
 }
 
@@ -296,7 +310,7 @@ impl Candidates {
         cap: CapturedPayload,
         now: i64,
         may_lock: bool,
-    ) -> Option<(FlowKey, Vec<Vec<u8>>)> {
+    ) -> Option<(FlowKey, Vec<CapturedPayload>)> {
         let key = FlowKey::from_server(&cap);
         if !self.flows.contains_key(&key) {
             self.flows
@@ -319,7 +333,8 @@ impl Candidates {
             c.bytes = 0;
             return None;
         }
-        if contains_signature(&cap.data) {
+        let (ordered, _) = c.order.feed(cap.tcp_seq, &cap.data, now);
+        if ordered.iter().any(|chunk| contains_signature(chunk)) {
             if now - c.last_hit > SIGNATURE_WINDOW_MS {
                 c.hits = 0;
             }
@@ -327,10 +342,10 @@ impl Candidates {
             c.last_hit = now;
         }
         c.bytes += cap.data.len();
-        c.chunks.push_back(cap.data);
+        c.chunks.push_back(cap);
         while c.bytes > CANDIDATE_BUFFER_BYTES {
             match c.chunks.pop_front() {
-                Some(old) => c.bytes -= old.len(),
+                Some(old) => c.bytes -= old.data.len(),
                 None => break,
             }
         }
@@ -359,8 +374,10 @@ impl Dispatcher {
     }
 
     pub fn run(self, rx: Receiver<CapturedPayload>) {
-        let mut flows: HashMap<FlowKey, (StreamAssembler, StreamProcessor, EffectScanner)> =
-            HashMap::new();
+        let mut flows: HashMap<
+            FlowKey,
+            (StreamAssembler, StreamProcessor, EffectScanner, TcpOrder),
+        > = HashMap::new();
         let mut recorder: Option<Recorder> = None;
         let mut candidates = Candidates::default();
         let mut lock: Option<FlowKey> = None;
@@ -455,16 +472,36 @@ impl Dispatcher {
                     flows.clear();
                     self.engine
                         .set_locked(Some((key.server_port, key.device.clone())));
-                    let (assembler, processor, effects) =
+                    let (assembler, processor, effects, order) =
                         flows.entry(key.clone()).or_insert_with(|| self.new_flow());
-                    for chunk in &chunks {
-                        assembler.process_chunk(chunk, processor);
-                        effects.feed(chunk, |payload| {
-                            if let Some(event) = buffs::parse(payload) {
-                                self.engine.buffs.record(event, now);
-                            }
-                        });
+                    // Keep the pre-lock spawn packets in recordings as well.
+                    recorder = None;
+                    self.sync_recorder(&mut recorder, now);
+                    for packet in &chunks {
+                        if let Some(rec) = &mut recorder
+                            && let Err(e) = rec.write(packet.captured_at_ms, true, packet)
+                        {
+                            recorder = None;
+                            self.engine.stop_recording(Some(e.to_string()));
+                        }
+                        let (ordered, recovered) =
+                            order.feed(packet.tcp_seq, &packet.data, packet.captured_at_ms);
+                        if recovered {
+                            *assembler = StreamAssembler::new();
+                            *effects = EffectScanner::default();
+                            self.engine.capture_gap();
+                        }
+                        processor.set_override_timestamp(Some(packet.captured_at_ms));
+                        for chunk in ordered {
+                            assembler.process_chunk(&chunk, processor);
+                            effects.feed(&chunk, |payload| {
+                                if let Some(event) = buffs::parse(payload) {
+                                    self.engine.buffs.record(event, packet.captured_at_ms);
+                                }
+                            });
+                        }
                     }
+                    processor.set_override_timestamp(None);
                     lock = Some(key);
                     last_parsed_ms = now;
                     last_lock_packet_ms = now;
@@ -476,7 +513,7 @@ impl Dispatcher {
             };
             last_lock_packet_ms = now;
             if let Some(rec) = &mut recorder
-                && let Err(e) = rec.write(now, from_server, l.server_port, &cap.data)
+                && let Err(e) = rec.write(cap.captured_at_ms, from_server, &cap)
             {
                 tracing::error!("Recording failed: {e}");
                 recorder = None;
@@ -491,29 +528,42 @@ impl Dispatcher {
                 continue; // only server -> client carries combat
             }
 
-            let (assembler, processor, effects) =
+            let (assembler, processor, effects, order) =
                 flows.entry(l.clone()).or_insert_with(|| self.new_flow());
-            if assembler.process_chunk(&cap.data, processor) {
-                last_parsed_ms = now;
+            let (chunks, recovered) = order.feed(cap.tcp_seq, &cap.data, now);
+            if recovered {
+                *assembler = StreamAssembler::new();
+                *effects = EffectScanner::default();
+                self.engine.capture_gap();
             }
-            effects.feed(&cap.data, |payload| {
-                if let Some(event) = buffs::parse(payload) {
-                    self.engine.buffs.record(event, now);
+            for chunk in chunks {
+                if assembler.process_chunk(&chunk, processor) {
+                    last_parsed_ms = now;
                 }
-            });
+                effects.feed(&chunk, |payload| {
+                    if let Some(event) = buffs::parse(payload) {
+                        self.engine.buffs.record(event, now);
+                    }
+                });
+            }
         }
     }
 }
 
 impl Dispatcher {
-    fn new_flow(&self) -> (StreamAssembler, StreamProcessor, EffectScanner) {
+    fn new_flow(&self) -> (StreamAssembler, StreamProcessor, EffectScanner, TcpOrder) {
         let mut p = StreamProcessor::new(
             self.engine.storage.clone(),
             self.engine.skills.clone(),
             self.engine.npcs.clone(),
         );
         p.set_dot_skill_ids(self.engine.dot_skill_ids.clone());
-        (StreamAssembler::new(), p, EffectScanner::default())
+        (
+            StreamAssembler::new(),
+            p,
+            EffectScanner::default(),
+            TcpOrder::default(),
+        )
     }
 
     /// Open or close the recording file when `ctl record` flipped it.
@@ -597,26 +647,14 @@ mod tests {
     }
 
     #[test]
-    fn recorder_writes_framed_payloads() {
-        let dir = std::env::temp_dir().join(format!("a2m-rec-{}", std::process::id()));
-        let path = {
-            let mut r = Recorder::create(&dir, 42).unwrap();
-            assert!(
-                Recorder::create(&dir, 42).is_err(),
-                "an existing recording must never be overwritten"
-            );
-            r.write(1_000, true, 7777, &[1, 2, 3]).unwrap();
-            r.path().to_path_buf()
-        };
-        let bytes = std::fs::read(&path).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut expect = Recorder::MAGIC.to_vec();
-        expect.extend(1_000u64.to_le_bytes());
-        expect.push(0);
-        expect.extend(7777u16.to_le_bytes());
-        expect.extend(3u32.to_le_bytes());
-        expect.extend([1, 2, 3]);
-        assert_eq!(bytes, expect);
+    fn recorder_never_overwrites_a_capture() {
+        let dir = std::env::temp_dir().join(format!("a2m-v2-rec-{}", std::process::id()));
+        let r = Recorder::create(&dir, 42).unwrap();
+        assert!(Recorder::create(&dir, 42).is_err());
+        let path = r.path().to_path_buf();
+        drop(r);
+        assert_eq!(std::fs::read(path).unwrap(), Recorder::MAGIC);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -662,15 +700,24 @@ mod tests {
                 .is_empty()
         );
         for i in 0..SIGNATURE_LOCK_THRESHOLD - 1 {
-            let cap = server_payload(50001, &combat);
+            let mut cap = server_payload(50001, &combat);
+            cap.tcp_seq = 2 + 3 * i;
             assert!(c.observe(cap, 30_000 + i as i64, true).is_none());
         }
         let (key, chunks) = c
-            .observe(server_payload(50001, &combat), 30_100, true)
+            .observe(
+                {
+                    let mut p = server_payload(50001, &combat);
+                    p.tcp_seq = 2 + 3 * (SIGNATURE_LOCK_THRESHOLD - 1);
+                    p
+                },
+                30_100,
+                true,
+            )
             .expect("locks");
         assert_eq!(key.client_port, 50001);
         assert_eq!(chunks.len(), SIGNATURE_LOCK_THRESHOLD as usize + 1);
-        assert_eq!(chunks[0], vec![7]);
+        assert_eq!(chunks[0].data, vec![7]);
         assert!(c.flows.is_empty());
     }
 
@@ -680,13 +727,29 @@ mod tests {
         let combat = [0x0E, 0x00, 0x36];
         for i in 0..SIGNATURE_LOCK_THRESHOLD {
             assert!(
-                c.observe(server_payload(50001, &combat), i as i64, false)
-                    .is_none()
+                c.observe(
+                    {
+                        let mut p = server_payload(50001, &combat);
+                        p.tcp_seq = 1 + 3 * i;
+                        p
+                    },
+                    i as i64,
+                    false
+                )
+                .is_none()
             );
         }
         assert!(
-            c.observe(server_payload(50001, &combat), 20, true)
-                .is_some()
+            c.observe(
+                {
+                    let mut p = server_payload(50001, &combat);
+                    p.tcp_seq = 1 + 3 * SIGNATURE_LOCK_THRESHOLD;
+                    p
+                },
+                20,
+                true
+            )
+            .is_some()
         );
     }
 
@@ -742,5 +805,16 @@ mod tests {
         assert!(!looks_like_tls(&[0x17, 0x36]));
         assert!(contains_signature(&[1, 2, 0x0E, 0x00, 0x36, 4]));
         assert!(!contains_signature(&[0x0E, 0x00, 0x37]));
+    }
+    #[test]
+    fn duplicate_markers_cannot_lock_a_candidate() {
+        let mut c = Candidates::default();
+        for i in 0..20 {
+            assert!(
+                c.observe(server_payload(50001, &[0x0e, 0, 0x36]), i, true)
+                    .is_none()
+            );
+        }
+        assert_eq!(c.flows.values().next().unwrap().hits, 1);
     }
 }
