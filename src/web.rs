@@ -612,6 +612,48 @@ mod tests {
         assert_eq!(data["visible"], false);
     }
     #[tokio::test]
+    async fn unicode_text_limits_accept_multibyte_characters_and_reject_overlong_inputs() {
+        let app = app();
+        for (count, status) in [(100, StatusCode::OK), (101, StatusCode::BAD_REQUEST)] {
+            let body = json!({"key":"한".repeat(count),"save":true}).to_string();
+            let response = app
+                .clone()
+                .oneshot(request(
+                    "POST",
+                    "/api/overlay/profile",
+                    "localhost:8787",
+                    true,
+                    &body,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+        }
+        for (note_len, tags_len, status) in [
+            // Missing fight gives 404 only after the text has passed validation.
+            (4000, 500, StatusCode::NOT_FOUND),
+            (4001, 500, StatusCode::BAD_REQUEST),
+            (4000, 501, StatusCode::BAD_REQUEST),
+        ] {
+            let body =
+                json!({"favorite":false,"note":"ü".repeat(note_len),"tags":"한".repeat(tags_len)})
+                    .to_string();
+            let response = app
+                .clone()
+                .oneshot(request(
+                    "POST",
+                    "/api/fights/missing/annotation",
+                    "localhost:8787",
+                    true,
+                    &body,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+        }
+    }
+
+    #[tokio::test]
     async fn new_actions_require_guard_and_training_duration_is_validated() {
         for (path, body) in [
             ("/api/training", r#"{"seconds":60}"#),
