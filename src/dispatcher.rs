@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::mpsc::Receiver;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use a2tools_dps_meter_lib::capture::captured_payload::CapturedPayload;
 use a2tools_dps_meter_lib::capture::framing::{self, FrameKind};
@@ -32,6 +32,7 @@ const PROCESS_CHECK_RUNNING_MS: i64 = 60_000;
 const MAX_SCAN_BUFFER: usize = 2 << 20;
 /// Bundles inside bundles, at most this deep.
 const MAX_BUNDLE_DEPTH: u8 = 3;
+const MAX_CANDIDATE_FLOWS: usize = 128;
 
 fn now_ms() -> i64 {
     SystemTime::now()
@@ -58,7 +59,12 @@ pub fn game_running() -> bool {
     };
     dir.flatten().any(|entry| {
         let path = entry.path();
-        if !entry.file_name().to_string_lossy().bytes().all(|b| b.is_ascii_digit()) {
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .bytes()
+            .all(|b| b.is_ascii_digit())
+        {
             return false;
         }
         let comm = std::fs::read_to_string(path.join("comm")).unwrap_or_default();
@@ -137,16 +143,26 @@ impl Recorder {
     pub fn create(dir: &std::path::Path, now: i64) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let path = dir.join(format!("aion2-{now}.a2mcap"));
-        let mut out = BufWriter::new(File::create(&path)?);
+        let mut out = BufWriter::new(File::options().write(true).create_new(true).open(&path)?);
         out.write_all(Self::MAGIC)?;
-        Ok(Self { out, path, last_flush: now })
+        Ok(Self {
+            out,
+            path,
+            last_flush: now,
+        })
     }
 
     pub fn path(&self) -> &std::path::Path {
         &self.path
     }
 
-    pub fn write(&mut self, now: i64, from_server: bool, port: u16, data: &[u8]) -> std::io::Result<()> {
+    pub fn write(
+        &mut self,
+        now: i64,
+        from_server: bool,
+        port: u16,
+        data: &[u8],
+    ) -> std::io::Result<()> {
         self.out.write_all(&(now as u64).to_le_bytes())?;
         self.out.write_all(&[u8::from(!from_server)])?;
         self.out.write_all(&port.to_le_bytes())?;
@@ -166,10 +182,48 @@ impl Drop for Recorder {
     }
 }
 
-#[derive(Default)]
-struct Lock {
-    port: u16,
+/// Directional server-to-client identity. Ports alone are not unique across
+/// hosts or interfaces and must never mix separate TCP streams.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct FlowKey {
+    server_ip: Option<String>,
+    client_ip: Option<String>,
+    server_port: u16,
+    client_port: u16,
     device: String,
+}
+
+impl FlowKey {
+    fn from_server(cap: &CapturedPayload) -> Self {
+        Self {
+            server_ip: cap.src_ip.clone(),
+            client_ip: cap.dst_ip.clone(),
+            server_port: cap.src_port,
+            client_port: cap.dst_port,
+            device: cap.device_name.clone().unwrap_or_default(),
+        }
+    }
+
+    fn direction(&self, cap: &CapturedPayload) -> Option<bool> {
+        if cap.device_name.as_deref().unwrap_or_default() != self.device {
+            return None;
+        }
+        if cap.src_ip == self.server_ip
+            && cap.dst_ip == self.client_ip
+            && cap.src_port == self.server_port
+            && cap.dst_port == self.client_port
+        {
+            Some(true)
+        } else if cap.dst_ip == self.server_ip
+            && cap.src_ip == self.client_ip
+            && cap.dst_port == self.server_port
+            && cap.src_port == self.client_port
+        {
+            Some(false)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct Dispatcher {
@@ -181,28 +235,50 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new(engine: Arc<Engine>, require_process: bool) -> Self {
-        Self { engine, require_process }
+        Self {
+            engine,
+            require_process,
+        }
     }
 
     pub fn run(self, rx: Receiver<CapturedPayload>) {
-        let mut flows: HashMap<(u16, u16), (StreamAssembler, StreamProcessor, EffectScanner)> = HashMap::new();
+        let mut flows: HashMap<FlowKey, (StreamAssembler, StreamProcessor, EffectScanner)> =
+            HashMap::new();
         let mut recorder: Option<Recorder> = None;
-        let mut sig_hits: HashMap<(u16, u16), (u32, i64)> = HashMap::new();
-        let mut lock: Option<Lock> = None;
+        let mut sig_hits: HashMap<FlowKey, (u32, i64)> = HashMap::new();
+        let mut lock: Option<FlowKey> = None;
         let mut last_parsed_ms = 0i64;
         let mut last_process_check = 0i64;
         let mut game = !self.require_process;
 
-        while let Ok(cap) = rx.recv() {
+        loop {
+            // Check process, recording and connection state even on a quiet
+            // network, instead of waiting forever for another payload.
+            let cap = match rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(cap) => Some(cap),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
             let now = now_ms();
 
             if self.require_process {
-                let interval = if game { PROCESS_CHECK_RUNNING_MS } else { PROCESS_CHECK_STOPPED_MS };
+                let interval = if game {
+                    PROCESS_CHECK_RUNNING_MS
+                } else {
+                    PROCESS_CHECK_STOPPED_MS
+                };
                 if now - last_process_check >= interval {
                     last_process_check = now;
                     let running = game_running();
                     if running != game {
-                        tracing::info!("AION2.exe {}", if running { "found" } else { "no longer running" });
+                        tracing::info!(
+                            "AION2.exe {}",
+                            if running {
+                                "found"
+                            } else {
+                                "no longer running"
+                            }
+                        );
                     }
                     if !running && game {
                         lock = None;
@@ -215,11 +291,16 @@ impl Dispatcher {
                 }
             }
             if !game {
+                recorder = None;
+                self.engine.recording_paused();
                 continue;
             }
 
             if lock.is_some() && last_parsed_ms > 0 && now - last_parsed_ms > STALE_CONNECTION_MS {
-                tracing::info!("Nothing parsed for {} s, unlocking", (now - last_parsed_ms) / 1000);
+                tracing::info!(
+                    "Nothing parsed for {} s, unlocking",
+                    (now - last_parsed_ms) / 1000
+                );
                 lock = None;
                 flows.clear();
                 sig_hits.clear();
@@ -227,34 +308,47 @@ impl Dispatcher {
                 self.engine.set_locked(None);
             }
 
-            self.sync_recorder(&mut recorder, now);
+            if lock.is_some() {
+                self.sync_recorder(&mut recorder, now);
+            } else {
+                recorder = None;
+                self.engine.recording_paused();
+                sig_hits.retain(|_, (_, seen)| now - *seen <= SIGNATURE_WINDOW_MS);
+                flows.retain(|key, _| sig_hits.contains_key(key));
+            }
 
+            let Some(cap) = cap else {
+                continue;
+            };
             let device = cap.device_name.clone().unwrap_or_default();
             if let Some(l) = &lock {
-                if l.device != device || (cap.src_port != l.port && cap.dst_port != l.port) {
+                let Some(from_server) = l.direction(&cap) else {
                     continue;
-                }
-                if let Some(rec) = &mut recorder {
-                    if let Err(e) = rec.write(now, cap.src_port == l.port, l.port, &cap.data) {
-                        tracing::error!("Recording failed: {e}");
-                        recorder = None;
-                        self.engine.stop_recording(Some(e.to_string()));
-                    }
+                };
+                if let Some(rec) = &mut recorder
+                    && let Err(e) = rec.write(now, from_server, l.server_port, &cap.data)
+                {
+                    tracing::error!("Recording failed: {e}");
+                    recorder = None;
+                    self.engine.stop_recording(Some(e.to_string()));
                 }
                 let before = self.engine.ping.current_ping_ms();
-                self.engine.ping.on_packet(&cap, l.port);
+                self.engine.ping.on_packet(&cap, l.server_port);
                 if self.engine.ping.current_ping_ms() != before {
                     last_parsed_ms = now;
                 }
-                if cap.src_port != l.port {
+                if !from_server {
                     continue; // only server -> client carries combat
                 }
             } else if looks_like_tls(&cap.data) || !contains_signature(&cap.data) {
                 continue;
             }
 
-            let key = (cap.src_port.min(cap.dst_port), cap.src_port.max(cap.dst_port));
-            let (assembler, processor, effects) = flows.entry(key).or_insert_with(|| {
+            let key = FlowKey::from_server(&cap);
+            if lock.is_none() && !flows.contains_key(&key) && flows.len() >= MAX_CANDIDATE_FLOWS {
+                continue;
+            }
+            let (assembler, processor, effects) = flows.entry(key.clone()).or_insert_with(|| {
                 let mut p = StreamProcessor::new(
                     self.engine.storage.clone(),
                     self.engine.skills.clone(),
@@ -265,7 +359,7 @@ impl Dispatcher {
             });
 
             if lock.is_none() {
-                let slot = sig_hits.entry(key).or_insert((0, now));
+                let slot = sig_hits.entry(key.clone()).or_insert((0, now));
                 if now - slot.1 > SIGNATURE_WINDOW_MS {
                     slot.0 = 0;
                 }
@@ -284,9 +378,17 @@ impl Dispatcher {
                 });
             }
 
-            if lock.is_none() && sig_hits.get(&key).is_some_and(|(c, _)| *c >= SIGNATURE_LOCK_THRESHOLD) {
-                tracing::info!("Locked onto game server port {} on {}", cap.src_port, device);
-                lock = Some(Lock { port: cap.src_port, device: device.clone() });
+            if lock.is_none()
+                && sig_hits
+                    .get(&key)
+                    .is_some_and(|(c, _)| *c >= SIGNATURE_LOCK_THRESHOLD)
+            {
+                tracing::info!(
+                    "Locked onto game server port {} on {}",
+                    cap.src_port,
+                    device
+                );
+                lock = Some(key.clone());
                 last_parsed_ms = now;
                 flows.retain(|k, _| *k == key);
                 sig_hits.clear();
@@ -312,10 +414,11 @@ impl Dispatcher {
                     self.engine.stop_recording(Some(e.to_string()));
                 }
             }
-        } else if !wanted && recorder.is_some() {
-            if let Some(r) = recorder.take() {
-                tracing::info!("Recording saved: {}", r.path().display());
-            }
+        } else if !wanted
+            && recorder.is_some()
+            && let Some(r) = recorder.take()
+        {
+            tracing::info!("Recording saved: {}", r.path().display());
         }
     }
 }
@@ -342,7 +445,10 @@ mod tests {
         scanner.feed(&stream[..4], |p| seen.push(p.to_vec()));
         assert!(seen.is_empty());
         scanner.feed(&stream[4..], |p| seen.push(p.to_vec()));
-        assert_eq!(seen, vec![vec![0x2A, 0x38, 1, 2, 3], vec![0x04, 0x38, 9, 9]]);
+        assert_eq!(
+            seen,
+            vec![vec![0x2A, 0x38, 1, 2, 3], vec![0x04, 0x38, 9, 9]]
+        );
         assert!(scanner.buffer.is_empty());
     }
 
@@ -351,6 +457,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("a2m-rec-{}", std::process::id()));
         let path = {
             let mut r = Recorder::create(&dir, 42).unwrap();
+            assert!(
+                Recorder::create(&dir, 42).is_err(),
+                "an existing recording must never be overwritten"
+            );
             r.write(1_000, true, 7777, &[1, 2, 3]).unwrap();
             r.path().to_path_buf()
         };
@@ -372,7 +482,41 @@ mod tests {
             "wine64-preload",
             b"Z:\\home\\p\\.steam\\steamapps\\common\\AION2\\Binaries\\Win64\\AION2.exe\0-arg\0"
         ));
-        assert!(!is_aion2_process("python3", b"python3\0/proton\0run\0Z:\\games\\AION2.exe\0"));
+        assert!(!is_aion2_process(
+            "python3",
+            b"python3\0/proton\0run\0Z:\\games\\AION2.exe\0"
+        ));
+    }
+
+    #[test]
+    fn connection_identity_includes_hosts_ports_and_interface() {
+        let cap = CapturedPayload {
+            src_ip: Some("10.0.0.1".into()),
+            dst_ip: Some("192.168.1.2".into()),
+            src_port: 7777,
+            dst_port: 50000,
+            device_name: Some("eth0".into()),
+            tcp_seq: 1,
+            tcp_ack: 0,
+            captured_at_ms: 0,
+            data: vec![1],
+        };
+        let key = FlowKey::from_server(&cap);
+        assert_eq!(key.direction(&cap), Some(true));
+        let mut other = cap.clone();
+        std::mem::swap(&mut other.src_ip, &mut other.dst_ip);
+        std::mem::swap(&mut other.src_port, &mut other.dst_port);
+        assert_eq!(key.direction(&other), Some(false));
+        other = cap.clone();
+        other.src_ip = Some("10.0.0.2".into());
+        assert_eq!(key.direction(&other), None);
+        assert_ne!(key, FlowKey::from_server(&other));
+        other = cap.clone();
+        other.dst_port += 1;
+        assert_eq!(key.direction(&other), None);
+        other = cap.clone();
+        other.device_name = Some("tun0".into());
+        assert_eq!(key.direction(&other), None);
     }
 
     #[test]

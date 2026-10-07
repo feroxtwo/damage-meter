@@ -14,20 +14,60 @@ pub struct ClassInfo {
     pub color: [u8; 3],
 }
 
-const UNKNOWN: ClassInfo = ClassInfo { key: "unknown", name: "", color: [120, 120, 130] };
+const UNKNOWN: ClassInfo = ClassInfo {
+    key: "unknown",
+    name: "",
+    color: [120, 120, 130],
+};
 
 /// The parser names classes by their Korean name; map that to ours.
 pub fn class_info(job: &str) -> ClassInfo {
     match job {
-        "검성" => ClassInfo { key: "gladiator", name: "Gladiator", color: [196, 120, 64] },
-        "수호성" => ClassInfo { key: "templar", name: "Templer", color: [214, 182, 92] },
-        "궁성" => ClassInfo { key: "ranger", name: "Waldläufer", color: [120, 186, 84] },
-        "살성" => ClassInfo { key: "assassin", name: "Assassine", color: [200, 90, 200] },
-        "마도성" => ClassInfo { key: "sorcerer", name: "Magier", color: [88, 150, 236] },
-        "치유성" => ClassInfo { key: "cleric", name: "Kleriker", color: [236, 236, 236] },
-        "정령성" => ClassInfo { key: "elementalist", name: "Beschwörer", color: [150, 110, 230] },
-        "호법성" => ClassInfo { key: "chanter", name: "Kantor", color: [90, 210, 200] },
-        "권성" => ClassInfo { key: "fighter", name: "Faustkämpfer", color: [220, 80, 80] },
+        "검성" => ClassInfo {
+            key: "gladiator",
+            name: "Gladiator",
+            color: [196, 120, 64],
+        },
+        "수호성" => ClassInfo {
+            key: "templar",
+            name: "Templer",
+            color: [214, 182, 92],
+        },
+        "궁성" => ClassInfo {
+            key: "ranger",
+            name: "Waldläufer",
+            color: [120, 186, 84],
+        },
+        "살성" => ClassInfo {
+            key: "assassin",
+            name: "Assassine",
+            color: [200, 90, 200],
+        },
+        "마도성" => ClassInfo {
+            key: "sorcerer",
+            name: "Magier",
+            color: [88, 150, 236],
+        },
+        "치유성" => ClassInfo {
+            key: "cleric",
+            name: "Kleriker",
+            color: [236, 236, 236],
+        },
+        "정령성" => ClassInfo {
+            key: "elementalist",
+            name: "Beschwörer",
+            color: [150, 110, 230],
+        },
+        "호법성" => ClassInfo {
+            key: "chanter",
+            name: "Kantor",
+            color: [90, 210, 200],
+        },
+        "권성" => ClassInfo {
+            key: "fighter",
+            name: "Faustkämpfer",
+            color: [220, 80, 80],
+        },
         _ => UNKNOWN,
     }
 }
@@ -42,7 +82,9 @@ struct DungeonEntry {
 static DUNGEONS: LazyLock<HashMap<i32, DungeonEntry>> = LazyLock::new(|| {
     let raw: HashMap<String, DungeonEntry> =
         serde_json::from_str(include_str!("../data/i18n/dungeons/en.json")).unwrap_or_default();
-    raw.into_iter().filter_map(|(k, v)| Some((k.parse().ok()?, v))).collect()
+    raw.into_iter()
+        .filter_map(|(k, v)| Some((k.parse().ok()?, v)))
+        .collect()
 });
 
 pub fn dungeon_name(id: i32) -> Option<String> {
@@ -102,7 +144,13 @@ pub fn short_number(v: f64) -> String {
     } else {
         return format!("{v:.0}");
     };
-    let digits = if n >= 100.0 { 0 } else if n >= 10.0 { 1 } else { 2 };
+    let digits = if n >= 100.0 {
+        0
+    } else if n >= 10.0 {
+        1
+    } else {
+        2
+    };
     format!("{n:.digits$}{suffix}").replace('.', ",")
 }
 

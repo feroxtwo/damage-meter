@@ -59,7 +59,9 @@ fn varint(data: &[u8], offset: usize) -> Option<(u32, usize)> {
 }
 
 fn u32_at(data: &[u8], offset: usize) -> Option<u32> {
-    Some(u32::from_le_bytes(data.get(offset..offset + 4)?.try_into().ok()?))
+    Some(u32::from_le_bytes(
+        data.get(offset..offset + 4)?.try_into().ok()?,
+    ))
 }
 
 fn is_effect_code(code: u32) -> bool {
@@ -89,11 +91,11 @@ pub fn parse(payload: &[u8]) -> Option<BuffEvent> {
 
     if refresh && !is_effect_code(code) {
         let retry = after_target + 1;
-        if let Some((_, len)) = varint(payload, retry) {
-            if let Some(c) = u32_at(payload, retry + len).filter(|&c| is_effect_code(c)) {
-                code = c;
-                offset = retry + len + 4;
-            }
+        if let Some((_, len)) = varint(payload, retry)
+            && let Some(c) = u32_at(payload, retry + len).filter(|&c| is_effect_code(c))
+        {
+            code = c;
+            offset = retry + len + 4;
         }
     }
     if !is_effect_code(code) || offset + 16 > payload.len() {
@@ -102,10 +104,18 @@ pub fn parse(payload: &[u8]) -> Option<BuffEvent> {
     let duration_ms = u32_at(payload, offset)?;
     offset += 16; // duration, 4 unknown bytes, server time
     let (caster, _) = varint(payload, offset)?;
-    if caster <= 1 || duration_ms == PERMANENT || !(MIN_DURATION_MS..=MAX_DURATION_MS).contains(&duration_ms) {
+    if caster <= 1
+        || duration_ms == PERMANENT
+        || !(MIN_DURATION_MS..=MAX_DURATION_MS).contains(&duration_ms)
+    {
         return None;
     }
-    Some(BuffEvent { target, caster, code, duration_ms })
+    Some(BuffEvent {
+        target,
+        caster,
+        code,
+        duration_ms,
+    })
 }
 
 /// Candidate keys for an effect's name in the skill table, best first: effect
@@ -131,10 +141,13 @@ pub struct Uptime {
     pub percent: f64,
 }
 
+type EffectIntervals = HashMap<u32, HashMap<(u32, u32), VecDeque<Interval>>>;
+type EffectCoverage = (Vec<(i64, i64)>, u32, i64);
+
 /// Every effect interval seen, by target, then (effect, caster).
 #[derive(Default)]
 pub struct BuffTracker {
-    inner: Mutex<HashMap<u32, HashMap<(u32, u32), VecDeque<Interval>>>>,
+    inner: Mutex<EffectIntervals>,
 }
 
 fn covered(intervals: &[(i64, i64)], from: i64, to: i64) -> i64 {
@@ -167,7 +180,11 @@ impl BuffTracker {
     pub fn record(&self, event: BuffEvent, now_ms: i64) {
         let end = now_ms + event.duration_ms as i64;
         let mut inner = self.inner.lock();
-        let list = inner.entry(event.target).or_default().entry((event.code, event.caster)).or_default();
+        let list = inner
+            .entry(event.target)
+            .or_default()
+            .entry((event.code, event.caster))
+            .or_default();
         match list.back_mut() {
             Some(last) if now_ms <= last.end + MERGE_TOLERANCE_MS => last.end = last.end.max(end),
             _ => list.push_back(Interval { start: now_ms, end }),
@@ -180,7 +197,7 @@ impl BuffTracker {
         }
     }
 
-    fn prune(inner: &mut HashMap<u32, HashMap<(u32, u32), VecDeque<Interval>>>, now_ms: i64) {
+    fn prune(inner: &mut EffectIntervals, now_ms: i64) {
         for effects in inner.values_mut() {
             for list in effects.values_mut() {
                 while list.front().is_some_and(|i| i.end < now_ms - KEEP_MS) {
@@ -203,8 +220,10 @@ impl BuffTracker {
             return Vec::new();
         }
         let inner = self.inner.lock();
-        let Some(effects) = inner.get(&target) else { return Vec::new() };
-        let mut by_code: HashMap<u32, (Vec<(i64, i64)>, u32, i64)> = HashMap::new();
+        let Some(effects) = inner.get(&target) else {
+            return Vec::new();
+        };
+        let mut by_code: HashMap<u32, EffectCoverage> = HashMap::new();
         for (&(code, caster), list) in effects {
             let spans: Vec<(i64, i64)> = list.iter().map(|i| (i.start, i.end)).collect();
             let mine = covered(&spans, from, to);
@@ -266,7 +285,12 @@ mod tests {
         let p = packet(0x2A, 300, 120_340_010, 8_000, 4711);
         assert_eq!(
             parse(&p),
-            Some(BuffEvent { target: 300, caster: 4711, code: 120_340_010, duration_ms: 8_000 })
+            Some(BuffEvent {
+                target: 300,
+                caster: 4711,
+                code: 120_340_010,
+                duration_ms: 8_000
+            })
         );
         // With the flag byte in front.
         let mut flagged = vec![0xF3];
@@ -294,17 +318,31 @@ mod tests {
         p.extend(5_000u32.to_le_bytes());
         p.extend([0; 12]);
         enc_varint(99, &mut p);
-        assert_eq!(parse(&p).map(|e| (e.code, e.caster)), Some((150_000_000, 99)));
+        assert_eq!(
+            parse(&p).map(|e| (e.code, e.caster)),
+            Some((150_000_000, 99))
+        );
     }
 
     #[test]
     fn uptime_merges_refreshes_and_casters() {
         let t = BuffTracker::default();
-        let ev = |caster, d| BuffEvent { target: 1, caster, code: 120_000_000, duration_ms: d };
+        let ev = |caster, d| BuffEvent {
+            target: 1,
+            caster,
+            code: 120_000_000,
+            duration_ms: d,
+        };
         t.record(ev(10, 10_000), 0); // 0..10 s
         t.record(ev(10, 10_000), 5_000); // refresh: 0..15 s
         t.record(ev(20, 10_000), 30_000); // another caster: 30..40 s
-        t.record(BuffEvent { code: 130_000_000, ..ev(10, 5_000) }, 0);
+        t.record(
+            BuffEvent {
+                code: 130_000_000,
+                ..ev(10, 5_000)
+            },
+            0,
+        );
         let u = t.uptimes(1, 0, 60_000);
         assert_eq!(u.len(), 2);
         assert_eq!(u[0].code, 120_000_000);

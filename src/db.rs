@@ -111,7 +111,11 @@ CREATE TABLE IF NOT EXISTS fight_effects (
 
 /// Columns added after the first release, for databases created by it.
 const MIGRATIONS: &[(&str, &str, &str)] = &[
-    ("fight_players", "hits_received", "INTEGER NOT NULL DEFAULT 0"),
+    (
+        "fight_players",
+        "hits_received",
+        "INTEGER NOT NULL DEFAULT 0",
+    ),
     ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
@@ -158,7 +162,10 @@ pub struct EffectRow {
     pub on_boss: bool,
 }
 
-fn rows_to_json(stmt: &mut rusqlite::Statement, params: impl rusqlite::Params) -> Result<Vec<Value>> {
+fn rows_to_json(
+    stmt: &mut rusqlite::Statement,
+    params: impl rusqlite::Params,
+) -> Result<Vec<Value>> {
     let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
     let rows = stmt.query_map(params, |row| {
         let mut obj = serde_json::Map::new();
@@ -197,7 +204,9 @@ impl Db {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     #[cfg(test)]
@@ -205,10 +214,19 @@ impl Db {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
-    pub fn note_my_character(&self, name: &str, server_id: u16, job: &str, level: u32, now: i64) -> Result<()> {
+    pub fn note_my_character(
+        &self,
+        name: &str,
+        server_id: u16,
+        job: &str,
+        level: u32,
+        now: i64,
+    ) -> Result<()> {
         self.conn.lock().execute(
             "INSERT INTO my_characters(name, server_id, job, level, last_seen) VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(name) DO UPDATE SET
@@ -221,7 +239,13 @@ impl Db {
         Ok(())
     }
 
-    pub fn start_run(&self, dungeon_id: i32, started_at: i64, character: Option<&str>, server_id: u16) -> Result<i64> {
+    pub fn start_run(
+        &self,
+        dungeon_id: i32,
+        started_at: i64,
+        character: Option<&str>,
+        server_id: u16,
+    ) -> Result<i64> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO runs(dungeon_id, dungeon_name, difficulty, kind, started_at, character, server_id)
@@ -240,7 +264,10 @@ impl Db {
 
     pub fn end_run(&self, run_id: i64, ended_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE runs SET ended_at = ?2 WHERE id = ?1", params![run_id, ended_at])?;
+        conn.execute(
+            "UPDATE runs SET ended_at = ?2 WHERE id = ?1",
+            params![run_id, ended_at],
+        )?;
         // An entry with no fight and nobody else in it was a walk-through
         // (a wrong portal, a disconnect): not worth keeping.
         conn.execute(
@@ -338,7 +365,11 @@ impl Db {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         for record in records {
-            let dungeon_id = if record.dungeon_id > 0 { record.dungeon_id } else { fallback_dungeon };
+            let dungeon_id = if record.dungeon_id > 0 {
+                record.dungeon_id
+            } else {
+                fallback_dungeon
+            };
             let run_id = Self::run_for_fight(&tx, dungeon_id, record.start_time_ms)?;
 
             // Damage per actor, from the skill breakdown.
@@ -356,7 +387,12 @@ impl Db {
             // Hit timestamps and ping history make the record many times larger
             // and nothing here shows them.
             let mut slim = record.clone();
-            for s in slim.details.skills.iter_mut().chain(slim.details.heal_skills.iter_mut()) {
+            for s in slim
+                .details
+                .skills
+                .iter_mut()
+                .chain(slim.details.heal_skills.iter_mut())
+            {
                 s.hit_timestamps.clear();
             }
             slim.details.ping_history.clear();
@@ -380,7 +416,10 @@ impl Db {
                     serde_json::to_string(&slim)?
                 ],
             )?;
-            tx.execute("DELETE FROM fight_players WHERE fight_id = ?1", params![record.id])?;
+            tx.execute(
+                "DELETE FROM fight_players WHERE fight_id = ?1",
+                params![record.id],
+            )?;
             for actor in &record.actors {
                 let dmg = damage.get(&actor.actor_id).copied().unwrap_or(0);
                 let healed = heal.get(&actor.actor_id).copied().unwrap_or(0) + actor.party_heal;
@@ -413,9 +452,10 @@ impl Db {
                 )?;
                 // Everyone who fought alongside you in a run is in its party,
                 // even when no roster reached the meter.
-                if let Some(run_id) = run_id {
-                    if actor.dbid != 0 || is_self {
-                        tx.execute(
+                if let Some(run_id) = run_id
+                    && (actor.dbid != 0 || is_self)
+                {
+                    tx.execute(
                             "INSERT INTO run_members(run_id, name, job, server_id, level, gear_score, combat_power, dbid, is_self)
                              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                              ON CONFLICT(run_id, name) DO UPDATE SET
@@ -433,7 +473,6 @@ impl Db {
                                 is_self
                             ],
                         )?;
-                    }
                 }
             }
         }
@@ -446,7 +485,10 @@ impl Db {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         for record in records {
-            tx.execute("DELETE FROM fight_effects WHERE fight_id = ?1", params![record.id])?;
+            tx.execute(
+                "DELETE FROM fight_effects WHERE fight_id = ?1",
+                params![record.id],
+            )?;
         }
         for e in effects {
             tx.execute(
@@ -460,12 +502,17 @@ impl Db {
     }
 
     pub fn delete_run(&self, run_id: i64) -> Result<()> {
-        self.conn.lock().execute("DELETE FROM runs WHERE id = ?1", params![run_id])?;
+        self.conn
+            .lock()
+            .execute("DELETE FROM runs WHERE id = ?1", params![run_id])?;
         Ok(())
     }
 
     pub fn set_run_note(&self, run_id: i64, note: &str) -> Result<()> {
-        self.conn.lock().execute("UPDATE runs SET note = ?2 WHERE id = ?1", params![run_id, note])?;
+        self.conn.lock().execute(
+            "UPDATE runs SET note = ?2 WHERE id = ?1",
+            params![run_id, note],
+        )?;
         Ok(())
     }
 
@@ -473,7 +520,13 @@ impl Db {
 
     /// `character` limits everything to runs played on that character; empty
     /// means all of them.
-    pub fn list_runs(&self, limit: i64, offset: i64, dungeon: Option<&str>, character: &str) -> Result<Value> {
+    pub fn list_runs(
+        &self,
+        limit: i64,
+        offset: i64,
+        dungeon: Option<&str>,
+        character: &str,
+    ) -> Result<Value> {
         let conn = self.conn.lock();
         let filter = dungeon.unwrap_or("");
         let mut stmt = conn.prepare(
@@ -567,10 +620,15 @@ impl Db {
             "SELECT id, run_id, boss_name, mob_code, dungeon_id, started_at, duration_ms, total_damage, max_hp,
                     is_train, record_json FROM fights WHERE id = ?1",
         )?;
-        let Some(mut fight) = rows_to_json(&mut stmt, params![fight_id])?.into_iter().next() else {
+        let Some(mut fight) = rows_to_json(&mut stmt, params![fight_id])?
+            .into_iter()
+            .next()
+        else {
             return Ok(None);
         };
-        let record: Option<FightRecord> = fight["record_json"].as_str().and_then(|s| serde_json::from_str(s).ok());
+        let record: Option<FightRecord> = fight["record_json"]
+            .as_str()
+            .and_then(|s| serde_json::from_str(s).ok());
         fight.as_object_mut().map(|o| o.remove("record_json"));
         let mut stmt = conn.prepare(
             "SELECT actor_id, name, job, damage, dps, share, heal, damage_received, hits_received, died,
@@ -587,11 +645,18 @@ impl Db {
              WHERE e.fight_id = ?1 ORDER BY e.uptime DESC",
         )?;
         let effects = rows_to_json(&mut stmt, params![fight_id])?;
-        let (boss, buffs): (Vec<Value>, Vec<Value>) =
-            effects.into_iter().partition(|e| e["on_boss"].as_i64() == Some(1));
+        let (boss, buffs): (Vec<Value>, Vec<Value>) = effects
+            .into_iter()
+            .partition(|e| e["on_boss"].as_i64() == Some(1));
         for p in &mut players {
             let actor = p["actor_id"].as_i64();
-            p["buffs"] = Value::Array(buffs.iter().filter(|e| e["entity_id"].as_i64() == actor).cloned().collect());
+            p["buffs"] = Value::Array(
+                buffs
+                    .iter()
+                    .filter(|e| e["entity_id"].as_i64() == actor)
+                    .cloned()
+                    .collect(),
+            );
         }
         fight["boss_debuffs"] = Value::Array(boss);
         if let Some(record) = record {
@@ -748,7 +813,8 @@ impl Db {
         )?;
         let per_day = rows_to_json(&mut stmt, params![c])?;
         let my_deaths: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(died), 0) FROM fight_players WHERE is_self = 1 AND (?1 = '' OR name = ?1)",
+            "SELECT COALESCE(SUM(fp.died), 0) FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND (?1 = '' OR fp.name = ?1)",
             params![c],
             |r| r.get(0),
         )?;
@@ -795,13 +861,18 @@ mod tests {
         .iter()
         .enumerate()
         {
-            let run = db.start_run(600093, i as i64 * 1000, Some("Me"), 1304).unwrap();
+            let run = db
+                .start_run(600093, i as i64 * 1000, Some("Me"), 1304)
+                .unwrap();
             let members: Vec<_> = party.iter().map(|n| member(n, *n == "Me")).collect();
             db.upsert_members(run, &members).unwrap();
             db.end_run(run, i as i64 * 1000 + 500).unwrap();
         }
         let top = db.top_partners(5, "").unwrap();
-        let names: Vec<_> = top.iter().map(|r| r["name"].as_str().unwrap().to_string()).collect();
+        let names: Vec<_> = top
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
         assert_eq!(names[0], "Anna");
         assert_eq!(names[1], "Bob");
         assert_eq!(top[0]["runs"], 3);
@@ -836,8 +907,16 @@ mod tests {
         let db = Db::in_memory().unwrap();
         let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
         let dead: HashSet<i32> = [1].into();
-        db.save_fights(&[record("a", 1_000, 1_500)], 0, &["Me".into()], None, &dead).unwrap();
-        db.save_fights(&[record("b", 50_000, 3_000)], 0, &["Me".into()], None, &HashSet::new()).unwrap();
+        db.save_fights(&[record("a", 1_000, 1_500)], 0, &["Me".into()], None, &dead)
+            .unwrap();
+        db.save_fights(
+            &[record("b", 50_000, 3_000)],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
 
         let fight = db.fight_detail("a").unwrap().unwrap();
         let me = &fight["players"][0];
@@ -849,7 +928,11 @@ mod tests {
         assert_eq!(fight["run_id"], run);
 
         let detail = db.run_detail(run).unwrap().unwrap();
-        assert_eq!(detail["members"].as_array().unwrap().len(), 2, "fighters join the run");
+        assert_eq!(
+            detail["members"].as_array().unwrap().len(),
+            2,
+            "fighters join the run"
+        );
         assert_eq!(detail["totals"][0]["deaths"], 1);
 
         let history = db.boss_history("").unwrap();
@@ -863,30 +946,69 @@ mod tests {
     }
 
     #[test]
+    fn training_deaths_do_not_count_as_boss_deaths() {
+        let db = Db::in_memory().unwrap();
+        let mut training = record("training", 1000, 500);
+        training.is_train = true;
+        db.save_fights(&[training], 0, &["Me".into()], None, &[1].into())
+            .unwrap();
+        assert_eq!(db.summary("Me").unwrap()["my_deaths"], 0);
+        assert_eq!(db.summary("").unwrap()["fights"], 0);
+        db.save_fights(
+            &[record("boss", 2000, 500)],
+            0,
+            &["Me".into()],
+            None,
+            &[1].into(),
+        )
+        .unwrap();
+        assert_eq!(db.summary("Me").unwrap()["my_deaths"], 1);
+        assert_eq!(db.summary("Other").unwrap()["my_deaths"], 0);
+    }
+
+    #[test]
     fn everything_filters_by_character() {
         let db = Db::in_memory().unwrap();
         db.note_my_character("Main", 1304, "검성", 45, 10).unwrap();
-        db.note_my_character("Twink", 1304, "치유성", 30, 20).unwrap();
+        db.note_my_character("Twink", 1304, "치유성", 30, 20)
+            .unwrap();
         let a = db.start_run(600093, 0, Some("Main"), 1304).unwrap();
-        db.upsert_members(a, &[member("Main", true), member("Anna", false)]).unwrap();
+        db.upsert_members(a, &[member("Main", true), member("Anna", false)])
+            .unwrap();
         let b = db.start_run(600092, 1_000, Some("Twink"), 1304).unwrap();
-        db.upsert_members(b, &[member("Twink", true), member("Bob", false)]).unwrap();
+        db.upsert_members(b, &[member("Twink", true), member("Bob", false)])
+            .unwrap();
         // A character only seen on a run still shows up.
         let c = db.start_run(600092, 2_000, Some("Alt"), 1304).unwrap();
-        db.upsert_members(c, &[member("Alt", true), member("Bob", false)]).unwrap();
+        db.upsert_members(c, &[member("Alt", true), member("Bob", false)])
+            .unwrap();
 
         assert_eq!(db.list_runs(10, 0, None, "").unwrap()["total"], 3);
         assert_eq!(db.list_runs(10, 0, None, "Main").unwrap()["total"], 1);
-        assert_eq!(db.list_runs(10, 0, None, "Twink").unwrap()["dungeons"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            db.list_runs(10, 0, None, "Twink").unwrap()["dungeons"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
         let names = |c: &str| -> Vec<String> {
-            db.top_partners(5, c).unwrap().iter().map(|r| r["name"].as_str().unwrap().to_string()).collect()
+            db.top_partners(5, c)
+                .unwrap()
+                .iter()
+                .map(|r| r["name"].as_str().unwrap().to_string())
+                .collect()
         };
         assert_eq!(names("Main"), vec!["Anna"]);
         assert_eq!(names("Twink"), vec!["Bob"]);
         assert_eq!(names(""), vec!["Bob", "Anna"]);
         assert_eq!(db.summary("Twink").unwrap()["runs"], 1);
-        let chars: Vec<String> =
-            db.characters().unwrap().iter().map(|r| r["name"].as_str().unwrap().to_string()).collect();
+        let chars: Vec<String> = db
+            .characters()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
         assert_eq!(chars, vec!["Alt", "Twink", "Main"]);
     }
 
@@ -894,7 +1016,8 @@ mod tests {
     fn effects_show_on_their_fighter_and_the_boss() {
         let db = Db::in_memory().unwrap();
         let fight = record("f1", 1_000, 500);
-        db.save_fights(std::slice::from_ref(&fight), 0, &[], None, &HashSet::new()).unwrap();
+        db.save_fights(std::slice::from_ref(&fight), 0, &[], None, &HashSet::new())
+            .unwrap();
         let row = |entity_id, code, on_boss| EffectRow {
             fight_id: "f1".into(),
             entity_id,
@@ -904,15 +1027,26 @@ mod tests {
             uptime: 50.0,
             on_boss,
         };
-        db.save_effects(std::slice::from_ref(&fight), &[row(1, 10, false), row(fight.target_id, 20, true)])
-            .unwrap();
+        db.save_effects(
+            std::slice::from_ref(&fight),
+            &[row(1, 10, false), row(fight.target_id, 20, true)],
+        )
+        .unwrap();
         // Saving again replaces, not duplicates.
-        db.save_effects(std::slice::from_ref(&fight), &[row(1, 10, false), row(fight.target_id, 20, true)])
-            .unwrap();
+        db.save_effects(
+            std::slice::from_ref(&fight),
+            &[row(1, 10, false), row(fight.target_id, 20, true)],
+        )
+        .unwrap();
         let detail = db.fight_detail("f1").unwrap().unwrap();
         assert_eq!(detail["boss_debuffs"].as_array().unwrap().len(), 1);
         assert_eq!(detail["boss_debuffs"][0]["name"], "E20");
-        let me = detail["players"].as_array().unwrap().iter().find(|p| p["actor_id"] == 1).unwrap();
+        let me = detail["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["actor_id"] == 1)
+            .unwrap();
         assert_eq!(me["buffs"][0]["code"], 10);
         assert_eq!(me["buffs"][0]["caster"], me["name"]);
     }
@@ -945,7 +1079,8 @@ mod tests {
     fn runs_list_and_summary() {
         let db = Db::in_memory().unwrap();
         let run = db.start_run(600092, 0, Some("Me"), 1304).unwrap();
-        db.upsert_members(run, &[member("Me", true), member("Anna", false)]).unwrap();
+        db.upsert_members(run, &[member("Me", true), member("Anna", false)])
+            .unwrap();
         db.end_run(run, 60_000).unwrap();
         let list = db.list_runs(10, 0, None, "").unwrap();
         assert_eq!(list["total"], 1);

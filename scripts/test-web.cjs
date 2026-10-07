@@ -1,0 +1,146 @@
+// Browser regression checks. API fixtures never become part of the production UI.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const http = require('node:http');
+const path = require('node:path');
+const { chromium } = require('playwright');
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const settings = {visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false};
+const live = {
+  target_name:'Kargos', dungeon:'Ferocious Horn Den', character:'FeroxTOO',
+  battle_time_ms:90000, total_damage:9450000, target_hp:.38, target_mode:'bossTargets', ping_ms:42,
+  overlay:settings, capture:{permission:true, game_running:true, locked_port:13328, device:'eth0'},
+  rows:[
+    {name:'FeroxTOO', class_key:'cleric', class_name:'Kleriker', damage:4500000, dps:50000, share:47.6, is_self:true},
+    {name:'Moon', class_key:'gladiator', class_name:'Gladiator', damage:3000000, dps:33333, share:31.8},
+    {name:'Al', class_key:'assassin', class_name:'Assassine', damage:1950000, dps:21667, share:20.6}
+  ]
+};
+const characters = [{name:'FeroxTOO', class_name:'Kleriker', runs:12}, {name:'Alt', class_name:'Gladiator', runs:1}];
+const run = {id:1, started_at:Date.now()-3600000, ended_at:Date.now()-3000000, dungeon_name:'Ferocious Horn Den', difficulty:'Schwer', fights:2, members:[{name:'FeroxTOO',is_self:1,class_key:'cleric'}], my_dps:50000, note:'Test-Run'};
+const summary = {runs:12,fights:24,play_ms:7200000,partners:8,my_deaths:2,characters,per_dungeon:[{dungeon_name:run.dungeon_name,difficulty:'Schwer',runs:12,fastest_ms:600000}],my_best:[{boss_name:'Kargos',best_dps:50000,kills:12,class_key:'cleric'}],per_day:[]};
+const server = http.createServer((req,res) => {
+  const file = req.url.split('?')[0] === '/overlay' ? 'overlay.html' : 'index.html';
+  res.setHeader('Content-Type','text/html; charset=utf-8');
+  res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
+});
+
+(async () => {
+  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const browser = await chromium.launch({headless:true, ...(process.env.CHROMIUM_PATH ? {executablePath:process.env.CHROMIUM_PATH} : {}), args:['--no-sandbox']});
+  let checks = 0;
+  async function check(name, fn) { await fn(); checks++; console.log(`PASS ${name}`); }
+  const context = await browser.newContext({viewport:{width:1440,height:1000}});
+  const errors = [];
+  let writes = [], activeWrites = 0, maxActiveWrites = 0, failReset = false, failRuns = false;
+  let slowMain = false;
+  await context.route('**/api/**', async route => {
+    const req = route.request(), u = new URL(req.url());
+    let data = {};
+    if (u.pathname === '/api/live') data = live;
+    else if (u.pathname === '/api/characters') data = characters;
+    else if (u.pathname === '/api/runs') {
+      if (failRuns) { await route.fulfill({status:500,body:'error'}); return; }
+      if (slowMain && u.searchParams.get('character') === 'FeroxTOO') await delay(250);
+      const offset = Number(u.searchParams.get('offset') || 0);
+      data = {runs:[{...run, id:offset+1, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name}], total:2, dungeons:[run.dungeon_name]};
+    }
+    else if (u.pathname === '/api/runs/1') data = {...run, totals:[], fights:[]};
+    else if (u.pathname === '/api/stats/summary') data = summary;
+    else if (u.pathname === '/api/stats/partners') data = [{name:'Moon', class_key:'gladiator',class_name:'Gladiator',runs:10}];
+    else if (u.pathname === '/api/stats/boss-history') data = [{boss:'Kargos',kills:[{dps:40000,started_at:run.started_at,duration_ms:90000,share:40},{dps:50000,started_at:run.ended_at,duration_ms:90000,share:48}]}];
+    else if (u.pathname === '/api/overlay') {
+      if(req.method() === 'POST') {
+        activeWrites++; maxActiveWrites = Math.max(maxActiveWrites,activeWrites);
+        const body = req.postDataJSON(); writes.push(body); await delay(300);
+        Object.assign(settings,body); activeWrites--;
+      }
+      data = settings;
+    }
+    else if (u.pathname === '/api/reset' && failReset) { await route.fulfill({status:500,body:'error'}); return; }
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+  });
+  const page = await context.newPage(); page.on('pageerror',e=>errors.push(e.message));
+  try {
+    await page.goto(base);
+    await page.waitForFunction(() => document.querySelector('#groupDps').textContent === '105,0K');
+    await check('live metrics and character rows',async()=>{
+      assert.equal(await page.locator('#selfDps').textContent(),'50,0K');
+      assert.equal(await page.locator('#battleDuration').textContent(),'1:30');
+      assert.equal(await page.locator('#liveRows .bar').count(),3);
+    });
+    if(process.env.SCREENSHOT_DIR) { fs.mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true}); await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'dashboard-desktop.png'),fullPage:true}); }
+    await check('unknown URL tab falls back to live',async()=>{
+      await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
+    });
+    await page.getByRole('button',{name:'Runs',exact:true}).click();
+    await page.locator('#runRows tr.click').waitFor();
+    await check('pagination has no duplicate requests',async()=>{
+      await page.locator('#moreRuns').evaluate(b=>{b.click();b.click();});
+      await page.waitForFunction(()=>document.querySelectorAll('#runRows tr.click').length===2);
+      assert.deepEqual(await page.locator('#runRows tr.click').evaluateAll(rows=>rows.map(r=>r.dataset.id)),['1','2']);
+    });
+    await check('late character requests cannot overwrite current filter',async()=>{
+      slowMain=true;
+      await page.selectOption('#charSel','FeroxTOO');
+      await page.selectOption('#charSel','Alt');
+      await page.waitForFunction(()=>document.querySelector('#runRows').textContent.includes('Alt Dungeon'));
+      await delay(400);
+      assert.match(await page.locator('#runRows').textContent(),/Alt Dungeon/);
+    });
+    await check('API failure shows an actionable message',async()=>{
+      failRuns=true; await page.selectOption('#charSel','FeroxTOO');
+      await page.waitForFunction(()=>document.querySelector('#runRows').textContent.includes('nicht geladen'));
+      await page.locator('#toast.error').waitFor(); failRuns=false;
+      failReset=true; await page.getByRole('button',{name:'Live',exact:true}).click();
+      await page.locator('#resetBtn').click();
+      await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Aktion fehlgeschlagen'));
+    });
+    await page.getByRole('button',{name:'Overlay',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='1.00×');
+    await check('settings writes stay ordered during rapid edits',async()=>{
+      await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.5';i.dispatchEvent(new Event('input'));});
+      await delay(210);
+      await page.locator('[data-k="scale"]').evaluate(i=>{i.value='2';i.dispatchEvent(new Event('input'));});
+      await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='2.00×');
+      await delay(900);
+      assert.equal(settings.scale,2); assert.equal(maxActiveWrites,1); assert.equal(writes.length,2);
+    });
+    await check('mobile tabs have no page overflow',async()=>{
+      await page.setViewportSize({width:390,height:844});
+      for(const width of [320,390]) {
+      await page.setViewportSize({width,height:844});
+      for(const tab of ['Live','Runs','Statistik','Overlay']) {
+        await page.getByRole('button',{name:tab,exact:true}).click(); await delay(100);
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab);
+      }
+      }
+      await page.getByRole('button',{name:'Live',exact:true}).click();
+      await page.evaluate(() => { document.querySelector('#toast').hidden = true; window.scrollTo(0,0); });
+      if(process.env.SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'dashboard-mobile.png'),fullPage:true});
+    });
+    await check('OBS overlay respects privacy and display settings',async()=>{
+      Object.assign(settings,{hide_names:true,show_dps:false,max_rows:2,scale:1.5,opacity:.4});
+      live.rows[1].name='Al';
+      const overlay=await context.newPage();overlay.on('pageerror',e=>errors.push(e.message));
+      await overlay.goto(base+'/overlay'); await overlay.locator('#rows .row').first().waitFor();
+      assert.equal(await overlay.locator('#rows .row').count(),2);
+      const text=await overlay.locator('#rows').textContent();
+      assert.match(text,/FeroxTOO/); assert.match(text,/\*\*/); assert.ok(!text.includes('Al'));assert.ok(!text.includes('/s'));
+      assert.equal(await overlay.locator('#box').evaluate(e=>e.style.transform),'scale(1.5)');
+      settings.visible=false; await overlay.locator('#box').waitFor({state:'hidden'});
+      settings.visible=true;settings.hide_names=false;settings.max_rows=3;live.rows[1].name='<img src=x onerror=alert(1)>';
+      await overlay.locator('#box').waitFor({state:'visible'});
+      await overlay.waitForFunction(()=>document.querySelector('#rows').textContent.includes('<img'));
+      assert.equal(await overlay.locator('#rows img').count(),0);await overlay.close();
+    });
+    await check('empty combat state gives guidance and zero personal DPS',async()=>{
+      live.rows=[]; live.total_damage=0; live.battle_time_ms=0;
+      await page.waitForFunction(()=>document.querySelector('#liveRows').textContent.includes('Bereit für den nächsten Kampf'));
+      assert.equal(await page.locator('#selfDps').textContent(),'0');
+    });
+    assert.deepEqual(errors,[]);
+    console.log(`${checks} browser checks passed.`);
+  } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
+})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

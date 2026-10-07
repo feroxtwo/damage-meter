@@ -26,7 +26,7 @@ if ! command -v cargo >/dev/null; then
 fi
 
 echo "==> Baue (Release) …"
-cargo build --release
+cargo build --release --locked
 
 echo "==> Installiere nach $BIN"
 install -Dm755 target/release/aion2-meter "$BIN"
