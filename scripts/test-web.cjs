@@ -454,6 +454,9 @@ const server = http.createServer((req,res) => {
       await page.evaluate(()=>show('live'));
     });
     await check('language setting relabels skills and exports without changing measured values',async()=>{
+      // The empty-state check above intentionally removes all live rows.
+      live.rows=fight.players.map(({skills,heal_skills,buffs,actor_id,job,...row})=>row);
+      live.total_damage=fight.total_damage;live.battle_time_ms=fight.duration_ms;
       await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('en');
       await page.waitForFunction(()=>settings.skill_language==='en'&&!settingsDirty&&!settingsSaving);assert.equal(settings.skill_language,'en');
       await page.evaluate(()=>show('live'));await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();
