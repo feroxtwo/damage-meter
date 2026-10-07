@@ -55,6 +55,19 @@ async fn update_check(headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
         StatusCode::BAD_GATEWAY
     })
 }
+fn display(engine: &Engine, mut value: Value) -> Value {
+    crate::skills::decorate(&mut value, &engine.overlay.read().skill_language);
+    value
+}
+async fn skill_icon(Path(name): Path<String>) -> Response {
+    match crate::skills::icon(&name) {
+        Some(bytes) => ([(header::CONTENT_TYPE, "image/webp")], bytes).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+async fn skill_catalog() -> Json<Value> {
+    Json(crate::skills::all())
+}
 async fn qol_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
@@ -70,7 +83,14 @@ async fn overlay_page() -> Html<&'static str> {
 }
 
 async fn live(State(engine): State<AppState>) -> Response {
-    ([(header::CACHE_CONTROL, "no-store")], Json(engine.live())).into_response()
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(display(
+            &engine,
+            serde_json::to_value(engine.live()).unwrap_or(Value::Null),
+        )),
+    )
+        .into_response()
 }
 
 #[derive(Deserialize)]
@@ -101,11 +121,13 @@ async fn run_detail(
     State(engine): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, StatusCode> {
-    blocking(engine, move |e| e.db.run_detail(id))
-        .await?
-        .map_err(db_error)?
-        .map(Json)
-        .ok_or(StatusCode::NOT_FOUND)
+    blocking(engine, move |e| {
+        e.db.run_detail(id).map(|v| v.map(|v| display(e, v)))
+    })
+    .await?
+    .map_err(db_error)?
+    .map(Json)
+    .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn delete_run(
@@ -149,11 +171,13 @@ async fn fight_detail(
     State(engine): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
-    blocking(engine, move |e| e.db.fight_detail(&id))
-        .await?
-        .map_err(db_error)?
-        .map(Json)
-        .ok_or(StatusCode::NOT_FOUND)
+    blocking(engine, move |e| {
+        e.db.fight_detail(&id).map(|v| v.map(|v| display(e, v)))
+    })
+    .await?
+    .map_err(db_error)?
+    .map(Json)
+    .ok_or(StatusCode::NOT_FOUND)
 }
 
 /// `?character=Name` limits a statistic to one of your characters.
@@ -364,7 +388,9 @@ async fn annotate(
     }
 }
 async fn player(State(e): State<AppState>, Path(id): Path<i32>) -> Result<Json<Value>, StatusCode> {
-    blocking(e, move |e| e.player_details(id)).await.map(Json)
+    blocking(e, move |e| display(e, e.player_details(id)))
+        .await
+        .map(Json)
 }
 #[derive(Deserialize)]
 struct ProfileBody {
@@ -473,6 +499,17 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
             }),
         )
         .route("/qol.js", get(qol_js))
+        .route("/assets/icons/{name}", get(skill_icon))
+        .route("/api/skills", get(skill_catalog))
+        .route(
+            "/skills.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/skills.js"),
+                )
+            }),
+        )
         .route("/api/version", get(version))
         .route("/api/update-check", post(update_check))
         .route("/api/live", get(live))
@@ -566,6 +603,104 @@ mod tests {
             builder = builder.header(ACTION_HEADER, "1");
         }
         builder.body(Body::from(body.to_string())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn offline_catalog_icons_and_language_persistence() {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "en",
+            std::env::temp_dir(),
+        );
+        let app = router(engine.clone(), "127.0.0.1:8787".parse().unwrap());
+        let response = app
+            .clone()
+            .oneshot(request("GET", "/api/skills", "localhost:8787", false, ""))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let catalog: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 4_000_000).await.unwrap())
+                .unwrap();
+        assert_eq!(catalog["skills"].as_array().unwrap().len(), 364);
+        assert_eq!(
+            catalog["skills"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|s| s["icon"].is_string())
+                .count(),
+            353
+        );
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/assets/icons/skill-11170000.webp",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/webp");
+        let bytes = to_bytes(response.into_body(), 100_000).await.unwrap();
+        assert!(bytes.starts_with(b"RIFF"));
+        assert_eq!(&bytes[8..12], b"WEBP");
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/assets/icons/not-bundled.webp",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(engine.overlay.read().skill_language, "en");
+        engine
+            .db
+            .set_meta("overlay_profile:legacy", r#"{"theme":"ember"}"#)
+            .unwrap();
+        assert_eq!(
+            engine.profile("legacy", false).unwrap().skill_language,
+            "en"
+        );
+        engine.profile("language", true).unwrap();
+        let response = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/overlay",
+                "localhost:8787",
+                true,
+                r#"{"skill_language":"de"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let saved: Value =
+            serde_json::from_str(&engine.db.meta("overlay").unwrap().unwrap()).unwrap();
+        assert_eq!(saved["skill_language"], "de");
+        assert_eq!(
+            engine.profile("language", false).unwrap().skill_language,
+            "en"
+        );
+        let response = app
+            .oneshot(request(
+                "POST",
+                "/api/overlay",
+                "localhost:8787",
+                true,
+                r#"{"skill_language":"xx"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(engine.overlay.read().skill_language, "de");
     }
 
     #[tokio::test]

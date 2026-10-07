@@ -129,6 +129,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   header { padding: 14px; }
   nav button { flex-direction: column; gap: 4px; padding: 8px 3px; font-size: 12px; }
 }
+.game-icon{width:24px;height:24px;object-fit:contain;flex-shrink:0;vertical-align:middle;border-radius:4px}.class-icon{width:20px;height:20px}.skill-label{display:inline-flex;align-items:center;gap:8px;max-width:100%;overflow-wrap:anywhere}.unknown-skill{display:inline-grid;place-items:center;width:24px;height:24px;background:var(--panel2);color:var(--muted);border-radius:4px;flex-shrink:0}#catalogRows details{max-width:260px;overflow-wrap:anywhere}#catalogSearch{flex:1;min-width:160px}
 </style>
 <link rel="stylesheet" href="/enhancements.css">
 </head>
@@ -141,6 +142,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     <button data-tab="live" class="active"><svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg>Live</button>
     <button data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#icon-runs"/></svg>Runs</button>
     <button data-tab="stats"><svg class="icon" aria-hidden="true"><use href="#icon-stats"/></svg>Statistik</button>
+    <button data-tab="skills"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg>Fähigkeiten</button>
     <button data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Overlay</button>
   </nav>
   <select id="charSel" title="Runs und Statistik für einen Charakter" style="display:none"><option value="">Alle Charaktere</option></select>
@@ -210,6 +212,12 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     </div>
   </section>
 
+  <section id="skills">
+    <div class="card"><h2>Fähigkeiten · Skills</h2><p class="muted">Offline-Katalog mit deutschen und englischen Namen. Suche auch nach Skill-ID oder Varianten-ID. Quelle: Wakayashi / Questlog, Stand 07.10.2026.</p>
+    <div class="row"><input id="catalogSearch" type="search" placeholder="Name / Skill-ID" aria-label="Fähigkeiten suchen"><select id="catalogClass" aria-label="Klasse filtern"><option value="">Alle Klassen</option><option value="gladiator">Gladiator</option><option value="templar">Templer</option><option value="assassin">Assassine</option><option value="ranger">Jäger</option><option value="sorcerer">Zauberer</option><option value="elementalist">Beschwörer</option><option value="cleric">Kleriker</option><option value="chanter">Kantor</option><option value="fighter">Faustkämpfer</option></select><label><input id="catalogVariants" type="checkbox"> Weitere Paket-IDs / Effekte</label></div>
+    <p id="catalogCount" class="analysis-note" role="status">Katalog wird geladen …</p><div class="table-scroll"><table><thead><tr><th>Fähigkeit</th><th>Deutsch</th><th>English</th><th>Klasse</th><th>ID / Varianten</th></tr></thead><tbody id="catalogRows"></tbody></table></div><div class="row"><button id="catalogPrev" class="btn">Zurück</button><span id="catalogPage"></span><button id="catalogNext" class="btn">Weiter</button></div>
+    <p class="analysis-note">Unbekannte IDs bleiben sichtbar. Ein zugeordnetes Symbol bestätigt keine Ingame-Messgenauigkeit.</p></div>
+  </section>
   <section id="settings">
     <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Overlay anpassen</h2><p>So kompakt und dezent, wie du es im Spiel brauchst.</p></div><span class="tag">AION 2 · LINUX</span></div>
     <div class="card">
@@ -227,6 +235,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">Eigene Zeile immer anzeigen <input type="checkbox" data-k="pin_self"></label>
       <label class="set">Kennzahl <select data-k="metric"><option value="damage">Schaden</option><option value="heal">Heilung</option><option value="damage_received">Erlittener Schaden</option></select></label>
       <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
+      <label class="set">Fähigkeits- und Klassennamen <select data-k="skill_language"><option value="de">Deutsch</option><option value="en">English</option></select></label>
       <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
       <div class="row"><p id="settingsStatus" class="save-status" role="status">Änderungen werden automatisch gespeichert.</p><button class="btn" id="retrySettings" hidden>Erneut speichern</button></div>
       <label class="set">Pakete mitschneiden (bleibt nach Neustart an) <input type="checkbox" id="recAuto"></label>
@@ -263,7 +272,17 @@ const date = (ms) => ms ? new Date(ms).toLocaleString('de-DE', { dateStyle: 'sho
 const color = (k) => `var(--${/^[a-z]+$/.test(k) ? k : 'unknown'})`;
 const api = (path, opts = {}) => fetch(path, { signal: AbortSignal.timeout(6000), cache: 'no-store', ...opts, headers: { 'x-a2m': '1', 'content-type': 'application/json', ...(opts.headers || {}) } })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.status === 204 ? null : r.json(); });
-const chip = (m) => `<span class="chip ${m.is_self ? 'me' : ''}" title="${esc(m.class_name)}"><i style="background:${color(m.class_key)}"></i>${esc(m.name)}</span>`;
+let latestLive = null;
+// Local artwork and display names only. No requests to third-party sites.
+function skillLanguage(){return (settingsDirty||settingsSaving?settings?.skill_language:latestLive?.overlay?.skill_language)||settings?.skill_language||'de';}
+function skillName(s={}){return s.names?.[skillLanguage()]||s.names?.en||s.names?.de||s.name||'#'+(s.code??s.id??'?');}
+function iconUrl(s={}){return /^\/assets\/icons\/[a-z0-9-]+\.webp$/.test(s.icon||'')?s.icon:'';}
+function skillLabel(s={}){const url=iconUrl(s);return `<span class="skill-label">${url?`<img class="game-icon" src="${url}" alt="" loading="lazy">`:'<span class="unknown-skill" aria-hidden="true">?</span>'}<span>${esc(skillName(s))}</span></span>`;}
+const classKeys=['gladiator','templar','assassin','ranger','sorcerer','elementalist','cleric','chanter','fighter'];
+function classIcon(p={}){return classKeys.includes(p.class_key)?`<img class="game-icon class-icon" src="/assets/icons/class-${p.class_key}.webp" alt="" loading="lazy">`:'';}
+function localizedClass(p={}){const names={gladiator:['Gladiator','Gladiator'],templar:['Templer','Templar'],assassin:['Assassine','Assassin'],ranger:['Jäger','Ranger'],sorcerer:['Zauberer','Sorcerer'],elementalist:['Beschwörer','Elementalist'],cleric:['Kleriker','Cleric'],chanter:['Kantor','Chanter'],fighter:['Faustkämpfer','Brawler']};return names[p.class_key]?.[skillLanguage()==='en'?1:0]||p.class_name||'';}
+
+const chip = (m) => `<span class="chip ${m.is_self ? 'me' : ''}" title="${esc(m.class_name)}">${classIcon(m)}${esc(m.name)}</span>`;
 const badge = (d) => d ? `<span class="badge ${esc(d)}">${esc(d)}</span>` : '';
 
 let toastTimer;
@@ -277,13 +296,14 @@ const task = promise => promise.catch(() => toast('Daten konnten nicht geladen w
 // Tabs
 let tab = location.hash.slice(1) || 'live';
 function show(t) {
-  if (!['live', 'runs', 'stats', 'settings'].includes(t)) t = 'live';
+  if (!['live', 'runs', 'stats', 'settings', 'skills'].includes(t)) t = 'live';
   tab = t; location.hash = t;
   document.querySelectorAll('nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === t));
   if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
   if (t === 'stats') { task(loadStats()); task(loadBossHistory()); }
   if (t === 'settings') task(loadSettings());
+  if (t === 'skills' && typeof loadSkillCatalog === 'function') task(loadSkillCatalog());
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
 
@@ -299,7 +319,7 @@ function bars(rows, opts = {}) {
   const sum = rows.reduce((a, r) => a + (r.damage || 0), 0) || 1;
   return rows.map((r, i) => `<div class="bar ${r.is_self ? 'me' : ''}">
     <div class="fill" style="width:${(r.damage / top * 100).toFixed(1)}%;background:${color(r.class_key)};color:${color(r.class_key)}"></div>
-    <div class="lbl"><span>${opts.noRank ? '' : (i + 1) + '. '}${deathMark(r)}<b>${esc(r.name)}</b> <span class="muted">${esc(r.class_name || '')}${r.damage_received ? ` · ${num(r.damage_received)} erlitten` : ''}</span></span>
+    <div class="lbl"><span>${opts.noRank ? '' : (i + 1) + '. '}${deathMark(r)}${classIcon(r)}<b>${esc(r.name)}</b> <span class="muted">${esc(localizedClass(r))}${r.damage_received ? ` · ${num(r.damage_received)} erlitten` : ''}</span></span>
     <span class="num" title="${esc(Number(r.damage||0).toLocaleString('de-DE'))} gesamt · ${esc(Number(r.dps||0).toLocaleString('de-DE',{maximumFractionDigits:2}))}/s">${opts.right ? opts.right(r) : `${num(r.damage)} · ${num(r.dps)}/s · ${(r.share ?? (r.damage / sum * 100)).toFixed(1).replace('.', ',')}%`}</span></div></div>`).join('');
 }
 function setStatus(c) {
@@ -432,7 +452,7 @@ async function openRun(id) {
 function uptimes(list, debuff) {
   if (!list || !list.length) return '';
   return `<div class="uptimes">${list.map(e => `<div class="uptime${debuff ? ' debuff' : ''}" title="${esc(e.caster ? 'von ' + e.caster : '')}">
-    <span>${esc(e.name)}${debuff && e.caster ? ` <span class="muted">· ${esc(e.caster)}</span>` : ''}</span><span class="num">${e.uptime.toFixed(0)}%</span>
+    <span>${skillLabel(e)}${debuff && e.caster ? ` <span class="muted">· ${esc(e.caster)}</span>` : ''}</span><span class="num">${e.uptime.toFixed(0)}%</span>
     <div class="track"><div style="width:${Math.min(100, e.uptime).toFixed(1)}%"></div></div></div>`).join('')}</div>`;
 }
 async function openSkills(fid) { if(window.openFight) await openFight(fid); }
@@ -447,7 +467,7 @@ async function loadStats() {
     + kpi(s.partners, 'verschiedene Mitspieler') + kpi(s.my_deaths ?? 0, 'eigene Tode in Bosskämpfen') + kpi(s.characters.map(c => esc(c.name)).join(', ') || '–', 'Deine Charaktere');
   $('#partners').innerHTML = partners.length ? partners.map((p, i) => `<div class="partner">
     <div class="rank">${i + 1}</div>
-    <div><div class="name"><span class="chip"><i style="background:${color(p.class_key)}"></i>${esc(p.class_name || '?')}</span> ${esc(p.name)}</div>
+    <div><div class="name"><span class="chip"><i style="background:${color(p.class_key)}"></i>${classIcon(p)}${esc(localizedClass(p)||'?')}</span> ${esc(p.name)}</div>
       <div class="muted" style="font-size:12px">Zuletzt ${date(p.last_run)}${p.favourite ? ' · meist in ' + esc(p.favourite) : ''}${p.avg_dps ? ' · Ø ' + num(p.avg_dps) + '/s' : ''}${p.combat_power ? ' · KP ' + num(p.combat_power) : ''}</div></div>
     <div class="count">${p.runs}<small>Runs</small></div></div>`).join('')
     : '<div class="empty">Noch keine Gruppen-Runs.</div>';
@@ -567,6 +587,7 @@ document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
   settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? (i.dataset.k === 'idle_reset_seconds' ? Number(i.value) : i.value) : Number(i.value);
   settingsChanged.add(i.dataset.k);
   settingsValues(); settingsDirty = true; settingsRequest++;
+  if(i.dataset.k==='skill_language')renderSkillCatalog();
   settingsStatus('Änderungen noch nicht gespeichert …');
   clearTimeout(settingsTimer); settingsTimer = setTimeout(() => saveSettings().catch(() => {}), 180);
 });
@@ -575,6 +596,7 @@ window.addEventListener('hashchange', () => { const t = location.hash.slice(1); 
 window.addEventListener('resize', () => { if (tab === 'stats') drawBoss(); });
 show(tab);
 </script>
+<script src="/skills.js"></script>
 <script src="/enhancements.js"></script>
 <script src="/qol.js"></script>
 </body>

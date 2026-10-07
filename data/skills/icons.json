@@ -1,0 +1,2174 @@
+{
+  "skill-1008.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-9865.webp": {
+    "offset": 994,
+    "length": 660,
+    "sha256": "504bc4d470f41b77ecb66010cac8811ce7b8232bcf59c36316697b5c37e44187",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_001.webp"
+  },
+  "skill-9866.webp": {
+    "offset": 1654,
+    "length": 616,
+    "sha256": "6727d66c551c168e2312496705c81095ee9e17f09c4153e869d45fbfb6077f4a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_002.webp"
+  },
+  "skill-9867.webp": {
+    "offset": 2270,
+    "length": 986,
+    "sha256": "7e14be37241a8fea5476818df77df71e3178ca84674b28a961d29e5dcdbb5f5c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_003.webp"
+  },
+  "skill-9868.webp": {
+    "offset": 3256,
+    "length": 1434,
+    "sha256": "cc21eb4805729338f7ed238d26e15320b2f6314cb166022e52cad8d2b2b1a104",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_006.webp"
+  },
+  "skill-9869.webp": {
+    "offset": 4690,
+    "length": 1180,
+    "sha256": "a9249569ef525b9aead73575c9a573c858f5942815eded2924ec46f365cb9168",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_014.webp"
+  },
+  "skill-9871.webp": {
+    "offset": 5870,
+    "length": 858,
+    "sha256": "37d5839d4744908d8d78a0e81b6395a15a9c4fd6937f232b98c7cf90fae30a3d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_003.webp"
+  },
+  "skill-11010000.webp": {
+    "offset": 6728,
+    "length": 598,
+    "sha256": "eb64113b7801a27e92fb074dfd4eaafd0d4ba7f94860142b6de41197bbc04079",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-rending-blow.webp?v=1790541690457"
+  },
+  "skill-11020000.webp": {
+    "offset": 7326,
+    "length": 754,
+    "sha256": "c500640c915a0b6228d818abf1797b8cae5a7d00bef4781d55a61ec9fd507e76",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-keen-strike.webp?v=1790541690457"
+  },
+  "skill-11030000.webp": {
+    "offset": 8080,
+    "length": 940,
+    "sha256": "a4fb33ae32e80bb168de0b474be008bdfc3dc176d6ac5d1319a081ee11cf822e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_003.webp"
+  },
+  "skill-11040000.webp": {
+    "offset": 9020,
+    "length": 822,
+    "sha256": "88d7e4a137f75af4c8d44f749f8490040633f374fc98cc03ad5621575ccfe3f9",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_004.webp"
+  },
+  "skill-11050000.webp": {
+    "offset": 9842,
+    "length": 752,
+    "sha256": "570f573b8f0a60c8e6bf2be1367561d79e64d54eb48b2bb6177ec739f5dfb6e4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-crushing-wave.webp?v=1790541690457"
+  },
+  "skill-11060000.webp": {
+    "offset": 10594,
+    "length": 1116,
+    "sha256": "d1df57e9a7ab7c141119a8cab82bf3e6a30bcbfb79c218f682e86012e60df092",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_006.webp"
+  },
+  "skill-11080000.webp": {
+    "offset": 11710,
+    "length": 614,
+    "sha256": "2e4a3664f658b2175df55bd4da2939d674a379a7ea3c4059d5a4650f61381582",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_008.webp"
+  },
+  "skill-11090000.webp": {
+    "offset": 12324,
+    "length": 650,
+    "sha256": "6ef44abf9dafb6f0822f77aca5869c62616918d31ffccaa149f52e91f3f5e618",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_009.webp"
+  },
+  "skill-11100000.webp": {
+    "offset": 12974,
+    "length": 784,
+    "sha256": "db4c9630e151dba842f7647f398ea7fd6efaab98d54b77608df830cc076e527d",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-ruinous-blow.webp?v=1790541690457"
+  },
+  "skill-11110000.webp": {
+    "offset": 13758,
+    "length": 810,
+    "sha256": "95e21835dd8a82eca4c0204d01c6bd844f07859996ed8f840d48c8f359dbf780",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_011.webp"
+  },
+  "skill-11130000.webp": {
+    "offset": 14568,
+    "length": 790,
+    "sha256": "2b0990d7a6137128681a9563bc21b66373aff067aea02fe3462aea53627e680a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_013.webp"
+  },
+  "skill-11170000.webp": {
+    "offset": 15358,
+    "length": 778,
+    "sha256": "80a04824fc74958e6864e919f8aa395a418890c352d8f8cc1995d822aef304e3",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-overhead-slam.webp?v=1790541690457"
+  },
+  "skill-11190000.webp": {
+    "offset": 16136,
+    "length": 1026,
+    "sha256": "95fadc440f241c376a3f635562afe25b5f5c99c4b23b409d5e4bcda8556fdfa4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-leaping-slam.webp?v=1790541690457"
+  },
+  "skill-11200000.webp": {
+    "offset": 17162,
+    "length": 956,
+    "sha256": "036fbe5b95c699bbe7f411847644a9445a24adee6a56c046db3b4662bec52cbd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-ankle-slice.webp?v=1790541690457"
+  },
+  "skill-11240000.webp": {
+    "offset": 18118,
+    "length": 820,
+    "sha256": "0915f9c1648865dc2e33a0c76e53726be29c3ae54cf9c1336743e5c9cceb2ec3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_007.webp"
+  },
+  "skill-11250000.webp": {
+    "offset": 18938,
+    "length": 1292,
+    "sha256": "584408585af965ab8fdaebf38c8f994bdf1c551d2f952354ac6e17d8930ed7e8",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_040.webp"
+  },
+  "skill-11260000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-11280000.webp": {
+    "offset": 21166,
+    "length": 1084,
+    "sha256": "58758d1e6b312e3f0751af7693d42bb0afc8d6eb4fc50cd33d81ec15564cfc51",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-sword-aura-rampage.webp?v=1790541690457"
+  },
+  "skill-11290000.webp": {
+    "offset": 22250,
+    "length": 860,
+    "sha256": "dbcf7a241ffc56dde2986aaead95e17e537b635263856be3198574699b816f51",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-mocking-blade.webp?v=1790541690457"
+  },
+  "skill-11300000.webp": {
+    "offset": 23110,
+    "length": 742,
+    "sha256": "1c66720813b9de9a9042e6ebecff8a424225559967106e194cb30cade674c67a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-aerial-snare.webp?v=1790541690457"
+  },
+  "skill-11340000.webp": {
+    "offset": 23852,
+    "length": 876,
+    "sha256": "a297bf0ecc513eac2b8570720a081fa4dd0acc367d4c5851fd1f5b18a2f9a72f",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_034.webp"
+  },
+  "skill-11360000.webp": {
+    "offset": 24728,
+    "length": 1100,
+    "sha256": "a87c5a71116f3b555ad79ed92ebd56bc97a913490994a29ddac263a0c06434a1",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-rush-strike.webp?v=1790541690457"
+  },
+  "skill-11380000.webp": {
+    "offset": 25828,
+    "length": 944,
+    "sha256": "d4bf754b64467c9eb547f6e60256e2a28e6a72de7d67a0f196dcd6f3592c4c20",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_038.webp"
+  },
+  "skill-11390000.webp": {
+    "offset": 26772,
+    "length": 1070,
+    "sha256": "36339a61705970c22615917827a10d8008d84c60d02b5efceeea1cdec0d8a860",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-rage-burst.webp?v=1790541690457"
+  },
+  "skill-11400000.webp": {
+    "offset": 27842,
+    "length": 1076,
+    "sha256": "ed71d73a1e672597ce4c2047e2cca6bf0c6298557a653a8e03e7c48ccffa29cd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-lunge-stance.webp?v=1790684365000"
+  },
+  "skill-11410000.webp": {
+    "offset": 28918,
+    "length": 932,
+    "sha256": "e51fdab9172cd1494effa661314adc771f731362f1f539a1a02d56e37be312f7",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_041.webp"
+  },
+  "skill-11420000.webp": {
+    "offset": 29850,
+    "length": 728,
+    "sha256": "41ac44d6b8b8ddc56c98834497b6ee9ea343156784a8731540e7511753335a38",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_042.webp"
+  },
+  "skill-11430000.webp": {
+    "offset": 30578,
+    "length": 926,
+    "sha256": "99f03464b76919de040b39ee43d37e7412a1a81963b19db8f7e909c1a4a79791",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_043.webp"
+  },
+  "skill-11450000.webp": {
+    "offset": 31504,
+    "length": 818,
+    "sha256": "e3c75ddc7dc312732e5e9d1460db1a920cfa9e93d3ed3aaf1c76e7c36a5b14df",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_045.webp"
+  },
+  "skill-11700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-11710000.webp": {
+    "offset": 32322,
+    "length": 952,
+    "sha256": "f244c9781fe23873133ace9c22c2fcc21e3d7ff1233028316a6c7ffdfaef7469",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-survival-stance.webp?v=1790541690457"
+  },
+  "skill-11720000.webp": {
+    "offset": 33274,
+    "length": 992,
+    "sha256": "815cbed8954d91a8f2de535afd69063edb896f6d5ab0c935c7b0f170e03f6c12",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-protection-armor.webp?v=1790541690457"
+  },
+  "skill-11730000.webp": {
+    "offset": 34266,
+    "length": 768,
+    "sha256": "4a95c22e53ceb1cc1f36bf3761184329fe95c42a9d8e137c1cb03c7e615758c0",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-blood-absorption.webp?v=1790541690457"
+  },
+  "skill-11740000.webp": {
+    "offset": 35034,
+    "length": 682,
+    "sha256": "9e72878aecd49c843912b6dd90db90ed97d094c94f9274d580e2fdc68e3b91c7",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-identify-weakness.webp?v=1790541690457"
+  },
+  "skill-11750000.webp": {
+    "offset": 35716,
+    "length": 780,
+    "sha256": "ae87214dd050c2dde5645e4ca6f2e527d77d3aa1295461d960270836b45cdead",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_005.webp"
+  },
+  "skill-11760000.webp": {
+    "offset": 36496,
+    "length": 856,
+    "sha256": "806f5909795ba32c0719247f76e0597212c4135866c6206a91caad2003b2d325",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_006.webp"
+  },
+  "skill-11770000.webp": {
+    "offset": 37352,
+    "length": 932,
+    "sha256": "132231f258ad480deb3be761f9f79595c985691fdfc13074d5401b82910286c4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-destructive-impulse.webp?v=1790541690457"
+  },
+  "skill-11780000.webp": {
+    "offset": 38284,
+    "length": 894,
+    "sha256": "d21aecb8c67490ea7fe8da3fcd566eb44797728dff4125a598ca4a14252adb7a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_008.webp"
+  },
+  "skill-11790000.webp": {
+    "offset": 39178,
+    "length": 970,
+    "sha256": "84c8dc546b7a7a0b402f86f5b49854f36c16f0454a702ea60e0946273a99baf2",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-gladiator-survival-willpower.webp?v=1790541690457"
+  },
+  "skill-11800000.webp": {
+    "offset": 40148,
+    "length": 1098,
+    "sha256": "4c212033315703aed5e1df18511c3718dd9bdaca8ca7dc2c7a44ecd33af94052",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_010.webp"
+  },
+  "skill-12010000.webp": {
+    "offset": 41246,
+    "length": 644,
+    "sha256": "4e485490e93c889c4b56e2a250157a4a6c59a3e51c65e4bd01ea98929d8872b4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-vicious-strike.webp?v=1791011260129"
+  },
+  "skill-12020000.webp": {
+    "offset": 1654,
+    "length": 616,
+    "sha256": "6727d66c551c168e2312496705c81095ee9e17f09c4153e869d45fbfb6077f4a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_002.webp"
+  },
+  "skill-12030000.webp": {
+    "offset": 2270,
+    "length": 986,
+    "sha256": "7e14be37241a8fea5476818df77df71e3178ca84674b28a961d29e5dcdbb5f5c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_003.webp"
+  },
+  "skill-12040000.webp": {
+    "offset": 3256,
+    "length": 1434,
+    "sha256": "cc21eb4805729338f7ed238d26e15320b2f6314cb166022e52cad8d2b2b1a104",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_006.webp"
+  },
+  "skill-12060000.webp": {
+    "offset": 4690,
+    "length": 1180,
+    "sha256": "a9249569ef525b9aead73575c9a573c858f5942815eded2924ec46f365cb9168",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_014.webp"
+  },
+  "skill-12070000.webp": {
+    "offset": 41890,
+    "length": 956,
+    "sha256": "713552ee7de53ae3477ff7341dc0504950ffce3a041e05ec48c4907e618f4508",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-doom-shield.webp?v=1791011260129"
+  },
+  "skill-12090000.webp": {
+    "offset": 42846,
+    "length": 1204,
+    "sha256": "5796f5ad106c93d68533bdeda0c462b44aea01da9a362e85dfafd2d93cbf836a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_009.webp"
+  },
+  "skill-12100000.webp": {
+    "offset": 44050,
+    "length": 1016,
+    "sha256": "57f45b8a6ddd4991aec0f287d5bd95849819e4c2294eb26a81857104a564d367",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-shield-smite.webp?v=1791011260129"
+  },
+  "skill-12110000.webp": {
+    "offset": 45066,
+    "length": 738,
+    "sha256": "8f9675dde3c4acad9aa65097cc3a6532f18ba5e971a0169f04e7d0b96a64bc95",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_011.webp"
+  },
+  "skill-12120000.webp": {
+    "offset": 45804,
+    "length": 1174,
+    "sha256": "390f9d76fcef1cf91cc28e61c63612d066657f71f7f583e10f439f1b3fc739db",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_012.webp"
+  },
+  "skill-12130000.webp": {
+    "offset": 46978,
+    "length": 1022,
+    "sha256": "91a347c8627509138f94e89d0b94f93f9d671d72d4a2143c07f4c07174f60936",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_013.webp"
+  },
+  "skill-12190000.webp": {
+    "offset": 48000,
+    "length": 984,
+    "sha256": "1b10e11810683e8dec46bdd0b9bc438bb61f57a2a42d4da4c9228462db523ca0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_018.webp"
+  },
+  "skill-12200000.webp": {
+    "offset": 14568,
+    "length": 790,
+    "sha256": "2b0990d7a6137128681a9563bc21b66373aff067aea02fe3462aea53627e680a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_013.webp"
+  },
+  "skill-12220000.webp": {
+    "offset": 48984,
+    "length": 1460,
+    "sha256": "012444e5a252e623f78709133a7c63aba4493dccdc8c17c983a6bdcce169c734",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_021.webp"
+  },
+  "skill-12230000.webp": {
+    "offset": 50444,
+    "length": 838,
+    "sha256": "c6bc81bba205f26d21821c46f8cc59d689741808639f4bb7258cc3246cc5c835",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_022.webp"
+  },
+  "skill-12240000.webp": {
+    "offset": 51282,
+    "length": 1038,
+    "sha256": "2acae2d3283434bd2df01aeaac78a95cd1e0fe64fa56bfce17d619825768e699",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-judgment.webp?v=1791011260129"
+  },
+  "skill-12250000.webp": {
+    "offset": 52320,
+    "length": 1186,
+    "sha256": "20cdb394a8ff40f3e6741f4b6566ea264acd65f8a3b76d876dba01008813eb54",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_024.webp"
+  },
+  "skill-12260000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-12270000.webp": {
+    "offset": 53506,
+    "length": 966,
+    "sha256": "06c15f0bc6bc39a445e5a2a6cbdd4472ac0e072294443604ea809230861b106b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_025.webp"
+  },
+  "skill-12300000.webp": {
+    "offset": 54472,
+    "length": 764,
+    "sha256": "3d80c805e361694f2370bc0899289663946887527d8d8988572c3a7ebb199a25",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_028.webp"
+  },
+  "skill-12310000.webp": {
+    "offset": 55236,
+    "length": 790,
+    "sha256": "7a381bff471728d2ea33c461240970e2ffe2ae0270d1092db9769c2d23079375",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_029.webp"
+  },
+  "skill-12320000.webp": {
+    "offset": 56026,
+    "length": 734,
+    "sha256": "dc34753124956a4fa0e0a628b39431d3d877d186e6eca03000799101fbb5dc4c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_030.webp"
+  },
+  "skill-12340000.webp": {
+    "offset": 56760,
+    "length": 930,
+    "sha256": "98bc1d1f9a6c819e0bc18a824cd8738322b4a7e790dc54631054e36923911456",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_027.webp"
+  },
+  "skill-12350000.webp": {
+    "offset": 57690,
+    "length": 1512,
+    "sha256": "939c17d364384ccda1ef3dc2047e532e5b6aefb3d0fd3d7fa37f444a6a662710",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-warding-strike.webp?v=1791011260129"
+  },
+  "skill-12410000.webp": {
+    "offset": 59202,
+    "length": 1514,
+    "sha256": "94483029ec18066f0a57ba1370955aab375bc7e39f7b9c7be41636049feab88c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_041.webp"
+  },
+  "skill-12430000.webp": {
+    "offset": 60716,
+    "length": 654,
+    "sha256": "c754e41e900b3dcd87423905af2c73e8e495b99c4289290641e7e79a6b97e446",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-shield-rush.webp?v=1791011260129"
+  },
+  "skill-12450000.webp": {
+    "offset": 61370,
+    "length": 960,
+    "sha256": "44360ebd8762cf4b6dd01b531264c1525b8fc00bcff3aa63b8ee41c54d48df9e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_045.webp"
+  },
+  "skill-12700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-12710000.webp": {
+    "offset": 62330,
+    "length": 1004,
+    "sha256": "f1ce24bbcb6a8d082f69738a084e0f68ebb0643947e43deb83dd71df362db71d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_001.webp"
+  },
+  "skill-12720000.webp": {
+    "offset": 63334,
+    "length": 898,
+    "sha256": "838f09017632c2265482a1cb04ff2cda29e2e7e6ec7db0e7cd5cc71ae088b6b1",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_002.webp"
+  },
+  "skill-12730000.webp": {
+    "offset": 5870,
+    "length": 858,
+    "sha256": "37d5839d4744908d8d78a0e81b6395a15a9c4fd6937f232b98c7cf90fae30a3d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_003.webp"
+  },
+  "skill-12740000.webp": {
+    "offset": 64232,
+    "length": 768,
+    "sha256": "6a191f2ba01a4f694e531d73fab32c924a5d4a48b712ae52a5c784e76b14b2a7",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_004.webp"
+  },
+  "skill-12750000.webp": {
+    "offset": 65000,
+    "length": 1068,
+    "sha256": "3f7421c1a28191b0628c8912a1e56a4a6b73c4bb9de970aa606acac3a0e8d986",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_005.webp"
+  },
+  "skill-12760000.webp": {
+    "offset": 36496,
+    "length": 856,
+    "sha256": "806f5909795ba32c0719247f76e0597212c4135866c6206a91caad2003b2d325",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_006.webp"
+  },
+  "skill-12770000.webp": {
+    "offset": 66068,
+    "length": 1120,
+    "sha256": "de3ebf2475144a3be7f4fdb874190701980eb9dfe9cc172ea11ecf3190ea01a4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-insulting-roar.webp?v=1791011260129"
+  },
+  "skill-12780000.webp": {
+    "offset": 67188,
+    "length": 958,
+    "sha256": "944884ef04d20f8a1b2776cf6a7a00da64579ab2d804c6207159d5e9d4b880e0",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-templar-fury.webp?v=1791011260129"
+  },
+  "skill-12790000.webp": {
+    "offset": 68146,
+    "length": 986,
+    "sha256": "cd6fc2c30b88e7a9a8e1284a00b09578bf6180292bc70f2ecbca57522d0f2309",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_009.webp"
+  },
+  "skill-12800000.webp": {
+    "offset": 69132,
+    "length": 1134,
+    "sha256": "73b33af26fb654c800a1f93a0ad59eadc0b24626b450cd2dd23e8cb3133bd696",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_TE_SKILL_Passive_010.webp"
+  },
+  "skill-13010000.webp": {
+    "offset": 70266,
+    "length": 814,
+    "sha256": "d3fc13ac4dc06ceb045f574dcb378e818dc1527075ec658196302f5f8094fc96",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-quick-slice.webp?v=1790507520680"
+  },
+  "skill-13020000.webp": {
+    "offset": 71080,
+    "length": 634,
+    "sha256": "331153ff9aa899375897ec2ee606e2a6b99fa03682eb9a42a9e6d0dd0453454d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_031.webp"
+  },
+  "skill-13030000.webp": {
+    "offset": 71714,
+    "length": 928,
+    "sha256": "ecb18fbcc419525763dee321536e30d5a115ffc1ec8fe78ebc4171366d1e8d37",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_003.webp"
+  },
+  "skill-13040000.webp": {
+    "offset": 72642,
+    "length": 978,
+    "sha256": "942f468de4ea6a2ed6ae4280e6f4029d40447b68b205c78614c5cb4c1010b078",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_004.webp"
+  },
+  "skill-13050000.webp": {
+    "offset": 73620,
+    "length": 898,
+    "sha256": "5506fffe7f34a61ee4c44a9e89e6181f733dfe3241187c04807eee0eb7a1d9f9",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-flash-slice.webp?v=1790507520680"
+  },
+  "skill-13060000.webp": {
+    "offset": 74518,
+    "length": 1154,
+    "sha256": "a51f6389d327ffe8ee06523260f7b847da0516f982ace7ec8d9633ba39316bc7",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-ambush.webp?v=1790507520680"
+  },
+  "skill-13070000.webp": {
+    "offset": 75672,
+    "length": 1200,
+    "sha256": "33170d73ff30bdee1a9e9fe9ae650f26e0dcf87d115fee234c54fcbacd08cae5",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-shadowstrike.webp?v=1790507520680"
+  },
+  "skill-13080000.webp": {
+    "offset": 76872,
+    "length": 1294,
+    "sha256": "2779535bb64cf8ef4c77d55c8ac6a24e88ab00b7de899f1d4bd7b93860d7f455",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_024.webp"
+  },
+  "skill-13100000.webp": {
+    "offset": 78166,
+    "length": 824,
+    "sha256": "613cf8318e3ed626f25fffa7aa9c3023ac239f6926622c4a8fd01cce78f1c8aa",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-savage-roar.webp?v=1790507520680"
+  },
+  "skill-13110000.webp": {
+    "offset": 78990,
+    "length": 692,
+    "sha256": "791878f3d5082f4a6aa9d8147d062a8381c52aee689dd8db04ac4eb0029d57ca",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_010.webp"
+  },
+  "skill-13120000.webp": {
+    "offset": 79682,
+    "length": 696,
+    "sha256": "930fe3695bd4da4f11be02cd8d3ae193d80a612898d4495d8205c23f01594752",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_011.webp"
+  },
+  "skill-13130000.webp": {
+    "offset": 80378,
+    "length": 844,
+    "sha256": "38b3e00c205d5a0c2d324cf6a1d91781bb12f1445f9f2952de2436fb709906c2",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-insignia-explosion.webp?v=1790507520680"
+  },
+  "skill-13140000.webp": {
+    "offset": 81222,
+    "length": 912,
+    "sha256": "9e9b27462f77eee95f66971f7124d561329bf8d024032603960e8a7a6daebab4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_014.webp"
+  },
+  "skill-13180000.webp": {
+    "offset": 82134,
+    "length": 866,
+    "sha256": "f8741901a8faf514e63736c3e7ede95fde252ac7e91e124e864bb11663d4ef44",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_016.webp"
+  },
+  "skill-13210000.webp": {
+    "offset": 83000,
+    "length": 926,
+    "sha256": "83970c2b4bd89b6d0ef4dc5faad39b8695326b36a4224be32ed369a8b3863e21",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-whirlwind-slice.webp?v=1790507520680"
+  },
+  "skill-13220000.webp": {
+    "offset": 83926,
+    "length": 1202,
+    "sha256": "b868d05f799bb89d39118be237a5fb7f8cef7293d8e41a4ac3a720bb089c3aba",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-shadow-fall.webp?v=1790507520680"
+  },
+  "skill-13230000.webp": {
+    "offset": 85128,
+    "length": 1052,
+    "sha256": "50d5893632abc4439f725ec2483ecc2ce7a2ba85ac32990325aed28309cb262f",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_026.webp"
+  },
+  "skill-13250000.webp": {
+    "offset": 86180,
+    "length": 1036,
+    "sha256": "c0862f9686b0c1350a3083da7928c91260153fc76b25dbf497680eeef39fe0e3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_023.webp"
+  },
+  "skill-13260000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-13270000.webp": {
+    "offset": 87216,
+    "length": 978,
+    "sha256": "4a88628abdac3ad6d90c8166b7e60323b9eded63f0cf28cd5cbae4b2b7595630",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-savage-fang.webp?v=1790507520680"
+  },
+  "skill-13280000.webp": {
+    "offset": 88194,
+    "length": 1346,
+    "sha256": "083da5c44573c2e5bb71c44b9f09f3de7ce15a1801f43b7620396560fe7fe145",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_022.webp"
+  },
+  "skill-13300000.webp": {
+    "offset": 89540,
+    "length": 936,
+    "sha256": "d6eaed32514947a311b744c4b996554881d543a36780742005169fa61581a97b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_028.webp"
+  },
+  "skill-13310000.webp": {
+    "offset": 90476,
+    "length": 1210,
+    "sha256": "4ead7e7c78ec846daf790d8bf5d2f54e3b3785640507110d9240a3c85d0fefc0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_029.webp"
+  },
+  "skill-13340000.webp": {
+    "offset": 91686,
+    "length": 1126,
+    "sha256": "a0e2fb09122905e3f574878f2b688ed6d31819dd33be8be74f2b463b9e1e9b7a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_034.webp"
+  },
+  "skill-13350000.webp": {
+    "offset": 92812,
+    "length": 986,
+    "sha256": "7c0bcc2c5fa11722cb6e5113bc170608723bba1f3137db378101939051128f1f",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-heart-gore.webp?v=1790507520680"
+  },
+  "skill-13360000.webp": {
+    "offset": 93798,
+    "length": 810,
+    "sha256": "f15ac5c4e9e54ed45d571ccb1304a1848ad76fb7b2f223143f034cf61a18e7a5",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-infiltrate.webp?v=1790507520680"
+  },
+  "skill-13370000.webp": {
+    "offset": 94608,
+    "length": 1048,
+    "sha256": "a035e02e6f11da33d7c6ae6390ba325380ee5710f6d91283ecf4cee819664bb4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_039.webp"
+  },
+  "skill-13390000.webp": {
+    "offset": 95656,
+    "length": 990,
+    "sha256": "29ae7721e2803fa88f8deb4ce4181dffd82b32671c172a89e4f7b17ab6be03c6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_037.webp"
+  },
+  "skill-13700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-13710000.webp": {
+    "offset": 96646,
+    "length": 1088,
+    "sha256": "c016420a2779b459c9feb41bac88e9c55452aa9922f8207a0dfa5c4251450225",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-heightened-sixth-sense.webp?v=1790507520680"
+  },
+  "skill-13720000.webp": {
+    "offset": 97734,
+    "length": 1128,
+    "sha256": "522e8c91ff3525e1ed0ab0f505494e389d76061cc50513dadff7534bbc21c1ff",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-exploit-weakness.webp?v=1790507520680"
+  },
+  "skill-13730000.webp": {
+    "offset": 98862,
+    "length": 746,
+    "sha256": "fecde351caaf956410d708667ebddb3d8a965a08e0b9ccc472d53f99725a138e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_Passive_003.webp"
+  },
+  "skill-13740000.webp": {
+    "offset": 99608,
+    "length": 846,
+    "sha256": "8c790a63d381848f56efc03d66eb7d1ba31b1695aeaa4838f7f645b0214d7217",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-rear-smite.webp?v=1790507520680"
+  },
+  "skill-13750000.webp": {
+    "offset": 100454,
+    "length": 654,
+    "sha256": "176f392ed5144bcfc055a1dcf6a8c93fd6bd1ce50ef91ff63f726c46e48bf3f7",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-assault-stance.webp?v=1790507520680"
+  },
+  "skill-13760000.webp": {
+    "offset": 101108,
+    "length": 844,
+    "sha256": "2fe2ca3c2390fb0640f496368394680525aa281005c61dcfa4da298c99b4e487",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-impact-hit.webp?v=1790507520680"
+  },
+  "skill-13770000.webp": {
+    "offset": 101952,
+    "length": 912,
+    "sha256": "b1dcda8d4e7de738f3d0a01183642e3df3944e45bfaa817e7fddd517d282133a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-ambush-stance.webp?v=1790507520680"
+  },
+  "skill-13780000.webp": {
+    "offset": 102864,
+    "length": 1162,
+    "sha256": "c19acd603998bea8995ad87c98f0d133dd96c42e1ba4a1071c5c81d3a7b0aefd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-defense-break.webp?v=1790507520680"
+  },
+  "skill-13790000.webp": {
+    "offset": 104026,
+    "length": 710,
+    "sha256": "6f1d0922274fec29e02ad23cc52b8853557688584c9a08dab37bfb392cde9fdd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-revitalization-contract.webp?v=1790507520680"
+  },
+  "skill-13800000.webp": {
+    "offset": 104736,
+    "length": 868,
+    "sha256": "9c76b4a248053f0409b28aae6986d293a091d8ac168ba7a6556e66273f1ece8d",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-assassin-determination.webp?v=1790507520680"
+  },
+  "skill-14010000.webp": {
+    "offset": 105604,
+    "length": 1154,
+    "sha256": "230c6810ade97d774835f95668ce2d0f214ea9bc75549e9d257e57fb91815fa2",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-deadshot.webp?v=1790539301038"
+  },
+  "skill-14020000.webp": {
+    "offset": 106758,
+    "length": 920,
+    "sha256": "2c863911c555c810c4ef0161389330d7d08b339e3825940a3e3f781a3739e5d9",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-snipe.webp?v=1790539301038"
+  },
+  "skill-14030000.webp": {
+    "offset": 107678,
+    "length": 728,
+    "sha256": "4e8fa68feae7245d02730d874b4a60a1068bf1be400a43ddea31bd190b570d9e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_003.webp"
+  },
+  "skill-14040000.webp": {
+    "offset": 108406,
+    "length": 748,
+    "sha256": "724c0215ad59448deb1c6f877c64cc6b20495a110d1278b36cf051b692944e6a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_004.webp"
+  },
+  "skill-14050000.webp": {
+    "offset": 109154,
+    "length": 686,
+    "sha256": "ac6f7f96b65d92159f7ad85cd108a821f2601b014e9a122b94a3554f467616ce",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-drill-dart.webp?v=1790539301038"
+  },
+  "skill-14060000.webp": {
+    "offset": 109840,
+    "length": 774,
+    "sha256": "5ed0751345bf49e1ac3720dde3334cd93b380cf874887a1ddf904029adc00c25",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_006.webp"
+  },
+  "skill-14070000.webp": {
+    "offset": 110614,
+    "length": 1306,
+    "sha256": "7c76d9c9e0182d2c3ffbfe29dc3303da52b77fccaaa40f92683553b2ac2b4def",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-suppressing-arrow.webp?v=1790539301038"
+  },
+  "skill-14080000.webp": {
+    "offset": 111920,
+    "length": 700,
+    "sha256": "6d56b181ab0fc1cfc45775a82f15368f6c783ddf821430465765208b042b6f93",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-burst-arrow.webp?v=1790539301038"
+  },
+  "skill-14090000.webp": {
+    "offset": 112620,
+    "length": 870,
+    "sha256": "2229269a974e59e987426f218640412ec2569aff6f9431994168b26a7320365b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-marking-shot.webp?v=1790539301038"
+  },
+  "skill-14110000.webp": {
+    "offset": 113490,
+    "length": 866,
+    "sha256": "e23acafb3e04c9a8bc454bd49bb6bbac89a94fd79a625504d30cee1760a616cd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-gale-arrow.webp?v=1790539301038"
+  },
+  "skill-14120000.webp": {
+    "offset": 114356,
+    "length": 738,
+    "sha256": "fe894c41f03b28adb86d3c02c091203b1afb47037fe4a92d103010df88cbe1b0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_012.webp"
+  },
+  "skill-14130000.webp": {
+    "offset": 115094,
+    "length": 936,
+    "sha256": "781fd99149fc0ebc345f3850f1a55dd8c83cc0ea3bea1a487ed8cfee12c73b30",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-snare-shot.webp?v=1790539301038"
+  },
+  "skill-14150000.webp": {
+    "offset": 116030,
+    "length": 990,
+    "sha256": "74402548019ef2c2ef30ddf8aadae6f2a6f609dcc50184caa601467d38a422c9",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_015.webp"
+  },
+  "skill-14160000.webp": {
+    "offset": 117020,
+    "length": 612,
+    "sha256": "57b1c50f990a7af474a9d606af3995dd99db2b444388a153cc96205f5178a7df",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_016.webp"
+  },
+  "skill-14170000.webp": {
+    "offset": 117632,
+    "length": 716,
+    "sha256": "6e6380d981ed7d58fd55c31b37ec915e66aa5a88e4c7ff1c5f2263d1e1cfb1d9",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-explosion-trap.webp?v=1790539301038"
+  },
+  "skill-14180000.webp": {
+    "offset": 118348,
+    "length": 688,
+    "sha256": "80783671f75543d559fdca0fc9252e0cd7fd9fc5175ea9ecbf1c130de190c4e0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_018.webp"
+  },
+  "skill-14190000.webp": {
+    "offset": 119036,
+    "length": 1126,
+    "sha256": "7fd3ec678db4aedc6b961d4c051428b58ede5f0d6dd585627f02773066fc14f6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_019.webp"
+  },
+  "skill-14220000.webp": {
+    "offset": 120162,
+    "length": 858,
+    "sha256": "8db0ef6ce6b8ff96e3ed9606c9b2f29d73f49b21ed42794cf1067da0d3f592b0",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-bow-of-blessing.webp?v=1790539301038"
+  },
+  "skill-14260000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-14270000.webp": {
+    "offset": 121020,
+    "length": 922,
+    "sha256": "e72bc73925f7918eccedc09f2ad3f5e5fa8229616b0fc8dabaa462b9f5a0e67f",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_026.webp"
+  },
+  "skill-14310000.webp": {
+    "offset": 121942,
+    "length": 952,
+    "sha256": "34d0ae0d4becf702f44f34ba5295b00b2b8bc167af3ff8f5640f27a6a09a0629",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-vaizels-authority.webp?v=1790539301038"
+  },
+  "skill-14330000.webp": {
+    "offset": 122894,
+    "length": 952,
+    "sha256": "69838af41bb1fb0173d8c2573132de6b7658d4df5c893f8253d53ef17ad614ec",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_033.webp"
+  },
+  "skill-14340000.webp": {
+    "offset": 123846,
+    "length": 792,
+    "sha256": "d98f390f7d2667d278ce2421d1856444741caab87169952eb5dc805a14cfb1d1",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-tempest-shot.webp?v=1790539301038"
+  },
+  "skill-14350000.webp": {
+    "offset": 124638,
+    "length": 956,
+    "sha256": "224b492da7de08408795adaf2ebc83a9aa4ff23d4137faeccc429332ad68cf4d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_035.webp"
+  },
+  "skill-14360000.webp": {
+    "offset": 125594,
+    "length": 804,
+    "sha256": "2e0ffb6e77b823dfc28203a1893e429e2e89d557b0abbb0bcddb3f773e2dc176",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_023.webp"
+  },
+  "skill-14380000.webp": {
+    "offset": 126398,
+    "length": 950,
+    "sha256": "951b2367fd93fb480fc235b0e14be3ae82b5e70d6b1c676aaffc8e62cf73ba65",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-supporting-fire.webp?v=1790539301038"
+  },
+  "skill-14700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-14710000.webp": {
+    "offset": 127348,
+    "length": 854,
+    "sha256": "b76d1938c80a1f857da94146fc9a09377c89ec7bd70a582083bbbc75882d8373",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_004.webp"
+  },
+  "skill-14720000.webp": {
+    "offset": 128202,
+    "length": 1030,
+    "sha256": "9245bf4cd0d1dcd05f1928b657cbb5bff3503a0c0c08b51caa646aa11926bd2c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_003.webp"
+  },
+  "skill-14730000.webp": {
+    "offset": 129232,
+    "length": 856,
+    "sha256": "81a2b235a166c92027f62629b7fa0db718f5d76a8681fd00c78cf8c06695c298",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_006.webp"
+  },
+  "skill-14740000.webp": {
+    "offset": 130088,
+    "length": 762,
+    "sha256": "d8e99ee1de2a8de6d3bc9772893a720590f4b977807f1301b68d409c4a9bc2f6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_001.webp"
+  },
+  "skill-14750000.webp": {
+    "offset": 130850,
+    "length": 916,
+    "sha256": "9fd6ddedd4e62e0def7e52f2f5f9875175f7fbcaee64289525a7bfc8df4c5b4e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_011.webp"
+  },
+  "skill-14760000.webp": {
+    "offset": 131766,
+    "length": 736,
+    "sha256": "3d2f00c30616d9d634c3725dc6daa20a214b3be20ef00c162017dacebd91b92b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_012.webp"
+  },
+  "skill-14770000.webp": {
+    "offset": 132502,
+    "length": 774,
+    "sha256": "943e825b469164b2bcc1b2f06a7827eff0e491afe6bf91b36c70c0219a24fd2c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_008.webp"
+  },
+  "skill-14780000.webp": {
+    "offset": 133276,
+    "length": 990,
+    "sha256": "0ab40a293037f543ba61708c684fb5d97620e7e26a6701f21130aeb1c7f9970a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-ranger-melee-fire.webp?v=1790539301038"
+  },
+  "skill-14790000.webp": {
+    "offset": 134266,
+    "length": 708,
+    "sha256": "3df64e48073c627be49417d145296f045b59efbbe49e461872a2cf25907f5831",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_Passive_009.webp"
+  },
+  "skill-14800000.webp": {
+    "offset": 134974,
+    "length": 738,
+    "sha256": "a67305ea22260115e4f6b3e74707991a70de56bcd4c511205469e0ee0c0f6627",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_RA_SKILL_Passive_007.webp"
+  },
+  "skill-15010000.webp": {
+    "offset": 135712,
+    "length": 926,
+    "sha256": "522b89520634c398e0c35643534384ce84c9b289cf6c7fd957d333c91dee6a69",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-flame-scattershot.webp?v=1790748726538"
+  },
+  "skill-15030000.webp": {
+    "offset": 136638,
+    "length": 802,
+    "sha256": "34cf76bfbe0193a19c105ce6d6e5822543ee2048d46d1d4845357eb42b36ba97",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_003.webp"
+  },
+  "skill-15040000.webp": {
+    "offset": 137440,
+    "length": 1094,
+    "sha256": "5ae9b2a8cf9c137691aae244b438fffac7be7eb53920a19615337337f5d33fb4",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-firestorm.webp?v=1790748726538"
+  },
+  "skill-15050000.webp": {
+    "offset": 138534,
+    "length": 778,
+    "sha256": "11cd7b5193015bf69f9a5cf86b67e581701a8c4deffe38741c6a1ad089ff14f8",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-blaze.webp?v=1790748726538"
+  },
+  "skill-15060000.webp": {
+    "offset": 139312,
+    "length": 772,
+    "sha256": "0efa95aeaedb44c3c5c60072c7dfb3cd2a012585c13092a2d6d242780d97478e",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-hellfire.webp?v=1790748726538"
+  },
+  "skill-15090000.webp": {
+    "offset": 140084,
+    "length": 864,
+    "sha256": "acdcbb88551b38767c7127aac2fd64358075f5711fafcf19489c9792cd54a6e8",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-ice-chain.webp?v=1790748726538"
+  },
+  "skill-15100000.webp": {
+    "offset": 140948,
+    "length": 774,
+    "sha256": "59d9eced35ed8e0891d483b246c86c1234333c0f38daf50a548654b4b9878532",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_010.webp"
+  },
+  "skill-15110000.webp": {
+    "offset": 141722,
+    "length": 692,
+    "sha256": "844a67f8d66f05526db46f1e908bede2bf9002bf7e4e899f02c41b90df8432f9",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-winters-shackles.webp?v=1790748726538"
+  },
+  "skill-15120000.webp": {
+    "offset": 142414,
+    "length": 676,
+    "sha256": "8b544dad902f45dc03b11478d9f11c602d20c0538114062b15ec24127727fce4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_012.webp"
+  },
+  "skill-15130000.webp": {
+    "offset": 143090,
+    "length": 1144,
+    "sha256": "165ec19f4cbd1685559c321a30100fb53a27b2155f51e92d3180b6c993325bbb",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_013.webp"
+  },
+  "skill-15140000.webp": {
+    "offset": 144234,
+    "length": 850,
+    "sha256": "d202f3dd243926e09d69a0f69edc0f52cc754f98b69784d0208c941bc6b77528",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_014.webp"
+  },
+  "skill-15150000.webp": {
+    "offset": 145084,
+    "length": 746,
+    "sha256": "e8628ae90469b28052d7e167a3f8c0bae8091897e48555fc703cafc91b10ad91",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_015.webp"
+  },
+  "skill-15160000.webp": {
+    "offset": 145830,
+    "length": 1076,
+    "sha256": "a75cc2e1b5440a3836ad22303e42b9fa7100f6d20d386a83f5eec4cbcebee646",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_016.webp"
+  },
+  "skill-15200000.webp": {
+    "offset": 146906,
+    "length": 864,
+    "sha256": "b02cdb06194969c6d9937251a463fa90739edd153de5690fac4bdb4e27a09ed8",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_019.webp"
+  },
+  "skill-15210000.webp": {
+    "offset": 147770,
+    "length": 828,
+    "sha256": "c63406b59dbdd17b507fa17d6d798217f9ac92e3b341887c69bda38bf8a326c3",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-flame-arrow.webp?v=1790748726538"
+  },
+  "skill-15220000.webp": {
+    "offset": 148598,
+    "length": 898,
+    "sha256": "270f6999f9add981278201ba51ca490add3a58fe94e543cc1c4ea5371ac4d5dd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-frost-burst.webp?v=1790748726538"
+  },
+  "skill-15230000.webp": {
+    "offset": 149496,
+    "length": 800,
+    "sha256": "c85267c3a3c729c5af2f7e8e6450a2d6406dabea595d934035ba750fb2b0af62",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_021.webp"
+  },
+  "skill-15240000.webp": {
+    "offset": 150296,
+    "length": 906,
+    "sha256": "a13a4860b6dd7720a43edd470cd4f3423e8fda5943de8b418ec778913e5ba42c",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-defiance.webp?v=1790748726538"
+  },
+  "skill-15250000.webp": {
+    "offset": 151202,
+    "length": 1086,
+    "sha256": "92bba0328d1dd7be87b7d166f5330154d43a7386e4c530c283e5235bbb4056af",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_023.webp"
+  },
+  "skill-15280000.webp": {
+    "offset": 152288,
+    "length": 660,
+    "sha256": "e70e832d93a6140488f1fdbe10e7ace5de58002f678f8ec993b287514a8bdc70",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-bittercold-wind.webp?v=1790748726538"
+  },
+  "skill-15300000.webp": {
+    "offset": 152948,
+    "length": 976,
+    "sha256": "90622533c883418c48f4726fe3a7306c0caf89804b29471a65998bbb0ae0b78a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_027.webp"
+  },
+  "skill-15310000.webp": {
+    "offset": 153924,
+    "length": 740,
+    "sha256": "be1c171cb8e1416244704e3f392a2f44421a8f778a5eeda835f2df0fa4332883",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-wish-of-concentration.webp?v=1790748726538"
+  },
+  "skill-15320000.webp": {
+    "offset": 154664,
+    "length": 1420,
+    "sha256": "c48681cce179c69caec2ad464bb002801e42f08b68277762852a3d5f7074680b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_032.webp"
+  },
+  "skill-15360000.webp": {
+    "offset": 156084,
+    "length": 1006,
+    "sha256": "85f51f6bf7e7af0b17dd2240fce3b734e9aa559e18497dd66876947059637f5b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_036.webp"
+  },
+  "skill-15390000.webp": {
+    "offset": 157090,
+    "length": 766,
+    "sha256": "4cf05aef9d08e0cdd135ac386b4c123a653be7052c5b42cc625692635f9c67c9",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_039.webp"
+  },
+  "skill-15400000.webp": {
+    "offset": 157856,
+    "length": 938,
+    "sha256": "47e2ec37368ada826b2a459a8ff5d65d8f571d565b9b411726c3135fbd115c22",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-element-enhancement.webp?v=1790748726538"
+  },
+  "skill-15410000.webp": {
+    "offset": 158794,
+    "length": 812,
+    "sha256": "3c3bd71631f3f67bb02427f9523172d5d84c5ad22ce0821a2585fbd478ee9a04",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_041.webp"
+  },
+  "skill-15700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-15710000.webp": {
+    "offset": 159606,
+    "length": 712,
+    "sha256": "0e6a1a45a280b8f49da6cf39deb72e720b329bb2f5199956daa89a8ef770aaf6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_002.webp"
+  },
+  "skill-15720000.webp": {
+    "offset": 160318,
+    "length": 996,
+    "sha256": "bfac57b0a66bd92b524ae5607fdf5eba4807e86f93f551593215cf94215d143a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_006.webp"
+  },
+  "skill-15730000.webp": {
+    "offset": 161314,
+    "length": 1326,
+    "sha256": "5eceeaf46d4789bf47906ab42986b9f15c72762a08078a56fede42f49ffbc37b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_003.webp"
+  },
+  "skill-15740000.webp": {
+    "offset": 162640,
+    "length": 1042,
+    "sha256": "89f1f17ce567f654e83a966c1bd1663293ff2af4ee5f7bf5723b0727bdef245e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_004.webp"
+  },
+  "skill-15750000.webp": {
+    "offset": 163682,
+    "length": 1086,
+    "sha256": "4dfb1ecfc5a3a20010b83ee465c7ccb06da6a079ecfa7a2a03208daafb37103a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-robe-of-cold.webp?v=1790748726538"
+  },
+  "skill-15760000.webp": {
+    "offset": 164768,
+    "length": 934,
+    "sha256": "9a1a03e83c306a482d0ab2f5169e38a35adaf702d70ddb51de61bb78b9b9da84",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-sorcerer-absorb-essence.webp?v=1790748726538"
+  },
+  "skill-15770000.webp": {
+    "offset": 165702,
+    "length": 916,
+    "sha256": "e3454921b7e779a56f0b2c7e1100f668e0170f9514e3d00f43b15627e690a76b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_038.webp"
+  },
+  "skill-15780000.webp": {
+    "offset": 166618,
+    "length": 1138,
+    "sha256": "e2762fb04320d18312caaf39dd5f9f26a9cfbfcaee3d1d8a3ce4f49d7e9d7efa",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_007.webp"
+  },
+  "skill-15790000.webp": {
+    "offset": 134266,
+    "length": 708,
+    "sha256": "3df64e48073c627be49417d145296f045b59efbbe49e461872a2cf25907f5831",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_AS_SKILL_Passive_009.webp"
+  },
+  "skill-15800000.webp": {
+    "offset": 167756,
+    "length": 916,
+    "sha256": "1afbca10ad375c02b60042bbd9ef52e20fdf83731e5d31cdf52f4c0d4e505c67",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_SO_SKILL_Passive_008.webp"
+  },
+  "skill-16010000.webp": {
+    "offset": 168672,
+    "length": 806,
+    "sha256": "b74f7a9508be4ac97adc8ff2edfe39d7eb5c29e2f9e2dab3949d9961e0f3e7eb",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-cold-shock.webp?v=1790522055012"
+  },
+  "skill-16020000.webp": {
+    "offset": 169478,
+    "length": 780,
+    "sha256": "9220fa4519262e9e339b14dac41d1d05423db5ddf98ab5d8c47eb3ad8edcf634",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_002.webp"
+  },
+  "skill-16030000.webp": {
+    "offset": 170258,
+    "length": 866,
+    "sha256": "f1b2db4fba9c6510e86d59255cff0779d7b4c76ffba84a2d8ffd89e8a8ab9bef",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_003.webp"
+  },
+  "skill-16040000.webp": {
+    "offset": 171124,
+    "length": 836,
+    "sha256": "11e03c1059e33b7e1b5d3d088c29272632e7e41f6886bc282fe49c8ad07b6138",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-combustion.webp?v=1790522055012"
+  },
+  "skill-16060000.webp": {
+    "offset": 171960,
+    "length": 756,
+    "sha256": "355ba4547c09468217e97535c1387df07c1fd9502847297755625d42a1ff0e46",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_006.webp"
+  },
+  "skill-16070000.webp": {
+    "offset": 172716,
+    "length": 716,
+    "sha256": "fce1e6eedf285b173322bfdc7fd191e6a9ddef3a1a7fe691cfc4d1ccf3b2db54",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_007.webp"
+  },
+  "skill-16080000.webp": {
+    "offset": 173432,
+    "length": 590,
+    "sha256": "0b611542691e8a5e75c7072b4a090a972c5454d1a562126210994157120e924a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_008.webp"
+  },
+  "skill-16100000.webp": {
+    "offset": 174022,
+    "length": 788,
+    "sha256": "2a9cb6e3fc90a43422e7203dd3bdfc21d2ea1abacaa53adeb874bac651232124",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-summon-fire-spirit.webp?v=1790522055012"
+  },
+  "skill-16110000.webp": {
+    "offset": 174810,
+    "length": 678,
+    "sha256": "5bed3c9999627436c53dbee4fc148aced38d85507f54c1c57b70570a516de90b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-summon-water-spirit.webp?v=1790522055012"
+  },
+  "skill-16120000.webp": {
+    "offset": 175488,
+    "length": 786,
+    "sha256": "80c6d3b6a7f95c0a5b2ffeecdaa38f1967bdd0f2230b400fb3a9bd21f9ce1d94",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_012.webp"
+  },
+  "skill-16130000.webp": {
+    "offset": 176274,
+    "length": 758,
+    "sha256": "cf77a5aed459b18abc74df39969e21e57a481dcf9f7dca0e4f6e0a59f4cbae1a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-summon-earth-spirit.webp?v=1790522055012"
+  },
+  "skill-16140000.webp": {
+    "offset": 177032,
+    "length": 796,
+    "sha256": "60b560daf543f8fb22dbbc0dd147e96e8b2752af586d3fcd674b6289c10fc213",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-jointstrike-curse.webp?v=1790522055012"
+  },
+  "skill-16150000.webp": {
+    "offset": 177828,
+    "length": 1056,
+    "sha256": "ca388c7543d72d8034c96ab4f394dd83fb3e692c979c249dbce6ecb3209ce399",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_015.webp"
+  },
+  "skill-16170000.webp": {
+    "offset": 178884,
+    "length": 978,
+    "sha256": "d57a06411180892bac05b28f7dbee70b97e0565cc519be57239ea779912da85c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_017.webp"
+  },
+  "skill-16190000.webp": {
+    "offset": 179862,
+    "length": 1022,
+    "sha256": "7d163a52e5a5b1428a147551e96f0919466c48e403d2438e7a42e41277af9a84",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_019.webp"
+  },
+  "skill-16200000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-16220000.webp": {
+    "offset": 180884,
+    "length": 734,
+    "sha256": "d660f8f903f0dc17e6631c9bfc0858f8d46283d6061d74043c3905971a6c9392",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_022.webp"
+  },
+  "skill-16230000.webp": {
+    "offset": 181618,
+    "length": 1436,
+    "sha256": "540d16ba9e206e40986c4a1b4808333e9ad9d58284b0470430708a6152cb0288",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_023.webp"
+  },
+  "skill-16240000.webp": {
+    "offset": 183054,
+    "length": 972,
+    "sha256": "9f66341544be181e38174e88da31f7b5c2ac86ca4cf37439eb097193b5196871",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_024.webp"
+  },
+  "skill-16250000.webp": {
+    "offset": 184026,
+    "length": 846,
+    "sha256": "a910392a1ed7d57ed359a16166a666b6c603ad586bc13cfa67d34065eb85769e",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-summon-ancient-spirit.webp?v=1790522055012"
+  },
+  "skill-16260000.webp": {
+    "offset": 184872,
+    "length": 806,
+    "sha256": "230c2cfc5081e0373776c4aaef0549db70757d7bafe135779c425eb73470d459",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_026.webp"
+  },
+  "skill-16300000.webp": {
+    "offset": 185678,
+    "length": 954,
+    "sha256": "9aaffbb3120b16415c458a265d7deac00aff9b86da917a73d4354eddeea16e3a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-elemental-fusion.webp?v=1790522055012"
+  },
+  "skill-16330000.webp": {
+    "offset": 186632,
+    "length": 924,
+    "sha256": "e7a18ca355277ea57ad3af463d5551b09ee5eb3a3123ff945db1b9cff5cb0224",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_033.webp"
+  },
+  "skill-16340000.webp": {
+    "offset": 187556,
+    "length": 674,
+    "sha256": "68d07950b6e47faa9b620e90656c045180bf0d18969835c4bcf12ea2ac29b186",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_034.webp"
+  },
+  "skill-16360000.webp": {
+    "offset": 188230,
+    "length": 812,
+    "sha256": "6a97430e8acb7c63d917b62d2372214d5f512a44e8d6bc7e1738fb744a4a1ac7",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_036.webp"
+  },
+  "skill-16370000.webp": {
+    "offset": 189042,
+    "length": 820,
+    "sha256": "b61a14c764d5d5e872757282e8705d4daba042ca05000cbd0161468b3cdb3e15",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_EL_SKILL_037.webp"
+  },
+  "skill-16700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-16710000.webp": {
+    "offset": 189862,
+    "length": 998,
+    "sha256": "ced00cbc7650b2cf4e8f3b9c430be8437d7cc6af0f96e43e84a1f9631df8e5f5",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-spirit-strike.webp?v=1790522055012"
+  },
+  "skill-16720000.webp": {
+    "offset": 190860,
+    "length": 862,
+    "sha256": "7841a3898172087c08e322d6fc7ae92defb52d1de504b2bef5d229245b6f773d",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-spirit-protection.webp?v=1790522055012"
+  },
+  "skill-16730000.webp": {
+    "offset": 191722,
+    "length": 756,
+    "sha256": "fc47a3cb98291ad129e77d0b13fa8caaed5112cea89e19ac8bd56a5df5970de6",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-spirits-descent.webp?v=1790522055012"
+  },
+  "skill-16740000.webp": {
+    "offset": 192478,
+    "length": 862,
+    "sha256": "d80420375f416959d770d26f63d48a453364ba17be1a61e4d5cc458e888f236b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-corrode.webp?v=1790522055012"
+  },
+  "skill-16750000.webp": {
+    "offset": 193340,
+    "length": 812,
+    "sha256": "8f3a6128814da7d20bd6423527a9d79406441251647497f77155cd07a9c1ce35",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-spirit-revitalization.webp?v=1790522055012"
+  },
+  "skill-16760000.webp": {
+    "offset": 194152,
+    "length": 818,
+    "sha256": "d3f9ebebfb953fc74a5bd20bc99e1bee8dd3cbba9dbf98040fd0821222ea2e82",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-mental-focus.webp?v=1790522055012"
+  },
+  "skill-16770000.webp": {
+    "offset": 194970,
+    "length": 812,
+    "sha256": "5cc49e1ae16ca0e6a9e5826a171f966254d99bf14e9718f9dbf5836aa5464b0c",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-spirit-communion.webp?v=1790522055012"
+  },
+  "skill-16780000.webp": {
+    "offset": 195782,
+    "length": 1068,
+    "sha256": "d61350e4c6ef09ba1145402202f36e2510f15a47f9b7e413f5f13dc52cd91aba",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-element-unification.webp?v=1790522055012"
+  },
+  "skill-16790000.webp": {
+    "offset": 104026,
+    "length": 710,
+    "sha256": "6f1d0922274fec29e02ad23cc52b8853557688584c9a08dab37bfb392cde9fdd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-revitalization-contract.webp?v=1790522055012"
+  },
+  "skill-16800000.webp": {
+    "offset": 196850,
+    "length": 694,
+    "sha256": "045ef1f689d270d23ca9fbec0ec573e1f6d5607f85b8a666e5a9a114d49bb1ae",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-elementalist-consecutive-countercurrent.webp?v=1790522055012"
+  },
+  "skill-17010000.webp": {
+    "offset": 197544,
+    "length": 930,
+    "sha256": "1e8cb614db16f27122abcc5b6028d5e45f2c6c79c535e420a6fb5dda3d8e6ec4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_001.webp"
+  },
+  "skill-17020000.webp": {
+    "offset": 198474,
+    "length": 950,
+    "sha256": "526c43e37a423bf39b53e6e6732b59ea4f701c3f29be5c6463cbe470211f0126",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_002.webp"
+  },
+  "skill-17030000.webp": {
+    "offset": 199424,
+    "length": 1048,
+    "sha256": "f7dffbb21e77762d584298691fe054712f51bc27321a7bdcb13aff60ca1ce826",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_003.webp"
+  },
+  "skill-17040000.webp": {
+    "offset": 200472,
+    "length": 976,
+    "sha256": "c0973b86969c36cd852410bb1e7fd98434e48f4be610af7f50710bfb37fbd5a7",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-judgment-thunder.webp?v=1790681910970"
+  },
+  "skill-17050000.webp": {
+    "offset": 201448,
+    "length": 722,
+    "sha256": "f1ce82e7978751b2c77b78559e8b5c8bbab8859264c7c63c8a24c3c7d4aa3080",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_005.webp"
+  },
+  "skill-17060000.webp": {
+    "offset": 202170,
+    "length": 1162,
+    "sha256": "4311ec8b219a22e282e20df62fa186196dd5f44318752cb8f62a1e246011305d",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-bolt.webp?v=1790681910970"
+  },
+  "skill-17070000.webp": {
+    "offset": 203332,
+    "length": 1450,
+    "sha256": "63a79947ed8cd5b998192bae776b383dbeda288a5e0d956230ca5a5cd65f85f5",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-chain-of-torment.webp?v=1790681910970"
+  },
+  "skill-17080000.webp": {
+    "offset": 204782,
+    "length": 712,
+    "sha256": "426dfdef99bdeea8b5b6ae8eea8380cf291f3accccff9e694fc9cc9a27f0b8b0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_008.webp"
+  },
+  "skill-17090000.webp": {
+    "offset": 205494,
+    "length": 728,
+    "sha256": "ace3112ad5fbe2ee8a39c5371e8301bf64d829a65b39814b0f67ab66a7013a9a",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-light-of-regeneration.webp?v=1790681910970"
+  },
+  "skill-17100000.webp": {
+    "offset": 206222,
+    "length": 728,
+    "sha256": "3c995ee92d8ddde62d1e516f67e6620d5c471408244f53a1eec981e4a99231bb",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-healing-light.webp?v=1790681910970"
+  },
+  "skill-17120000.webp": {
+    "offset": 206950,
+    "length": 792,
+    "sha256": "88239ec66bca00e833295ffde6e9bf11ef673b32e8a1fd21884d18e2acea022b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-radiant-recovery.webp?v=1790681910970"
+  },
+  "skill-17150000.webp": {
+    "offset": 207742,
+    "length": 948,
+    "sha256": "8574ca7ece30b0cf5bac2ffef914cb57f2e28617c1b21c40dd1aadf2906d4c26",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-divine-aura.webp?v=1790681910970"
+  },
+  "skill-17160000.webp": {
+    "offset": 208690,
+    "length": 1400,
+    "sha256": "bae4e05c5ce513c7846fd20437c3c8e136f6742a391ffe9fe8b963c26c82d509",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_047.webp"
+  },
+  "skill-17190000.webp": {
+    "offset": 210090,
+    "length": 826,
+    "sha256": "57051c3d184fd28cc887464965568b15324ce2c03354ed2e8fce82a54133c9d3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_019.webp"
+  },
+  "skill-17240000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-17270000.webp": {
+    "offset": 210916,
+    "length": 832,
+    "sha256": "a3988d10f956cefb93c1812b0789b374304a20bcadf13af25eb620691467986c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_026.webp"
+  },
+  "skill-17280000.webp": {
+    "offset": 211748,
+    "length": 760,
+    "sha256": "9eec80675f0110de668f8ec5ae0fbdd24d7651869f4f111c160b188af51da48b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_027.webp"
+  },
+  "skill-17290000.webp": {
+    "offset": 212508,
+    "length": 864,
+    "sha256": "61b450a12d25b1d1a49247b2f57f56c9d860518cfee6c44231176d373578b252",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_028.webp"
+  },
+  "skill-17300000.webp": {
+    "offset": 213372,
+    "length": 1322,
+    "sha256": "02cea1c33607ee156dde77a8f8e4ecc74f11da6d0afe005ca2595db93bda3def",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_029.webp"
+  },
+  "skill-17350000.webp": {
+    "offset": 214694,
+    "length": 888,
+    "sha256": "d949cf914f4fafe9bf2d5da1e4a6dfa7e06d522fc93d6a6149ab8c63096827ce",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-condemnation.webp?v=1790681910970"
+  },
+  "skill-17370000.webp": {
+    "offset": 215582,
+    "length": 1080,
+    "sha256": "6fb64c59ae9c64616d2ec45096e340c69e25fdff6cdf0c07836643b3186ca90f",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_037.webp"
+  },
+  "skill-17390000.webp": {
+    "offset": 216662,
+    "length": 778,
+    "sha256": "93ecd067c7e66958e168cae2b95f978ac8fca3cf13cb2f5dd946d95f13e2f54e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_039.webp"
+  },
+  "skill-17400000.webp": {
+    "offset": 217440,
+    "length": 1034,
+    "sha256": "07db1967f2eb27bd5b42a7c5e4d2ba9ab9a7d4ef4c3def6a902ea1b4fb1a7cad",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-earth-punishment.webp?v=1790681910970"
+  },
+  "skill-17410000.webp": {
+    "offset": 218474,
+    "length": 556,
+    "sha256": "a8d77f054d881ce41a3765a0c46b870c9b373a531c67177352a9ec0eabd2a57b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_041.webp"
+  },
+  "skill-17420000.webp": {
+    "offset": 219030,
+    "length": 782,
+    "sha256": "bb6b0e94eb130319d9296b1ecb10d6274a6f29914477e820fdf95cbeb97f84fc",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_042.webp"
+  },
+  "skill-17430000.webp": {
+    "offset": 219812,
+    "length": 762,
+    "sha256": "1916b4d17afaf0ed39e4e67a02599ce4770cc365261af3839efd4cd2c39e3dae",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-prayer-of-amplification.webp?v=1790681910970"
+  },
+  "skill-17440000.webp": {
+    "offset": 220574,
+    "length": 1034,
+    "sha256": "aca43e987e538747daa17c4bf5258373514625f67452d3e13e4dfec5b7299636",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_046.webp"
+  },
+  "skill-17700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-17710000.webp": {
+    "offset": 221608,
+    "length": 796,
+    "sha256": "d66fbe042644974af5794172eee525427197a3a34a465ed58c1f0e3de85f0f30",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-warm-benediction.webp?v=1790682502423"
+  },
+  "skill-17720000.webp": {
+    "offset": 222404,
+    "length": 786,
+    "sha256": "5030fb24ea62b51effe918a7aea1319f4f9a0c22a53f0f399397198eb11e97ae",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_Passive_002.webp"
+  },
+  "skill-17730000.webp": {
+    "offset": 223190,
+    "length": 956,
+    "sha256": "83c40f68da94ee83fbe245ac17ee11dbcc9e8b94b70e1ed6d6b4693e1bbdcbd0",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-empyrean-lords-grace.webp?v=1790682502423"
+  },
+  "skill-17740000.webp": {
+    "offset": 224146,
+    "length": 688,
+    "sha256": "8083d7a6eef91c6659059b0a2f1e182b20c450d96e4b546f54f6dd33d6b99a6b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-healing-enhancement.webp?v=1790681910970"
+  },
+  "skill-17750000.webp": {
+    "offset": 224834,
+    "length": 982,
+    "sha256": "7ce874b0d0e2a1a6a68215aca2fee7ce5927774633ab662970dde83d73c7fc77",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-immortal-veil.webp?v=1790682502423"
+  },
+  "skill-17760000.webp": {
+    "offset": 225816,
+    "length": 734,
+    "sha256": "cc9e07e562a912280de385dee63b3f059fcfaf6b4539262cf60a971a8201d66d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_Passive_005.webp"
+  },
+  "skill-17770000.webp": {
+    "offset": 226550,
+    "length": 1096,
+    "sha256": "55445990525993779790544ce902ec8130c55626a8d413ffd5a6286eacddd938",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-prayer-of-concentration.webp?v=1790682502423"
+  },
+  "skill-17780000.webp": {
+    "offset": 227646,
+    "length": 784,
+    "sha256": "9350ddf76dcfce9a5771e6c6103d4ea4fe43edc4e1adf65f5d431b39cea8ae78",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-earths-grace.webp?v=1790682502423"
+  },
+  "skill-17790000.webp": {
+    "offset": 39178,
+    "length": 970,
+    "sha256": "84c8dc546b7a7a0b402f86f5b49854f36c16f0454a702ea60e0946273a99baf2",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-cleric-survival-willpower.webp?v=1790682502423"
+  },
+  "skill-17800000.webp": {
+    "offset": 228430,
+    "length": 564,
+    "sha256": "047111e8da29ee0a295a61b8a7aab9867aac911be9a7bbdbd6c84197c3fc130b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CL_SKILL_Passive_007.webp"
+  },
+  "skill-18010000.webp": {
+    "offset": 228994,
+    "length": 800,
+    "sha256": "75f267978b2659826390682f8032919e7216d3a410f075677e412d00a1d03d5d",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-onslaught.webp?v=1790520782351"
+  },
+  "skill-18020000.webp": {
+    "offset": 229794,
+    "length": 758,
+    "sha256": "30bb1f239d468d1b8886e606aa6897b0d89912dcf23a62405046c227504b09f8",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_002.webp"
+  },
+  "skill-18030000.webp": {
+    "offset": 230552,
+    "length": 828,
+    "sha256": "dd041442b3ea486d0b37ba148f9b88015cafc068e351e571a680a06769cb8b1e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_003.webp"
+  },
+  "skill-18040000.webp": {
+    "offset": 231380,
+    "length": 752,
+    "sha256": "87b745a42676a220dd2868e6c6f9a225bc0b783eda6c51bf4246cb06bc33b1ca",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-incandescent-blow.webp?v=1790520782351"
+  },
+  "skill-18050000.webp": {
+    "offset": 232132,
+    "length": 1132,
+    "sha256": "31b00734c976af6f725e488d963de0e480a88d6b41b99986fb65ec6d38887dc1",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_005.webp"
+  },
+  "skill-18060000.webp": {
+    "offset": 233264,
+    "length": 860,
+    "sha256": "e3030104d2cc781f95ad0ac9eff8e2828b50d5b5b8f5de691661b7711612f7dd",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-impactful-crush.webp?v=1790520782351"
+  },
+  "skill-18080000.webp": {
+    "offset": 234124,
+    "length": 916,
+    "sha256": "892f178c1d650f0fa1d3b8834fca78062d6836dae3a6feeddbf2c9fee78ace30",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_008.webp"
+  },
+  "skill-18090000.webp": {
+    "offset": 235040,
+    "length": 680,
+    "sha256": "f011725b3c43d463d3d49bcd1f0b6155c2eebad548009a4683efd47d40c9f425",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_009.webp"
+  },
+  "skill-18100000.webp": {
+    "offset": 235720,
+    "length": 1056,
+    "sha256": "7d89d724486261ce314a3daa28bc29cef470645ef2a05def475a3eccfb513419",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-dark-crush.webp?v=1790520782351"
+  },
+  "skill-18120000.webp": {
+    "offset": 236776,
+    "length": 578,
+    "sha256": "a81154adc95b91c33bf32cfa895b6c9d06f276516b9d9f92077c971c39d632a9",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-recuperation.webp?v=1790520782351"
+  },
+  "skill-18130000.webp": {
+    "offset": 237354,
+    "length": 1180,
+    "sha256": "a82776214ec3a3b9c1f4f1ac36f0da7a684da9dfc8dfc6a3f356b89855a02e68",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_043.webp"
+  },
+  "skill-18140000.webp": {
+    "offset": 238534,
+    "length": 906,
+    "sha256": "b44bed9b9906163be4e078fd70beab40ab9a107141554e8db38a573bf9ba2baf",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_014.webp"
+  },
+  "skill-18150000.webp": {
+    "offset": 239440,
+    "length": 900,
+    "sha256": "3805712b55232860fff615791204bfd82b3cef7a478b4b42f70cdd458b44e2f6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_015.webp"
+  },
+  "skill-18160000.webp": {
+    "offset": 240340,
+    "length": 834,
+    "sha256": "9950aea324067254bf23b5c8f1a7dda2a29d12de62c162ef7d95a8b5f89d6dac",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_016.webp"
+  },
+  "skill-18170000.webp": {
+    "offset": 241174,
+    "length": 884,
+    "sha256": "7e2a4ff7ae4a12628a204e0d64f95e5be330ea48fdf7e774fc914e212e740034",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_017.webp"
+  },
+  "skill-18190000.webp": {
+    "offset": 242058,
+    "length": 804,
+    "sha256": "236e073a5c7412f077056d6b7199e08743ee02481933a70321d903312223568a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_019.webp"
+  },
+  "skill-18200000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-18210000.webp": {
+    "offset": 242862,
+    "length": 670,
+    "sha256": "5e6b0c50e33d3edf2784b0bf7c1e33397e1c49907fc180492c9db8ec7ec89088",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_021.webp"
+  },
+  "skill-18220000.webp": {
+    "offset": 243532,
+    "length": 966,
+    "sha256": "b877c23e9a7a4c8a16dfb6a2dfb1c632aeec4fd581dbfecee4a53299ac237e4e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_022.webp"
+  },
+  "skill-18230000.webp": {
+    "offset": 244498,
+    "length": 1110,
+    "sha256": "de6c6b2f68a33e90f6a2689bf9c92c0ac3694f5b844b7ac86ee2a2f8547bd149",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_023.webp"
+  },
+  "skill-18240000.webp": {
+    "offset": 245608,
+    "length": 1240,
+    "sha256": "fe343897150fa9ec7075e1eed55b83dc6fa97a1b3ed72111c235af2300ec8405",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_024.webp"
+  },
+  "skill-18250000.webp": {
+    "offset": 246848,
+    "length": 962,
+    "sha256": "200e72b9756fb1ae3e09849f6c52157c9dfd64d10f0245ba5151dbe3bccbc4a0",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-power-of-the-storm.webp?v=1790520782351"
+  },
+  "skill-18290000.webp": {
+    "offset": 247810,
+    "length": 1102,
+    "sha256": "1740ae659ab9246d247835a522337373c5c33fc067a4a27f77d6bb7328059026",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-spinning-strike.webp?v=1790520782351"
+  },
+  "skill-18300000.webp": {
+    "offset": 248912,
+    "length": 992,
+    "sha256": "9c8da495fd5069413f02562a1d8954302097a918088ca0bec54cdfa425fac595",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_030.webp"
+  },
+  "skill-18330000.webp": {
+    "offset": 249904,
+    "length": 1040,
+    "sha256": "11fce8dbd4b7015eb1b1e9452c64537dd03268d6819d6cc4e31a767f85a4480e",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-marchutans-wrath.webp?v=1790520782351"
+  },
+  "skill-18420000.webp": {
+    "offset": 250944,
+    "length": 812,
+    "sha256": "8cdaf936474f5384b9de038b9afbc51691358b0ed1e7cb0843c6666657123239",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_042.webp"
+  },
+  "skill-18440000.webp": {
+    "offset": 251756,
+    "length": 658,
+    "sha256": "b58d5ffb29312749780d28399c19a38616d4a52e635ec582bbfd3e92f7bbad1e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_044.webp"
+  },
+  "skill-18700000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-18710000.webp": {
+    "offset": 252414,
+    "length": 1010,
+    "sha256": "70b7247c1ff5750f186fa2c4959b407c547b0774c59d7a4dbed8154e9cae2e97",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_Passive_012.webp"
+  },
+  "skill-18720000.webp": {
+    "offset": 253424,
+    "length": 784,
+    "sha256": "8a6419623df61253bbc08cc6733167a236180d277467fb9853b8818da776d669",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_Passive_002.webp"
+  },
+  "skill-18730000.webp": {
+    "offset": 254208,
+    "length": 1110,
+    "sha256": "dca5553d363cf2a1e9ccb99413e0de294f548173d434f8e5236b08e413984e73",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_Passive_001.webp"
+  },
+  "skill-18740000.webp": {
+    "offset": 255318,
+    "length": 766,
+    "sha256": "de4aae10236a5d0e16923f7880143b90437a153a5339687b6c72712b84cb2f83",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-inspiring-spell.webp?v=1790520782351"
+  },
+  "skill-18750000.webp": {
+    "offset": 256084,
+    "length": 760,
+    "sha256": "c8ce0e8a7b9dc6c3e0230a83d0d98dfef6c0a0a6cc6f7aa02156cf74da84464f",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-attack-preparation.webp?v=1790520782351"
+  },
+  "skill-18760000.webp": {
+    "offset": 256844,
+    "length": 832,
+    "sha256": "82f54041bb5e1db62f6c303f979779890a0e35d879e817ace516628275a9ef3b",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-impact-hit.webp?v=1790520831121"
+  },
+  "skill-18770000.webp": {
+    "offset": 257676,
+    "length": 848,
+    "sha256": "8db7674179c14de5ab9b8c66eb03560a076382d06b1636913e00583a6541f0d0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_Passive_007.webp"
+  },
+  "skill-18780000.webp": {
+    "offset": 258524,
+    "length": 874,
+    "sha256": "94c3bdb5cd0727800548c12e1b3f5dd78482dc6701d2c5208b4d2d2e27ac5510",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CH_SKILL_Passive_010.webp"
+  },
+  "skill-18790000.webp": {
+    "offset": 68146,
+    "length": 986,
+    "sha256": "cd6fc2c30b88e7a9a8e1284a00b09578bf6180292bc70f2ecbca57522d0f2309",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GL_SKILL_Passive_009.webp"
+  },
+  "skill-18800000.webp": {
+    "offset": 259398,
+    "length": 806,
+    "sha256": "fc42bd155e976e6b9c2ad6459592fb721317bfb6ac0bc64a4e712453a3d15f77",
+    "source": "/cdn-cgi/image/width=128,format=auto/api/media/file/aion2-skill-chanter-winds-promise.webp?v=1790520782351"
+  },
+  "skill-19010000.webp": {
+    "offset": 260204,
+    "length": 828,
+    "sha256": "3c5bb344d2e0c71d7ba25a1030e282dca8c9755033881f2378bbf82f766fbcba",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_001.webp"
+  },
+  "skill-19020000.webp": {
+    "offset": 261032,
+    "length": 870,
+    "sha256": "9816ce788d4461ead4fc8c0e3d73530b6111b6b3047c93296070ea10ea53f7f5",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_002.webp"
+  },
+  "skill-19030000.webp": {
+    "offset": 261902,
+    "length": 1014,
+    "sha256": "509f92d85e05a9f24f8e70b3ee8c0d0a904b4d972aa37c53a0f4fb2b813718d2",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_003.webp"
+  },
+  "skill-19040000.webp": {
+    "offset": 262916,
+    "length": 934,
+    "sha256": "71978eb6a537b9dea14e182584c4f581b497f0a3d91514c4c02c35855b556506",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_004.webp"
+  },
+  "skill-19050000.webp": {
+    "offset": 263850,
+    "length": 906,
+    "sha256": "c7f48372271167ab4e47d9e3febaad24f121fb6e55b18cfc1e609811eb953aef",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_005.webp"
+  },
+  "skill-19060000.webp": {
+    "offset": 264756,
+    "length": 1090,
+    "sha256": "6f7bc4883b613b5fe608ba0e025a2cf1448860aeb2d5323faa85821251911d87",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_006.webp"
+  },
+  "skill-19070000.webp": {
+    "offset": 265846,
+    "length": 1160,
+    "sha256": "fcc2f72227ede00028687f2c9b2d25c5cf42498543c96ed90fdc6234f3f32132",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_007.webp"
+  },
+  "skill-19090000.webp": {
+    "offset": 267006,
+    "length": 1208,
+    "sha256": "85e48880488de9dc4e2782e98f5672a935da5fc1af166d9a057c1dd1d68a103d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_009.webp"
+  },
+  "skill-19130000.webp": {
+    "offset": 268214,
+    "length": 1036,
+    "sha256": "1e803f025df1665309a7352d7fd47525f1d00503c5e1c944616757d0bfcc908e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_013.webp"
+  },
+  "skill-19160000.webp": {
+    "offset": 269250,
+    "length": 1066,
+    "sha256": "86bdc70c6b3a5f28a413d6e72665b06a82d3407de3e80f3cd022304b4ca5f383",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_016.webp"
+  },
+  "skill-19170000.webp": {
+    "offset": 270316,
+    "length": 754,
+    "sha256": "529183d4f054fd716f201f5300b1be4be663cc7d37618967a63774f633984b8a",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_017.webp"
+  },
+  "skill-19200000.webp": {
+    "offset": 271070,
+    "length": 1224,
+    "sha256": "f53dba4d6d9bfe25edcd176043e2c84c6477c992397945543535d78da1d5b4cd",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_020.webp"
+  },
+  "skill-19230000.webp": {
+    "offset": 272294,
+    "length": 998,
+    "sha256": "aa35e51843eb902feef9ebb06f7a118d47a2528de028e28629b81df5845137c6",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_023.webp"
+  },
+  "skill-19250000.webp": {
+    "offset": 273292,
+    "length": 1196,
+    "sha256": "7fa4454c7b6e7fbc7284eae735a7bc3f73f941433b600b932061e1810fbefb89",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_025.webp"
+  },
+  "skill-19270000.webp": {
+    "offset": 274488,
+    "length": 1376,
+    "sha256": "1b0d5f5e16c27adf0fc6def873f7518da8822a4b905f4443879ae45db427619b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_027.webp"
+  },
+  "skill-19280000.webp": {
+    "offset": 275864,
+    "length": 1078,
+    "sha256": "10c6342bd55896db17fe7f0b9de4d875c4a90306219213880b76cbfd844700b0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_028.webp"
+  },
+  "skill-19290000.webp": {
+    "offset": 276942,
+    "length": 756,
+    "sha256": "b84c24b670abc518178eb65353808491abcdc07300f0a6494a1bda247c044298",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_029.webp"
+  },
+  "skill-19300000.webp": {
+    "offset": 277698,
+    "length": 998,
+    "sha256": "9882b2a7da980988ed70a7d6b90d6a8e52d394295083f0459fea2e41c3bf49f0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_030.webp"
+  },
+  "skill-19310000.webp": {
+    "offset": 278696,
+    "length": 968,
+    "sha256": "297e834b1d18d303d5ba66f709c60c0cda1ed45afa9816fc766e8789afce27e4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_031.webp"
+  },
+  "skill-19320000.webp": {
+    "offset": 279664,
+    "length": 784,
+    "sha256": "f59e41d706d7dfe10b3a851f300069b9599fd0721e58fb701260e076e5895961",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_032.webp"
+  },
+  "skill-19330000.webp": {
+    "offset": 280448,
+    "length": 942,
+    "sha256": "1caea5e27cec49dca3921ba46210f4afa538017cd471ee1e2e041094fd019af1",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_033.webp"
+  },
+  "skill-19350000.webp": {
+    "offset": 281390,
+    "length": 1102,
+    "sha256": "96e85396a3bc0539e708d99945970e31689cf281f987ed809f643294cdd0fd38",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_035.webp"
+  },
+  "skill-19360000.webp": {
+    "offset": 282492,
+    "length": 1036,
+    "sha256": "c7b1fbc8d508fee3bd56ac21cce9591d0dbb6f9c66f6c59005e5c7e316f077c7",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_036.webp"
+  },
+  "skill-19370000.webp": {
+    "offset": 283528,
+    "length": 1208,
+    "sha256": "ed49aba128942dff8a73b7f0a331498ebb847447e3ef3783eaffde7876e9ef28",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_037.webp"
+  },
+  "skill-19380000.webp": {
+    "offset": 0,
+    "length": 994,
+    "sha256": "64697bf72de88874d28c1922852c9ada7917b18fe5d3f1d6685a813d471d2287",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_003.webp"
+  },
+  "skill-19390000.webp": {
+    "offset": 284736,
+    "length": 920,
+    "sha256": "f92807c840da0c45c0e77cbb45715f8f30751fefd11f38e19bc29a99265ba8af",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_039.webp"
+  },
+  "skill-19400000.webp": {
+    "offset": 285656,
+    "length": 852,
+    "sha256": "e4d931be20f48e360022b1c027b564c871f5cd522969af777866c5a1f88951f7",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_040.webp"
+  },
+  "skill-19410000.webp": {
+    "offset": 286508,
+    "length": 822,
+    "sha256": "c537729caba24845e8dc13769ca302a01099d2e17e78d636b3db969aff635f47",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_041.webp"
+  },
+  "skill-19420000.webp": {
+    "offset": 287330,
+    "length": 966,
+    "sha256": "231c6af5bc3bfb52046de8dc2beb4023b6250e1f99417d3361494ece3b03295d",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_042.webp"
+  },
+  "skill-19450000.webp": {
+    "offset": 20230,
+    "length": 936,
+    "sha256": "ae8592d3f4f6bb2629b9470a53cf667455ddff903d2e93cf43635a2cb9d38dff",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_CO_SKILL_002.webp"
+  },
+  "skill-19460000.webp": {
+    "offset": 288296,
+    "length": 946,
+    "sha256": "11816699c0d12d8421d5b28bf5a6562625b008fcc573875fa51f27ca383eace9",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_046.webp"
+  },
+  "skill-19710000.webp": {
+    "offset": 289242,
+    "length": 1094,
+    "sha256": "127f8d77d6b1fb595ed77183f47f2e4760340655ef9bafc61192c6171ea349d0",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_001.webp"
+  },
+  "skill-19720000.webp": {
+    "offset": 290336,
+    "length": 912,
+    "sha256": "a0d27fa38f29fd5a21bb1682d8367ddfcd4be459a09804d8383174498b614112",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_002.webp"
+  },
+  "skill-19730000.webp": {
+    "offset": 291248,
+    "length": 1120,
+    "sha256": "f3aeb0acc234447ee99f30dceb753b8619c6e26db90d127b65908fea2ea6ea90",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_003.webp"
+  },
+  "skill-19740000.webp": {
+    "offset": 292368,
+    "length": 1060,
+    "sha256": "6144e21a96fbe7e049b3d6d766a8722abe36dd4cd1885a07540067a8c96f0044",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_004.webp"
+  },
+  "skill-19750000.webp": {
+    "offset": 293428,
+    "length": 986,
+    "sha256": "0a55157abc9d9d75acf8884fd6761adfbe396d96ad66a9c07ea3c51a56d3c20e",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_005.webp"
+  },
+  "skill-19760000.webp": {
+    "offset": 36496,
+    "length": 856,
+    "sha256": "806f5909795ba32c0719247f76e0597212c4135866c6206a91caad2003b2d325",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_006.webp"
+  },
+  "skill-19770000.webp": {
+    "offset": 294414,
+    "length": 1034,
+    "sha256": "80936d5ecf6559b96319398a6ee919003ad68bbd422619d7cfe5636ebbdb8209",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_007.webp"
+  },
+  "skill-19780000.webp": {
+    "offset": 295448,
+    "length": 1108,
+    "sha256": "77467c865b1ea9b3b1f002a30ccbc2f16461d2508fc08e044abe6b32b6fb3b65",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_008.webp"
+  },
+  "skill-19790000.webp": {
+    "offset": 296556,
+    "length": 714,
+    "sha256": "398f153184aecb93cef331ad03cf8c4b52c17fd4344d9143ee31ec5b26d6bc31",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_009.webp"
+  },
+  "skill-19800000.webp": {
+    "offset": 297270,
+    "length": 1072,
+    "sha256": "c136943e8b44dfa55573e05312c31d69ad936543ba1810f9a44fe613d55c7360",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Skill/ICON_GT_SKILL_Passive_010.webp"
+  },
+  "class-gladiator.webp": {
+    "offset": 298342,
+    "length": 3030,
+    "sha256": "4c9a1a805828dd4d3efe6e7e9d73762dcca987cbc242c2de03265d39f13f45a4",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Gladiator_Large.webp"
+  },
+  "class-templar.webp": {
+    "offset": 301372,
+    "length": 2856,
+    "sha256": "b6a17bc02b9ad62ad742bc96d0e8327d08d21915372f12c3b80f908f5575c453",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Templar_Large.webp"
+  },
+  "class-assassin.webp": {
+    "offset": 304228,
+    "length": 2862,
+    "sha256": "cf7aecdc1bbb20c8f57535789f72045073c83bffc6339b44c89dee7fa377d4d3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Assassin_Large.webp"
+  },
+  "class-ranger.webp": {
+    "offset": 307090,
+    "length": 2754,
+    "sha256": "35a479e954fc52c1d9f4b146d837ff9bbe82d2190b80003c7d6ad0fe7741f480",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Ranger_Large.webp"
+  },
+  "class-sorcerer.webp": {
+    "offset": 309844,
+    "length": 3120,
+    "sha256": "199177f987d802cfc18ed94eb5fad6d5707c5fd8c4c916707014c168befa1ed3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Sorcerer_Large.webp"
+  },
+  "class-elementalist.webp": {
+    "offset": 312964,
+    "length": 3196,
+    "sha256": "150f8819ac89c58d18d2888850558dc521d7cc739ca7960923a6f53603ca1a8b",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Elementalist_Large.webp"
+  },
+  "class-cleric.webp": {
+    "offset": 316160,
+    "length": 3178,
+    "sha256": "645388e9ab7240cf0c74d9e69a0933877744bdb9b537d2bee30f6684fb06fdef",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Cleric_Large.webp"
+  },
+  "class-chanter.webp": {
+    "offset": 319338,
+    "length": 3036,
+    "sha256": "08ef0a48fbb20325cacb991497e5d406b44ef0b9d1baeadc6c204a17c8f6f70c",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Chanter_Large.webp"
+  },
+  "class-fighter.webp": {
+    "offset": 322374,
+    "length": 3100,
+    "sha256": "f528e502d3bf27668a0899ca652c435248bf5602948e807baefe62d38eb933a3",
+    "source": "https://cdn.questlog.gg/aion-2/assets/Game/UI/Resource/Texture/Icon/UT_Class_Fighter_Large.webp"
+  }
+}

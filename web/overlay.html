@@ -65,7 +65,7 @@ async function tick() {
       const name = s.hide_names && !r.is_self ? masked(r.name) : r.name;
       return `<div class="row ${r.is_self ? 'me' : ''}">
       <div class="f" style="width:${clamp(r.value / top * 100, 0, 100)}%;background:var(--${key})"></div>
-      <div class="t"><span class="name">${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n">${num(r.value)} ${s.show_dps ? num(metric === 'heal' ? r.hps : metric === 'damage_received' ? r.value*1000/Math.max(l.battle_time_ms,1000) : r.dps) + '/s ' : ''}${(r.value*100/sum).toFixed(0)}%</span></div></div>`;
+      <div class="t"><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n">${num(r.value)} ${s.show_dps ? num(metric === 'heal' ? r.hps : metric === 'damage_received' ? r.value*1000/Math.max(l.battle_time_ms,1000) : r.dps) + '/s ' : ''}${(r.value*100/sum).toFixed(0)}%</span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
     const c = l.capture;
     el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';

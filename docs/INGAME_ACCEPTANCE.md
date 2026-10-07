@@ -54,3 +54,23 @@ CSV-Spalten: `kind,code,is_dot,total`, eine Zeile pro Schadens-/Heilungsskill un
 ## Entscheidung
 
 Eine Ingame-Freigabe setzt vollständige unabhängige Referenz, nachvollziehbare Zeitfenster und die betroffene Desktop-/Paketumgebung voraus. Für jede Abweichung Bugreport mit anonymisiertem Export, lokal verfügbarer Aufnahme, Versionen und Reproduktionsschritten erstellen. Ergebnis pro Zeile: bestanden / nicht bestanden / nicht anwendbar mit Begründung. Erst danach im Releasebericht den Status ändern.
+
+## Zusätzliche reale Abnahme: DE/EN-Katalog und Symbole
+
+Diese Erweiterung verändert nur die Anzeige. Für eine Freigabe anhand echter Kampfdaten separat dokumentieren:
+
+| Fall | Nachweis | Status |
+|---|---|---|
+| Jede verfügbare Klasse | Skill-ID aus realer Aufnahme mit Spielname und Spielsymbol vergleichen, auch neue Faustkämpfer-Fähigkeiten | Offen |
+| Varianten / Kombofolgen | Haupt-, Folge-, Spezial-, DoT-/HoT- und Multihit-ID vergleichen; gleicher Name darf keine falsche Klassen-/Symbolzuordnung erzeugen | Offen |
+| Gemeinsame Namen | „Defiance“, „Impact Hit“, „Survival Willpower“ in unterschiedlichen Klassen getrennt kontrollieren | Offen |
+| Pets / Beschwörungen / Effekte | Paket-ID, Besitzer und Anzeige getrennt prüfen; unbekannte Effekte bleiben erkennbar | Offen |
+| Deutsch / Englisch | Dieselbe Messspanne in DE und EN öffnen; primäre ID, Treffer, Schaden, DPS/HPS, Zeiten und Reihenfolge nach numerischer Sortierung identisch | Offen |
+| Faustkämpfer DE | Community-Namen mit später verfügbaren offiziellen deutschen Spielnamen abgleichen und nötige Korrekturen dokumentieren | Offen |
+| Historie / Replay | Alten Bericht in beiden Sprachen öffnen und reale Aufnahme nachspielen; Zahlen bleiben identisch | Offen |
+| Export | JSON und PNG gegen DE/EN-Bericht vergleichen; richtige Skill-/Klassenicons; Anonymisierung von Spielern unverändert | Offen |
+| Offline / Neustart | Externe Webseiten unerreichbar, Meter neu starten; Katalog, Icons und gespeicherte Sprache funktionieren weiter | Offen |
+| Natives / OBS-Overlay | Alle Klassen, kompakte/normal große Zeilen, 60–200 %, lange Namen und verschiedene Hintergründe; Icons schneiden Zahlen/Namen nicht ab | Offen |
+| Unbekannte / neue ID | Rohcode und verfügbarer Name sichtbar, keine falsche Zuordnung zu einer zufälligen Fähigkeit | Offen |
+
+Pro Befund Original-ID, Klasse, Skillname im Spiel, Sprache/Clientpatch, erwartet/angezeigt und zugehörige lokale Aufnahme notieren. Es gibt keine Behauptung, dass ein sichtbares Icon die Genauigkeit des Parsers bestätigt.

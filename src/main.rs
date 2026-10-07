@@ -10,6 +10,7 @@ mod engine;
 mod names;
 mod overlay;
 mod replay;
+mod skills;
 mod tcp;
 mod updates;
 mod web;

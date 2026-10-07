@@ -125,6 +125,7 @@ pub struct OverlaySettings {
     /// Zero disables idle reset. Stored with profiles.
     pub idle_reset_seconds: u64,
     pub wipe_reset: bool,
+    pub skill_language: String,
 }
 
 impl Default for OverlaySettings {
@@ -144,6 +145,7 @@ impl Default for OverlaySettings {
             compact: false,
             idle_reset_seconds: 0,
             wipe_reset: false,
+            skill_language: "de".into(),
         }
     }
 }
@@ -189,6 +191,9 @@ impl OverlaySettings {
             1.0
         };
         self.max_rows = self.max_rows.clamp(1, 24);
+        if !["de", "en"].contains(&self.skill_language.as_str()) {
+            self.skill_language = "de".into();
+        }
         if !["midnight", "aether", "ember"].contains(&self.theme.as_str()) {
             self.theme = "midnight".into();
         }
@@ -290,13 +295,17 @@ impl Engine {
             tracing::warn!("Could not close old runs: {e}");
         }
 
+        let initial_overlay = OverlaySettings {
+            skill_language: if language == "en" { "en" } else { "de" }.into(),
+            ..Default::default()
+        };
         let overlay = db
             .meta("overlay")
             .ok()
             .flatten()
             .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-            .map(|saved| OverlaySettings::default().merged(&saved))
-            .unwrap_or_default();
+            .map(|saved| initial_overlay.merged(&saved))
+            .unwrap_or(initial_overlay);
         let target_mode = db
             .meta("target_mode")
             .ok()
@@ -594,7 +603,11 @@ impl Engine {
                 .db
                 .meta(&key)?
                 .ok_or_else(|| anyhow::anyhow!("Profil nicht vorhanden"))?;
-            self.update_overlay(OverlaySettings::default().merged(&serde_json::from_str(&s)?))
+            let defaults = OverlaySettings {
+                skill_language: self.overlay.read().skill_language.clone(),
+                ..Default::default()
+            };
+            self.update_overlay(defaults.merged(&serde_json::from_str(&s)?))
         }
     }
     pub fn player_details(&self, id: i32) -> Value {
