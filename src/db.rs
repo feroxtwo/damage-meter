@@ -948,7 +948,7 @@ impl Db {
         from: i64,
         to: i64,
         favorites: bool,
-        offset: i64,
+        (limit, offset): (i64, i64),
     ) -> Result<Value> {
         let conn = self.conn.lock();
         let sql="SELECT f.id,f.boss_name,f.dungeon_id,f.started_at,f.duration_ms,f.total_damage,f.is_train,
@@ -958,13 +958,14 @@ impl Db {
           WHERE (instr(fold(f.boss_name||' '||COALESCE(a.note,'')||' '||COALESCE(a.tags,'')),fold(?1))>0)
            AND (?2='' OR EXISTS(SELECT 1 FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 AND p.name=?2))
            AND f.started_at>=?3 AND f.started_at<=?4 AND (?5=0 OR a.favorite=1)
-          ORDER BY f.started_at DESC LIMIT 101 OFFSET ?6";
+          ORDER BY f.started_at DESC LIMIT ?7 OFFSET ?6";
         let mut rows = rows_to_json(
             &mut conn.prepare(sql)?,
-            params![query, character, from, to, favorites, offset],
+            params![query, character, from, to, favorites, offset, limit + 1],
         )?;
-        let more = rows.len() > 100;
-        rows.truncate(100);
+        // One extra row tells the dashboard whether a next page exists.
+        let more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
         for r in &mut rows {
             r["difficulty"] = json!(names::dungeon_difficulty(
                 r["dungeon_id"].as_i64().unwrap_or(0) as i32
@@ -1629,7 +1630,7 @@ mod tests {
         assert_eq!(detail["favorite"], true);
         assert_eq!(detail["analytics"]["partial"], true);
         assert_eq!(
-            db.search_fights("rotation", "Me", 0, 2000, true, 0)
+            db.search_fights("rotation", "Me", 0, 2000, true, (100, 0))
                 .unwrap()["fights"]
                 .as_array()
                 .unwrap()
@@ -1637,20 +1638,21 @@ mod tests {
             1
         );
         assert!(
-            db.search_fights("rotation", "Other", 0, 2000, true, 0)
+            db.search_fights("rotation", "Other", 0, 2000, true, (100, 0))
                 .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .is_empty()
         );
         assert!(
-            db.search_fights("", "Me", 2000, 3000, false, 0).unwrap()["fights"]
+            db.search_fights("", "Me", 2000, 3000, false, (100, 0))
+                .unwrap()["fights"]
                 .as_array()
                 .unwrap()
                 .is_empty()
         );
         assert_eq!(
-            db.search_fights("AUSRÜSTUNG", "", 0, 2000, false, 0)
+            db.search_fights("AUSRÜSTUNG", "", 0, 2000, false, (100, 0))
                 .unwrap()["fights"]
                 .as_array()
                 .unwrap()

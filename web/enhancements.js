@@ -1,5 +1,6 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
-let fightOffset = 0, fightSearchRequest = 0, fightSearchBusy = false, detailRequest = 0;
+const FIGHT_PAGE = 10;
+let fightPage = 0, fightSearchRequest = 0, detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
 const pct = v => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(1).replace('.', ',') + '%';
 const metricKey = () => $('#liveMetric').value;
@@ -105,27 +106,34 @@ function fightExport(f,anonymous) {
   return {boss:f.boss_name,difficulty:f.difficulty,started_at:f.started_at,duration_ms:f.duration_ms,healing_scope:f.healing_scope,numeric_limited:!!f.numeric_limited,players};
 }
 
+// Shows one page of FIGHT_PAGE fights. reset jumps back to the newest page;
+// otherwise the current page is reloaded (e.g. after saving a note).
 async function loadFights(reset=true) {
-  if(!reset && fightSearchBusy)return;
   if($('#fightFrom').value&&$('#fightTo').value&&$('#fightFrom').value>$('#fightTo').value){toast('Das Von-Datum muss vor dem Bis-Datum liegen.',true);return;}
-  const request=++fightSearchRequest;fightSearchBusy=true;
-  if(reset){fightOffset=0;$('#fightResults').textContent='Kämpfe werden geladen …';}
-  $('#moreFights').disabled=true;
-  const q=new URLSearchParams({query:$('#fightSearch').value,character, favorites:String($('#fightFavorites').checked),offset:String(fightOffset)});
+  const request=++fightSearchRequest;
+  if(reset)fightPage=0;
+  $('#fightResults').textContent='Kämpfe werden geladen …';
+  $('#fightPrev').disabled=$('#fightNext').disabled=true;
+  const q=new URLSearchParams({query:$('#fightSearch').value,character, favorites:String($('#fightFavorites').checked),limit:String(FIGHT_PAGE),offset:String(fightPage*FIGHT_PAGE)});
   if($('#fightFrom').value)q.set('from',String(new Date($('#fightFrom').value+'T00:00:00').getTime()));
   if($('#fightTo').value)q.set('to',String(new Date($('#fightTo').value+'T23:59:59.999').getTime()));
   try {
     const data=await api('/api/fights?'+q);if(request!==fightSearchRequest)return;
     const rows=(data.fights||[]).map(f=>`<tr><td>${date(f.started_at)}</td><td><button class="btn" data-open-fight="${esc(f.id)}">${f.favorite?'★ ':''}${esc(f.boss_name)}${f.is_train?' · Training':''}</button>${badge(f.difficulty)}<div class="muted">${esc(f.tags||'')}</div></td><td>${dur(f.duration_ms)}</td><td>${num(f.my_dps)}/s</td></tr>`).join('');
-    if(reset)$('#fightResults').innerHTML=rows?`<div class="table-scroll"><table><thead><tr><th>Datum</th><th>Kampf</th><th>Dauer</th><th>Meine DPS</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">Keine passenden Kämpfe.</p>';
-    else if(rows)$('#fightResults tbody').insertAdjacentHTML('beforeend',rows);
-    fightOffset+=(data.fights||[]).length;$('#moreFights').hidden=!data.more;
+    // A page emptied by a changed filter result steps back to the first page.
+    if(!rows&&fightPage>0){fightPage=0;return loadFights(false);}
+    $('#fightResults').innerHTML=rows?`<div class="table-scroll"><table><thead><tr><th>Datum</th><th>Kampf</th><th>Dauer</th><th>Meine DPS</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">Keine passenden Kämpfe.</p>';
+    const first=fightPage*FIGHT_PAGE,count=(data.fights||[]).length;
+    $('#fightPager').hidden=fightPage===0&&!data.more;
+    $('#fightPage').textContent=`Seite ${fightPage+1} · ${count?first+1:0}–${first+count}`;
+    $('#fightPrev').disabled=fightPage===0;$('#fightNext').disabled=!data.more;
     $('#fightResults').querySelectorAll('[data-open-fight]').forEach(b=>b.onclick=()=>task(openFight(b.dataset.openFight)));
-  }catch(e){if(reset&&request===fightSearchRequest)$('#fightResults').textContent='Kampfliste konnte nicht geladen werden.';throw e;}
-  finally{if(request===fightSearchRequest){fightSearchBusy=false;$('#moreFights').disabled=false;}}
+  }catch(e){if(request===fightSearchRequest){$('#fightResults').textContent='Kampfliste konnte nicht geladen werden.';$('#fightPager').hidden=true;}throw e;}
 }
 window.loadFights=loadFights;
-$('#searchFights').onclick=()=>task(loadFights());$('#moreFights').onclick=()=>task(loadFights(false));
+$('#searchFights').onclick=()=>task(loadFights());
+// Buttons stay disabled while a page loads, so double clicks cannot skip pages.
+$('#fightPrev').onclick=()=>{fightPage=Math.max(0,fightPage-1);task(loadFights(false));};$('#fightNext').onclick=()=>{fightPage++;task(loadFights(false));};
 $('#fightSearch').onkeydown=e=>{if(e.key==='Enter')task(loadFights());};
 $('#fightFavorites').onchange=()=>task(loadFights());
 $('#clearFightFilters').onclick=()=>{$('#fightSearch').value='';$('#fightFrom').value='';$('#fightTo').value='';$('#fightFavorites').checked=false;task(loadFights());};
@@ -228,7 +236,7 @@ async function openFight(id) {
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
-  $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights());}));
+  $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights(false));}));
   $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,exportPlayers(f.players,$('#anonFight').checked),f.duration_ms)));
   $('#jsonFight').onclick=()=>download('aion2-kampf.json',JSON.stringify(fightExport(f,$('#anonFight').checked),null,2),'application/json');
   $('#csvFight').onclick=()=>{const exp=fightExport(f,$('#anonFight').checked);download('aion2-kampf.csv','\uFEFF'+[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])].map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};

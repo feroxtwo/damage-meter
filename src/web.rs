@@ -356,6 +356,7 @@ struct FightQuery {
     to: Option<i64>,
     #[serde(default)]
     favorites: bool,
+    limit: Option<i64>,
     #[serde(default)]
     offset: i64,
 }
@@ -373,7 +374,7 @@ async fn search_fights(
             q.from.unwrap_or(0),
             q.to.unwrap_or(i64::MAX),
             q.favorites,
-            q.offset.max(0),
+            (q.limit.unwrap_or(100).clamp(1, 500), q.offset.max(0)),
         )
     })
     .await?

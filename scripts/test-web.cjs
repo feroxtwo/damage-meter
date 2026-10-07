@@ -26,7 +26,7 @@ const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',st
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
 const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
 const profiles=new Map();
-let annotations=[],trainingStarts=[];
+let annotations=[],trainingStarts=[],fightLimits=new Set();
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
@@ -52,7 +52,10 @@ const server = http.createServer((req,res) => {
     else if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
     else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
     else if (u.pathname === '/api/live') data = live;
-    else if(u.pathname==='/api/fights')data={fights:[fight,comparison,comparison2],more:false};
+    else if(u.pathname==='/api/fights'){
+      fightLimits.add(u.searchParams.get('limit'));
+      data=Number(u.searchParams.get('offset'))>=10?{fights:[{...fight,id:'f4',boss_name:'Älterer Boss'}],more:false}:{fights:[fight,comparison,comparison2],more:true};
+    }
     else if(u.pathname==='/api/fights/f1')data=fight;
     else if(u.pathname==='/api/fights/f2'){if(slowComparison)await delay(350);data=comparison;}
     else if(u.pathname==='/api/fights/f3')data=comparison2;
@@ -69,10 +72,11 @@ const server = http.createServer((req,res) => {
     else if (u.pathname === '/api/runs') {
       if (failRuns) { await route.fulfill({status:500,body:'error'}); return; }
       if (slowMain && u.searchParams.get('character') === 'FeroxTOO') await delay(250);
-      const offset = Number(u.searchParams.get('offset') || 0);
-      data = {runs:[{...run, id:offset+1, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name}], total:2, dungeons:[run.dungeon_name]};
+      const offset = Number(u.searchParams.get('offset') || 0), limit = Number(u.searchParams.get('limit') || 50), total = 12;
+      const ids = Array.from({length:Math.max(0,Math.min(limit,total-offset))},(_,i)=>offset+i+1);
+      data = {runs:ids.map(id=>({...run, id, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name})), total, dungeons:[run.dungeon_name]};
     }
-    else if (u.pathname === '/api/runs/1') data = {...run, totals:[], fights:[]};
+    else if (/^\/api\/runs\/\d+$/.test(u.pathname)) data = {...run, id:Number(u.pathname.split('/').pop()), totals:[], fights:[]};
     else if (u.pathname === '/api/stats/summary') data = summary;
     else if (u.pathname === '/api/stats/partners') data = [{name:'Moon', class_key:'gladiator',class_name:'Gladiator',runs:10}];
     else if (u.pathname === '/api/stats/boss-history') data = [{boss:'Kargos',attempts:[{dps:40000,started_at:run.started_at,duration_ms:90000,share:40},{dps:50000,started_at:run.ended_at,duration_ms:90000,share:48}]}];
@@ -103,12 +107,32 @@ const server = http.createServer((req,res) => {
       await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
     });
     await page.getByRole('button',{name:'Runs',exact:true}).click();
-    await page.locator('#runRows tr.click').waitFor();
+    await page.locator('#runRows tr.click').first().waitFor();
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'runs-desktop.png'),fullPage:true});
-    await check('pagination has no duplicate requests',async()=>{
-      await page.locator('#moreRuns').evaluate(b=>{b.click();b.click();});
-      await page.waitForFunction(()=>document.querySelectorAll('#runRows tr.click').length===2);
-      assert.deepEqual(await page.locator('#runRows tr.click').evaluateAll(rows=>rows.map(r=>r.dataset.id)),['1','2']);
+    await check('run history shows ten runs per page and pages without skipping',async()=>{
+      assert.equal(await page.locator('#runRows tr.click').count(),10);
+      assert.equal(await page.locator('#runPage').textContent(),'1–10 von 12');
+      assert.ok(await page.locator('#runPrev').isDisabled());
+      await page.locator('#runNext').evaluate(b=>{b.click();b.click();});
+      await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='11–12 von 12');
+      assert.deepEqual(await page.locator('#runRows tr.click').evaluateAll(rows=>rows.map(r=>r.dataset.id)),['11','12']);
+      assert.ok(await page.locator('#runNext').isDisabled());
+      await page.locator('#runRows tr.click').first().click();
+      await page.locator('#backBtn').click();
+      await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='11–12 von 12');
+      await page.locator('#runPrev').click();
+      await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='1–10 von 12');
+    });
+    await check('fight library pages separately from the run history',async()=>{
+      await page.waitForFunction(()=>document.querySelector('#fightPage').textContent==='Seite 1 · 1–3');
+      await page.locator('#fightNext').click();
+      await page.waitForFunction(()=>document.querySelector('#fightResults').textContent.includes('Älterer Boss'));
+      assert.equal(await page.locator('#fightPage').textContent(),'Seite 2 · 11–11');
+      assert.ok(await page.locator('#fightNext').isDisabled());
+      assert.equal(await page.locator('#runPage').textContent(),'1–10 von 12');
+      await page.locator('#fightPrev').click();
+      await page.waitForFunction(()=>document.querySelector('#fightPage').textContent==='Seite 1 · 1–3');
+      assert.deepEqual([...fightLimits],['10']);
     });
     await check('late character requests cannot overwrite current filter',async()=>{
       slowMain=true;
