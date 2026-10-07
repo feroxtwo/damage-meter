@@ -86,8 +86,13 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
         post("/api/overlay/profile", {"key":"Main", "save":True})
         post("/api/training", {"seconds":180})
         assert get("/api/fights")["fights"] == []
+        # A deliberately incomplete HTTP request must not hold shutdown indefinitely.
+        stalled = socket.create_connection(("127.0.0.1", port), timeout=2)
+        stalled.sendall(b"GET /api/live HTTP/1.1\r\nHost: localhost")
         proc.terminate()
         proc.wait(timeout=5)
+        stalled.close()
+        assert proc.returncode == 0
         proc = subprocess.Popen([binary, "--no-overlay", "--db", database, "--port", str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         deadline = time.monotonic() + 10
         while True:

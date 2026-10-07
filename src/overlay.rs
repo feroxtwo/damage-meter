@@ -39,6 +39,7 @@ pub struct Overlay {
     passthrough: Option<bool>,
     last_size: Vec2,
     last_position: Option<[f32; 2]>,
+    last_scale: f32,
 }
 
 fn masked(name: &str) -> String {
@@ -62,6 +63,7 @@ impl Overlay {
             web_url,
             passthrough: None,
             last_size: Vec2::ZERO,
+            last_scale: 0.0,
         }
     }
 
@@ -119,11 +121,11 @@ impl Overlay {
             );
         }
         let time = duration(live.battle_time_ms);
-        let dps_total = if live.battle_time_ms > 0 {
-            live.total_damage * 1000.0 / live.battle_time_ms as f64
-        } else {
-            0.0
-        };
+        let total: f64 = live
+            .rows
+            .iter()
+            .fold(0.0, |sum, r| sum + metric_value(r, &metric));
+        let dps_total = total * 1000.0 / live.battle_time_ms.max(1000) as f64;
         let right = format!("{time}  ·  {}/s", short_number(dps_total));
         let right_width = p
             .layout_no_wrap(right.clone(), FontId::monospace(12.0), Color32::WHITE)
@@ -232,7 +234,7 @@ impl Overlay {
             ui.close();
         }
         if ui.button("Beenden").clicked() {
-            std::process::exit(0);
+            ui.ctx().send_viewport_cmd(ViewportCommand::Close);
         }
     }
 
@@ -525,15 +527,27 @@ impl eframe::App for Overlay {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.engine.is_stopping() {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+            return;
+        }
         ctx.request_repaint_after(Duration::from_millis(250));
+        // Viewport coordinates include egui zoom; persist screen logical pixels instead.
+        let applied_scale = ctx.zoom_factor();
         let desired = self.engine.overlay.read().position;
         if desired != self.last_position {
             if let Some(p) = desired {
-                ctx.send_viewport_cmd(ViewportCommand::OuterPosition(p.into()));
+                ctx.send_viewport_cmd(ViewportCommand::OuterPosition(Pos2::new(
+                    p[0] / applied_scale,
+                    p[1] / applied_scale,
+                )));
             }
             self.last_position = desired;
         } else if let Some(rect) = ctx.input(|i| i.viewport().outer_rect) {
-            let position = [rect.min.x, rect.min.y];
+            let position = [
+                (rect.min.x * applied_scale).round(),
+                (rect.min.y * applied_scale).round(),
+            ];
             if !ctx.input(|i| i.pointer.any_down()) && self.last_position != Some(position) {
                 let _ = self.engine.modify_overlay(|s| s.position = Some(position));
                 self.last_position = Some(position);
@@ -555,9 +569,10 @@ impl eframe::App for Overlay {
             WIDTH,
             HEADER + FOOTER + row_height(settings.compact) * rows.max(1) as f32 + 4.0,
         );
-        if size != self.last_size {
+        if size != self.last_size || applied_scale != self.last_scale {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
             self.last_size = size;
+            self.last_scale = applied_scale;
         }
 
         let bg = (settings.opacity.clamp(0.0, 1.0) * 200.0) as u8;
@@ -573,7 +588,10 @@ impl eframe::App for Overlay {
                     .rect_filled(full, 8, with_alpha(palette(&settings.theme).0, bg));
                 self.header(ui, &live, WIDTH, bg);
                 if live.rows.is_empty() {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::new(WIDTH, ROW), Sense::hover());
+                    let (rect, _) = ui.allocate_exact_size(
+                        Vec2::new(WIDTH, row_height(settings.compact)),
+                        Sense::hover(),
+                    );
                     ui.painter().text(
                         rect.center(),
                         Align2::CENTER_CENTER,

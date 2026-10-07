@@ -222,16 +222,25 @@ fn decorate_job(rows: &mut [Value]) {
 }
 
 fn observed_rate(count: i32, hits: f64) -> Option<f64> {
-    (count > 0).then_some(count as f64 * 100.0 / hits)
+    (count > 0 && hits > 0.0 && count as f64 <= hits).then_some(count as f64 * 100.0 / hits)
 }
 pub fn skill_rows(
     skills: &[a2tools_dps_meter_lib::entity::details_context::DetailSkillEntry],
     actor: i32,
+    duration_ms: i64,
 ) -> Value {
+    let total: i64 = skills
+        .iter()
+        .filter(|s| s.actor_id == actor)
+        .map(|s| i64::from(s.dmg))
+        .sum();
     let mut rows: Vec<Value> = skills.iter().filter(|s|s.actor_id==actor).map(|s| {
-        let hits=s.time.max(1) as f64;
+        let hits=s.time.max(0) as f64;
         json!({"code":s.code,"name":if s.name.is_empty(){format!("#{}",s.code)}else{s.name.clone()},
-          "damage":s.dmg,"hits":s.time,"quality_coverage":"unknown","crit_rate":observed_rate(s.crit,hits),
+          "damage":s.dmg,"hits":s.time,"average":(hits>0.0).then_some(s.dmg as f64/hits),
+          "dps":s.dmg as f64*1000.0/duration_ms.max(1000) as f64,
+          "share":(total>0).then_some(s.dmg as f64*100.0/total as f64),
+          "quality_coverage":"unknown","crit_rate":observed_rate(s.crit,hits),
           "back_rate":observed_rate(s.back,hits),"frontal_rate":observed_rate(s.frontal,hits),
           "perfect_rate":observed_rate(s.perfect,hits),"parry_rate":observed_rate(s.parry,hits),
           "double_rate":observed_rate(s.double,hits),"multi_hit_count":(s.multi_hit_count>0).then_some(s.multi_hit_count),
@@ -480,7 +489,7 @@ impl Db {
             for s in &record.details.heal_skills {
                 *heal.entry(s.actor_id).or_default() += s.dmg as i64;
             }
-            let total: i64 = damage.values().sum::<i64>().max(1);
+            let total: i64 = damage.values().sum::<i64>();
             let secs = (record.duration_ms as f64 / 1000.0).max(1.0);
 
             tx.execute(
@@ -500,7 +509,7 @@ impl Db {
                     dungeon_id,
                     record.start_time_ms,
                     record.duration_ms,
-                    record.total_damage,
+                    total,
                     record.details.max_hp,
                     record.is_train,
                     serde_json::to_string(record)?
@@ -511,7 +520,12 @@ impl Db {
                 params![record.id],
             )?;
             let mut actors = record.actors.clone();
-            for skill in &record.details.heal_skills {
+            for skill in record
+                .details
+                .skills
+                .iter()
+                .chain(&record.details.heal_skills)
+            {
                 if !actors.iter().any(|a| a.actor_id == skill.actor_id) {
                     actors.push(serde_json::from_value(json!({"actorId":skill.actor_id,"nickname":format!("#{}",skill.actor_id),"job":skill.job}))?);
                 }
@@ -540,7 +554,7 @@ impl Db {
                         actor.job,
                         dmg,
                         dmg as f64 / secs,
-                        dmg as f64 * 100.0 / total as f64,
+                        dmg as f64 * 100.0 / total.max(1) as f64,
                         healed,
                         actor.damage_received,
                         actor.combat_power,
@@ -601,19 +615,20 @@ impl Db {
         Ok(())
     }
 
-    pub fn delete_run(&self, run_id: i64) -> Result<()> {
-        self.conn
-            .lock()
-            .execute("DELETE FROM runs WHERE id = ?1", params![run_id])?;
-        Ok(())
+    pub fn delete_run(&self, run_id: i64) -> Result<bool> {
+        let count = self.conn.lock().execute(
+            "DELETE FROM runs WHERE id = ?1 AND ended_at IS NOT NULL",
+            params![run_id],
+        )?;
+        Ok(count > 0)
     }
 
-    pub fn set_run_note(&self, run_id: i64, note: &str) -> Result<()> {
-        self.conn.lock().execute(
+    pub fn set_run_note(&self, run_id: i64, note: &str) -> Result<bool> {
+        let count = self.conn.lock().execute(
             "UPDATE runs SET note = ?2 WHERE id = ?1",
             params![run_id, note],
         )?;
-        Ok(())
+        Ok(count > 0)
     }
 
     // ── queries for the web app ───────────────────────────────────────────
@@ -633,7 +648,7 @@ impl Db {
             "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
                     r.character, r.note,
                     (SELECT COUNT(*) FROM fights f WHERE f.run_id = r.id AND f.is_train = 0) AS fights,
-                    (SELECT GROUP_CONCAT(name || '|' || COALESCE(job, '') || '|' || is_self, ';')
+                    (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
                     (SELECT ROUND(AVG(fp.dps)) FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
                        WHERE f.run_id = r.id AND fp.is_self = 1) AS my_dps
@@ -643,20 +658,9 @@ impl Db {
         )?;
         let mut rows = rows_to_json(&mut stmt, params![limit, offset, filter, character])?;
         for row in &mut rows {
-            let members: Vec<Value> = row["members"]
-                .as_str()
-                .unwrap_or("")
-                .split(';')
-                .filter(|s| !s.is_empty())
-                .map(|m| {
-                    let mut parts = m.splitn(3, '|');
-                    let name = parts.next().unwrap_or("");
-                    let job = parts.next().unwrap_or("");
-                    let is_self = parts.next() == Some("1");
-                    let info = names::class_info(job);
-                    json!({ "name": name, "class_key": info.key, "class_name": info.name, "is_self": is_self })
-                })
-                .collect();
+            let mut members: Vec<Value> =
+                serde_json::from_str(row["members"].as_str().unwrap_or("[]"))?;
+            decorate_job(&mut members);
             row["members"] = Value::Array(members);
         }
         let total: i64 = conn.query_row(
@@ -700,7 +704,7 @@ impl Db {
         }
         let mut stmt = conn.prepare(
             "SELECT fp.name, MAX(fp.job) AS job, SUM(fp.damage) AS damage,
-                    SUM(fp.damage) * 1000.0 / MAX(SUM(f.duration_ms), 1) AS dps, MAX(fp.is_self) AS is_self,
+                    SUM(fp.damage) * 1000.0 / MAX((SELECT SUM(MAX(duration_ms,1000)) FROM fights WHERE run_id=?1 AND is_train=0),1000) AS dps, MAX(fp.is_self) AS is_self,
                     SUM(fp.damage_received) AS damage_received, SUM(fp.died) AS deaths
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE f.run_id = ?1 AND f.is_train = 0
@@ -711,13 +715,16 @@ impl Db {
         run["members"] = Value::Array(members);
         run["fights"] = Value::Array(fights);
         run["totals"] = Value::Array(totals);
+        run["totals_scope"] = json!(
+            "Summe über erfasste Kämpfe ohne Training. DPS: gemeinsame Summe ihrer Zeitfenster, mindestens 1 Sekunde je Kampf. Fehlende Teilnahme zählt als 0 Schaden."
+        );
         Ok(Some(run))
     }
 
     pub fn fight_detail(&self, fight_id: &str) -> Result<Option<Value>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, run_id, boss_name, mob_code, dungeon_id, started_at, duration_ms, total_damage, max_hp,
+            "SELECT id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at, duration_ms, total_damage, max_hp,
                     is_train, record_json FROM fights WHERE id = ?1",
         )?;
         let Some(mut fight) = rows_to_json(&mut stmt, params![fight_id])?
@@ -760,10 +767,19 @@ impl Db {
         }
         fight["boss_debuffs"] = Value::Array(boss);
         if let Some(record) = record {
+            fight["numeric_limited"] = json!(
+                record
+                    .details
+                    .skills
+                    .iter()
+                    .chain(&record.details.heal_skills)
+                    .any(|s| s.dmg == i32::MAX)
+            );
             for p in &mut players {
                 let actor = p["actor_id"].as_i64().unwrap_or(0) as i32;
-                p["skills"] = skill_rows(&record.details.skills, actor);
-                p["heal_skills"] = skill_rows(&record.details.heal_skills, actor);
+                p["skills"] = skill_rows(&record.details.skills, actor, record.duration_ms);
+                p["heal_skills"] =
+                    skill_rows(&record.details.heal_skills, actor, record.duration_ms);
                 let heals: Vec<_> = record
                     .details
                     .heal_skills
@@ -960,21 +976,19 @@ impl Db {
              ORDER BY f.started_at",
         )?;
         let rows = rows_to_json(&mut stmt, params![character])?;
-        let mut bosses: Vec<(String, Vec<Value>)> = Vec::new();
+        let mut bosses: HashMap<(String, i32), Vec<Value>> = HashMap::new();
         for mut row in rows {
             let boss = row["boss"].as_str().unwrap_or_default().to_string();
             let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
             row["difficulty"] = json!(names::dungeon_difficulty(id));
-            match bosses.iter_mut().find(|(b, _)| *b == boss) {
-                Some((_, list)) => list.push(row),
-                None => bosses.push((boss, vec![row])),
-            }
+            bosses.entry((boss, id)).or_default().push(row);
         }
+        let mut bosses: Vec<_> = bosses.into_iter().collect();
         bosses.sort_by_key(|(_, list)| std::cmp::Reverse(list.len()));
         Ok(Value::Array(
             bosses
                 .into_iter()
-                .map(|(boss, kills)| json!({ "boss": boss, "kills": kills }))
+                .map(|((boss,id), attempts)| json!({ "boss": boss, "dungeon_id":id,"difficulty":names::dungeon_difficulty(id),"attempts": attempts }))
                 .collect(),
         ))
     }
@@ -1010,13 +1024,18 @@ impl Db {
         )?;
         let per_dungeon = rows_to_json(&mut stmt, params![c])?;
         let mut stmt = conn.prepare(
-            "SELECT f.boss_name, MAX(fp.dps) AS best_dps, fp.job, COUNT(*) AS kills
+            "SELECT f.boss_name, f.dungeon_id, fp.name, MAX(fp.dps) AS best_dps, fp.job, COUNT(*) AS attempts
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND (?1 = '' OR fp.name = ?1)
-             GROUP BY f.boss_name ORDER BY best_dps DESC LIMIT 10",
+             GROUP BY f.boss_name, f.dungeon_id, fp.name, fp.job ORDER BY best_dps DESC LIMIT 10",
         )?;
         let mut my_best = rows_to_json(&mut stmt, params![c])?;
         decorate_job(&mut my_best);
+        for row in &mut my_best {
+            row["difficulty"] = json!(names::dungeon_difficulty(
+                row["dungeon_id"].as_i64().unwrap_or(0) as i32
+            ));
+        }
         let mut stmt = conn.prepare(
             "SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS runs
              FROM runs WHERE started_at >= (strftime('%s', 'now') - 30 * 86400) * 1000
@@ -1115,6 +1134,90 @@ mod tests {
     }
 
     #[test]
+    fn short_fights_use_one_second_and_run_rates_share_the_same_window() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        let mut first = record("short", 1000, 100);
+        first.duration_ms = 500;
+        first.details.skills[1].dmg = 200;
+        let mut second = record("long", 10_000, 900);
+        second.duration_ms = 9_000;
+        second.details.skills.retain(|s| s.actor_id == 1);
+        second.actors.retain(|s| s.actor_id == 1);
+        db.save_fights(&[first, second], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        let f = db.fight_detail("short").unwrap().unwrap();
+        assert_eq!(f["target_id"], 9);
+        assert_eq!(f["total_damage"], 300);
+        let me = f["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "Me")
+            .unwrap();
+        assert_eq!(me["dps"], 100.0);
+        assert_eq!(me["skills"][0]["dps"], 100.0);
+        assert_eq!(me["skills"][0]["average"], 25.0);
+        assert!((me["share"].as_f64().unwrap() - 100.0 / 3.0).abs() < 1e-9);
+        let r = db.run_detail(run).unwrap().unwrap();
+        assert_eq!(r["totals"][0]["damage"], 1000);
+        assert_eq!(r["totals"][0]["dps"], 100.0);
+        assert_eq!(r["totals"][1]["damage"], 200);
+        assert_eq!(
+            r["totals"][1]["dps"], 20.0,
+            "late/absent players share the ten-second run window"
+        );
+    }
+    #[test]
+    fn large_multi_skill_totals_are_64_bit_and_quality_needs_valid_hits() {
+        let db = Db::in_memory().unwrap();
+        let mut f = record("large", 1000, 1_500_000_000);
+        f.details.skills[1].dmg = 1_500_000_000;
+        f.details.skills[0].time = 0;
+        db.save_fights(&[f], 0, &[], None, &HashSet::new()).unwrap();
+        let f = db.fight_detail("large").unwrap().unwrap();
+        assert_eq!(f["total_damage"], 3_000_000_000i64);
+        assert!(f["players"][0]["skills"][0]["average"].is_null());
+        assert!(f["players"][0]["skills"][0]["crit_rate"].is_null());
+    }
+    #[test]
+    fn member_names_do_not_use_delimiters_and_active_runs_cannot_be_deleted() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        db.upsert_members(run, &[member("名;|\"<>&", false)])
+            .unwrap();
+        assert_eq!(
+            db.list_runs(10, 0, None, "").unwrap()["runs"][0]["members"][0]["name"],
+            "名;|\"<>&"
+        );
+        assert!(!db.delete_run(run).unwrap());
+        assert!(db.run_detail(run).unwrap().is_some());
+        db.end_run(run, 10).unwrap();
+        assert!(db.delete_run(run).unwrap());
+        assert!(!db.set_run_note(run, "missing").unwrap());
+    }
+    #[test]
+    fn boss_trends_keep_difficulty_separate_and_do_not_claim_kills() {
+        let db = Db::in_memory().unwrap();
+        let mut other = record("b", 10000, 1000);
+        other.dungeon_id = 600092;
+        db.save_fights(
+            &[record("a", 1000, 500), other],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        let history = db.boss_history("").unwrap();
+        assert_eq!(history.as_array().unwrap().len(), 2);
+        for b in history.as_array().unwrap() {
+            assert!(b["kills"].is_null());
+            assert_eq!(b["attempts"].as_array().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
     fn attempt_ending_keeps_kills_and_absent_quality_is_not_a_zero_measurement() {
         let db = Db::in_memory().unwrap();
         db.save_fights(
@@ -1173,7 +1276,7 @@ mod tests {
 
         let history = db.boss_history("").unwrap();
         assert_eq!(history[0]["boss"], "Kargos");
-        let kills = history[0]["kills"].as_array().unwrap();
+        let kills = history[0]["attempts"].as_array().unwrap();
         assert_eq!(kills.len(), 2);
         assert_eq!(kills[0]["dps"], 150.0);
         assert_eq!(kills[1]["dps"], 300.0);

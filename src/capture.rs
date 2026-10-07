@@ -56,6 +56,23 @@ fn open_socket() -> io::Result<RawSocket> {
         return Err(io::Error::last_os_error());
     }
     let sock = RawSocket(fd);
+    // Periodically return to the shutdown check even on a quiet network.
+    let timeout = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 250_000,
+    };
+    if unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            &timeout as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        )
+    } < 0
+    {
+        return Err(io::Error::last_os_error());
+    }
     // A big kernel buffer, so a burst during a boss fight is not dropped while
     // the parser catches up.
     let size: libc::c_int = 16 * 1024 * 1024;
@@ -96,13 +113,13 @@ fn now_ms() -> i64 {
 }
 
 /// Capture until the receiver goes away. Blocks the calling thread.
-pub fn run(tx: SyncSender<CapturedPayload>) -> io::Result<()> {
+pub fn run(tx: SyncSender<CapturedPayload>, stopping: impl Fn() -> bool) -> io::Result<()> {
     let sock = open_socket()?;
     let mut buf = vec![0u8; RECV_BUFFER];
     let mut names = HashMap::new();
     tracing::info!("Capture active on all interfaces");
 
-    loop {
+    while !stopping() {
         let mut addr: libc::sockaddr_ll = unsafe { std::mem::zeroed() };
         let mut addr_len = std::mem::size_of::<libc::sockaddr_ll>() as libc::socklen_t;
         let n = unsafe {
@@ -117,7 +134,10 @@ pub fn run(tx: SyncSender<CapturedPayload>) -> io::Result<()> {
         };
         if n < 0 {
             let err = io::Error::last_os_error();
-            if err.kind() == io::ErrorKind::Interrupted {
+            if matches!(
+                err.kind(),
+                io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+            ) {
                 continue;
             }
             return Err(err);
@@ -135,6 +155,7 @@ pub fn run(tx: SyncSender<CapturedPayload>) -> io::Result<()> {
             return Ok(());
         }
     }
+    Ok(())
 }
 
 /// The TCP payload of an IPv4 or IPv6 packet, or `None` for anything else.

@@ -386,7 +386,7 @@ impl Dispatcher {
         let mut last_process_check = 0i64;
         let mut game = !self.require_process;
 
-        loop {
+        while !self.engine.is_stopping() {
             // Check process, recording and connection state even on a quiet
             // network, instead of waiting forever for another payload.
             let cap = match rx.recv_timeout(Duration::from_millis(500)) {
@@ -395,6 +395,9 @@ impl Dispatcher {
                 Err(RecvTimeoutError::Disconnected) => break,
             };
             let now = now_ms();
+            if self.engine.is_stopping() {
+                break;
+            }
 
             if self.require_process {
                 let interval = if game {
@@ -478,6 +481,7 @@ impl Dispatcher {
                     recorder = None;
                     self.sync_recorder(&mut recorder, now);
                     for packet in &chunks {
+                        self.engine.received_game_packet();
                         if let Some(rec) = &mut recorder
                             && let Err(e) = rec.write(packet.captured_at_ms, true, packet)
                         {
@@ -492,6 +496,9 @@ impl Dispatcher {
                             self.engine.capture_gap();
                         }
                         let _gate = self.engine.combat_gate.lock();
+                        if self.engine.is_stopping() {
+                            break;
+                        }
                         processor.set_override_timestamp(Some(packet.captured_at_ms));
                         for chunk in ordered {
                             assembler.process_chunk(&chunk, processor);
@@ -513,6 +520,7 @@ impl Dispatcher {
                 continue;
             };
             last_lock_packet_ms = now;
+            self.engine.received_game_packet();
             if let Some(rec) = &mut recorder
                 && let Err(e) = rec.write(cap.captured_at_ms, from_server, &cap)
             {
@@ -538,6 +546,9 @@ impl Dispatcher {
                 self.engine.capture_gap();
             }
             let _gate = self.engine.combat_gate.lock();
+            if self.engine.is_stopping() {
+                break;
+            }
             for chunk in chunks {
                 if assembler.process_chunk(&chunk, processor) {
                     last_parsed_ms = now;

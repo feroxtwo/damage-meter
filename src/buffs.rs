@@ -32,7 +32,10 @@ const MAX_DURATION_MS: u32 = 3_600_000;
 const MERGE_TOLERANCE_MS: i64 = 100;
 /// Intervals older than this are dropped.
 const KEEP_MS: i64 = 2 * 3_600_000;
-const INTERVALS_PER_EFFECT: usize = 512;
+const INTERVALS_PER_EFFECT: usize = 128;
+const MAX_TARGETS: usize = 256;
+const MAX_EFFECTS_PER_TARGET: usize = 64;
+const MAX_INTERVALS: usize = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuffEvent {
@@ -148,6 +151,8 @@ type EffectCoverage = (Vec<(i64, i64)>, u32, i64);
 #[derive(Default)]
 pub struct BuffTracker {
     inner: Mutex<EffectIntervals>,
+    partial: std::sync::atomic::AtomicBool,
+    intervals: std::sync::atomic::AtomicUsize,
 }
 
 fn covered(intervals: &[(i64, i64)], from: i64, to: i64) -> i64 {
@@ -178,8 +183,23 @@ fn covered(intervals: &[(i64, i64)], from: i64, to: i64) -> i64 {
 
 impl BuffTracker {
     pub fn record(&self, event: BuffEvent, now_ms: i64) {
-        let end = now_ms + event.duration_ms as i64;
+        let end = now_ms.saturating_add(event.duration_ms as i64);
         let mut inner = self.inner.lock();
+        let exists = inner
+            .get(&event.target)
+            .is_some_and(|e| e.contains_key(&(event.code, event.caster)));
+        if (!inner.contains_key(&event.target) && inner.len() >= MAX_TARGETS)
+            || (!exists
+                && inner
+                    .get(&event.target)
+                    .is_some_and(|e| e.len() >= MAX_EFFECTS_PER_TARGET))
+            || self.intervals.load(std::sync::atomic::Ordering::Relaxed) >= MAX_INTERVALS
+        {
+            // Drop excess observations explicitly instead of growing without a bound.
+            self.partial
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            return;
+        }
         let list = inner
             .entry(event.target)
             .or_default()
@@ -187,13 +207,18 @@ impl BuffTracker {
             .or_default();
         match list.back_mut() {
             Some(last) if now_ms <= last.end + MERGE_TOLERANCE_MS => last.end = last.end.max(end),
-            _ => list.push_back(Interval { start: now_ms, end }),
+            _ => {
+                list.push_back(Interval { start: now_ms, end });
+                self.intervals
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
         }
         while list.len() > INTERVALS_PER_EFFECT {
             list.pop_front();
-        }
-        if inner.len() > 4096 {
-            Self::prune(&mut inner, now_ms);
+            self.intervals
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            self.partial
+                .store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
@@ -225,7 +250,20 @@ impl BuffTracker {
         serde_json::json!(rows)
     }
     pub fn prune_old(&self, now_ms: i64) {
-        Self::prune(&mut self.inner.lock(), now_ms);
+        let mut inner = self.inner.lock();
+        Self::prune(&mut inner, now_ms);
+        self.intervals.store(
+            inner
+                .values()
+                .flat_map(|e| e.values())
+                .map(|l| l.len())
+                .sum(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    pub fn partial(&self) -> bool {
+        self.partial.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Effects on `target` during `[from, to)`, highest uptime first. An
@@ -367,6 +405,38 @@ mod tests {
         assert!(t.uptimes(1, 100_000, 200_000).is_empty());
     }
 
+    #[test]
+    fn fresh_effects_and_intervals_have_strict_limits_and_report_truncation() {
+        let t = BuffTracker::default();
+        for target in 0..MAX_TARGETS as u32 + 10 {
+            for code in 110_000_000..110_000_000 + MAX_EFFECTS_PER_TARGET as u32 + 2 {
+                t.record(
+                    BuffEvent {
+                        target,
+                        code,
+                        caster: 42,
+                        duration_ms: 1000,
+                    },
+                    0,
+                );
+            }
+        }
+        assert!(t.partial());
+        assert!(t.inner.lock().len() <= MAX_TARGETS);
+        assert!(
+            t.inner
+                .lock()
+                .values()
+                .all(|e| e.len() <= MAX_EFFECTS_PER_TARGET)
+        );
+        assert_eq!(
+            t.intervals.load(std::sync::atomic::Ordering::Relaxed),
+            MAX_INTERVALS
+        );
+        t.prune_old(KEEP_MS + 2000);
+        assert!(t.inner.lock().is_empty());
+        assert_eq!(t.intervals.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
     #[test]
     fn names_try_the_skill_code() {
         assert_eq!(name_keys(120_340_015)[0], 12_034_001);

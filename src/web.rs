@@ -103,7 +103,9 @@ async fn delete_run(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    engine.db.delete_run(id).map_err(db_error)?;
+    if !engine.db.delete_run(id).map_err(db_error)? {
+        return Err(StatusCode::CONFLICT);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -119,10 +121,16 @@ async fn run_note(
     Json(body): Json<NoteBody>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    engine
+    if body.note.chars().count() > 4000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let saved = engine
         .db
         .set_run_note(id, body.note.trim())
         .map_err(db_error)?;
+    if !saved {
+        return Err(StatusCode::NOT_FOUND);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -296,6 +304,9 @@ async fn search_fights(
     State(e): State<AppState>,
     Query(q): Query<FightQuery>,
 ) -> Result<Json<Value>, StatusCode> {
+    if q.query.chars().count() > 500 || q.from.zip(q.to).is_some_and(|(a, b)| a > b) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     e.db.search_fights(
         &q.query,
         &q.character,
@@ -474,7 +485,14 @@ pub async fn serve(engine: AppState, listener: std::net::TcpListener) -> anyhow:
     let addr = listener.local_addr()?;
     let listener = tokio::net::TcpListener::from_std(listener)?;
     tracing::info!("Dashboard: http://{addr}/");
-    axum::serve(listener, router(engine, addr)).await?;
+    let shutdown = engine.clone();
+    axum::serve(listener, router(engine, addr))
+        .with_graceful_shutdown(async move {
+            while !shutdown.is_stopping() {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        })
+        .await?;
     Ok(())
 }
 
@@ -600,6 +618,86 @@ mod tests {
                 status
             );
         }
+    }
+
+    #[tokio::test]
+    async fn searches_notes_and_active_run_deletion_validate_input() {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "de",
+            std::env::temp_dir(),
+        );
+        let id = engine.db.start_run(600093, 1000, Some("Me"), 1).unwrap();
+        let app = router(engine.clone(), "127.0.0.1:8787".parse().unwrap());
+        for (method, path, body, status) in [
+            (
+                "GET",
+                "/api/fights?from=2000&to=1000".to_string(),
+                "".to_string(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "GET",
+                format!("/api/fights?query={}", "a".repeat(501)),
+                "".into(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "POST",
+                "/api/runs/999/note".into(),
+                json!({"note":"missing"}).to_string(),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                "POST",
+                format!("/api/runs/{id}/note"),
+                json!({"note":"ü".repeat(4001)}).to_string(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "DELETE",
+                format!("/api/runs/{id}"),
+                "".into(),
+                StatusCode::CONFLICT,
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(request(method, &path, "localhost:8787", true, &body))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+        }
+        engine
+            .db
+            .upsert_members(
+                id,
+                &[crate::db::Member {
+                    name: "Other".into(),
+                    job: "검성".into(),
+                    server_id: 1,
+                    level: 45,
+                    gear_score: 0,
+                    combat_power: 0,
+                    dbid: 0,
+                    is_self: false,
+                }],
+            )
+            .unwrap();
+        engine.db.end_run(id, 2000).unwrap();
+        assert_eq!(
+            app.oneshot(request(
+                "DELETE",
+                &format!("/api/runs/{id}"),
+                "localhost:8787",
+                true,
+                ""
+            ))
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::NO_CONTENT
+        );
     }
 
     #[tokio::test]
