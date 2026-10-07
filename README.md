@@ -56,7 +56,7 @@ Nach einem Update (`git pull && ./scripts/install.sh`) wird `setcap` erneut ausg
    grau = Spiel nicht gefunden, gelb = suche Verbindung, grün = verbunden.
 3. Kämpfen. Bosskämpfe werden automatisch gespeichert, Runs beim Verlassen der Instanz abgeschlossen.
 
-**Overlay bedienen:** Kopfzeile ziehen zum Verschieben, Rechtsklick für Menü (Zurücksetzen, Ziel-Modus,
+**Overlay bedienen:** Kopfzeile ziehen zum Verschieben, Symbole unten rechts: Mitschnitt, Zurücksetzen, Ausblenden, Sperren. Rechtsklick für Menü (Zurücksetzen, Ziel-Modus,
 Sperren, Dashboard, Beenden). Klappt das Ziehen nicht, geht es unter KDE immer mit **Meta (Windows-Taste) +
 Linksziehen**. **Gesperrt** gehen alle Klicks durch ans Spiel. Entsperren geht über das Dashboard (Tab „Overlay“)
 oder ein Tastenkürzel.

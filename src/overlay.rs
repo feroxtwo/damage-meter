@@ -20,7 +20,8 @@ pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
 const ROW: f32 = 26.0;
-const FOOTER: f32 = 18.0;
+const FOOTER: f32 = 22.0;
+const ICON: f32 = 18.0;
 
 pub struct Overlay {
     engine: Arc<Engine>,
@@ -292,25 +293,154 @@ impl Overlay {
             (Color32::from_gray(140), "AION2 nicht gestartet".to_string())
         };
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
-        p.text(
+        let mut state_rect = rect;
+        state_rect.set_right(rect.right() - 4.0 * (ICON + 3.0) - 52.0);
+        p.with_clip_rect(state_rect).text(
             rect.left_center() + Vec2::new(18.0, 0.0),
             Align2::LEFT_CENTER,
             state,
             FontId::proportional(10.5),
             Color32::from_gray(200),
         );
-        let mut ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
-        if c.recording.is_some() {
-            ping = format!("● REC  {ping}");
+        // Buttons for what the KDE shortcuts do, right to left.
+        let mut x = rect.right() - 4.0;
+        let mut button = |icon: Icon, tip: &str| {
+            let r = Rect::from_center_size(
+                Pos2::new(x - ICON / 2.0, rect.center().y),
+                Vec2::splat(ICON),
+            );
+            x -= ICON + 3.0;
+            let resp = ui
+                .interact(r, ui.id().with(tip), Sense::click())
+                .on_hover_text(tip);
+            let color = if resp.hovered() {
+                ui.painter()
+                    .rect_filled(r, 4, Color32::from_white_alpha(28));
+                Color32::WHITE
+            } else {
+                Color32::from_gray(185)
+            };
+            paint_icon(ui.painter(), r.shrink(3.5), icon, color);
+            resp.clicked()
+        };
+        let recording = self.engine.recording_wanted();
+        if button(
+            Icon::Lock,
+            "Sperren: Klicks gehen ans Spiel (Strg+Umschalt+F9 entsperrt)",
+        ) {
+            self.engine.overlay.write().locked = true;
         }
+        if button(
+            Icon::Hide,
+            "Ausblenden (Strg+Umschalt+F10 blendet wieder ein)",
+        ) {
+            self.engine.overlay.write().visible = false;
+        }
+        if button(Icon::Reset, "Meter zurücksetzen (Strg+Umschalt+F11)") {
+            self.engine.request_reset();
+        }
+        if button(
+            Icon::Record(recording),
+            if recording {
+                "Mitschnitt läuft: klicken zum Ausschalten"
+            } else {
+                "Pakete mitschneiden"
+            },
+        ) {
+            self.engine.set_recording(!recording);
+        }
+
+        let ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
+        let p = ui.painter();
         p.text(
-            rect.right_center() - Vec2::new(8.0, 0.0),
+            Pos2::new(x - 2.0, rect.center().y),
             Align2::RIGHT_CENTER,
             ping,
             FontId::monospace(10.5),
             Color32::from_gray(200),
         );
         resp.context_menu(|ui| self.menu(ui));
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Icon {
+    Lock,
+    Hide,
+    Reset,
+    /// Whether recording is on.
+    Record(bool),
+}
+
+/// Points on a circle from angle `a` to `b` (radians, clockwise on screen).
+fn arc(center: Pos2, radius: f32, a: f32, b: f32) -> Vec<Pos2> {
+    (0..=16)
+        .map(|i| {
+            let t = a + (b - a) * i as f32 / 16.0;
+            center + Vec2::angled(t) * radius
+        })
+        .collect()
+}
+
+/// Small line icons, drawn so they need no icon font.
+fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, color: Color32) {
+    use std::f32::consts::PI;
+    let stroke = Stroke::new(1.5_f32, color);
+    match icon {
+        Icon::Lock => {
+            let body = Rect::from_min_max(
+                Pos2::new(r.left() + 1.0, r.center().y - 0.5),
+                r.right_bottom() - Vec2::new(1.0, 0.0),
+            );
+            p.rect_filled(body, 1.5, color);
+            let shackle = r.width() * 0.28;
+            let top = Pos2::new(r.center().x, r.top() + shackle + 0.5);
+            let mut pts = vec![Pos2::new(top.x - shackle, body.top())];
+            pts.extend(arc(top, shackle, PI, 2.0 * PI));
+            pts.push(Pos2::new(top.x + shackle, body.top()));
+            p.add(egui::Shape::line(pts, stroke));
+        }
+        Icon::Hide => {
+            let c = r.center();
+            let (w, h) = (r.width() / 2.0, r.height() * 0.32);
+            let eye: Vec<Pos2> = (0..=24)
+                .map(|i| {
+                    let t = 2.0 * PI * i as f32 / 24.0;
+                    Pos2::new(c.x + w * t.cos(), c.y + h * t.sin())
+                })
+                .collect();
+            p.add(egui::Shape::line(eye, stroke));
+            p.circle_filled(c, h * 0.6, color);
+            p.line_segment([r.left_bottom(), r.right_top()], stroke);
+        }
+        Icon::Reset => {
+            let c = r.center();
+            let radius = r.width() / 2.0 - 1.0;
+            let end = 1.35 * PI;
+            p.add(egui::Shape::line(arc(c, radius, -0.25 * PI, end), stroke));
+            // Arrowhead at the open end, pointing along the arc.
+            let at = c + Vec2::angled(end) * radius;
+            let along = Vec2::angled(end + PI / 2.0);
+            let across = Vec2::angled(end);
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    at + along * 3.0,
+                    at - along * 1.0 + across * 3.0,
+                    at - along * 1.0 - across * 3.0,
+                ],
+                color,
+                Stroke::NONE,
+            ));
+        }
+        Icon::Record(on) => {
+            let radius = r.width() / 2.0 - 1.0;
+            if on {
+                p.circle_filled(r.center(), radius, Color32::from_rgb(235, 70, 70));
+            } else {
+                p.circle_stroke(r.center(), radius, stroke);
+                p.circle_filled(r.center(), radius * 0.35, color);
+            }
+        }
     }
 }
 
