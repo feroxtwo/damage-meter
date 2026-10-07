@@ -45,12 +45,8 @@ function installFightQol(f) {
   anchor.parentNode.insertBefore(block,anchor.nextSibling);
   if(f.players.length>1)$('#pairB').selectedIndex=1;
   $('#pairCompare').onclick=()=>{$('#playerPair').innerHTML=pairReport(f.players.find(p=>String(p.actor_id)===$('#pairA').value),f.players.find(p=>String(p.actor_id)===$('#pairB').value),f);};
-  const pngPlayer=document.createElement('select');pngPlayer.id='pngPlayer';pngPlayer.setAttribute('aria-label','Spieler für den PNG-Bericht');
-  pngPlayer.innerHTML=`<option value="">PNG: alle Spieler</option>${f.players.map(p=>`<option value="${Number(p.actor_id)}">PNG: ${esc(p.name)}</option>`).join('')}`;
-  const self=f.players.find(p=>p.is_self);if(self)pngPlayer.value=String(Number(self.actor_id));
-  $('#pngFight').before(pngPlayer);
-  $('#pngFight').onclick=()=>task(exportPng(f,$('#anonFight').checked,pngPlayer.value||null));
-  $('#chatFight').onclick=()=>task(copyText(chatLine(f.boss_name,exportPlayers(f.players,$('#anonFight').checked),f.duration_ms)));
+  $('#pngFight').onclick=()=>task(exportPng(f,$('#anonFight').checked,$('#exportScope').value||null,exportSuffix(f)));
+  $('#chatFight').onclick=()=>task(copyText(chatLine(f.boss_name,scopedPlayers(f,exportPlayers(f.players,$('#anonFight').checked)),f.duration_ms)));
 }
 function installLiveComparison(detail,row) {
   const candidates=latestLive?.rows.filter(r=>r.id!==row?.id)||[];
@@ -195,7 +191,7 @@ function reportBlocks(exp,curves,images=new Map(),focus=null) {
   return blocks;
 }
 // actor: null for the whole group, otherwise only that player's detail section and curve.
-async function exportPng(f,anonymous,actor=null) {
+async function exportPng(f,anonymous,actor=null,suffix='') {
   const exp=fightExport(f,anonymous),index=actor==null?-1:f.players.findIndex(p=>String(p.actor_id)===String(actor)),focus=index<0?null:index;
   const curves=reportCurves(f,exp.players);if(curves&&focus!=null)curves.series=curves.series.filter((_,i)=>i===focus);
   const images=await reportImages(focus==null?exp:{...exp,players:[exp.players[focus]]}),blocks=reportBlocks(exp,curves,images,focus);
@@ -210,7 +206,7 @@ async function exportPng(f,anonymous,actor=null) {
     let y=0;for(const b of rows){b.draw(ctx,y);y+=b.h;}
     ctx.fillStyle=reportInk.muted;ctx.font='14px system-ui, sans-serif';ctx.fillText(`Lokaler Export · Seite ${n+1}${pages.length>1?' von '+pages.length:''} · ${anonymous?'Andere Namen anonymisiert':'Namen enthalten'}`,40,canvas.height-22);
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG konnte nicht erstellt werden')),'image/png'));
-    download(`aion2-kampf${pages.length>1?'-'+(n+1):''}.png`,blob,'image/png');
+    download(`aion2-kampf${suffix}${pages.length>1?'-'+(n+1):''}.png`,blob,'image/png');
   }
   toast('PNG-Bericht erstellt.');
 }

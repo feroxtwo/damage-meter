@@ -322,8 +322,8 @@ const server = http.createServer((req,res) => {
       assert.deepEqual(await page.evaluate(()=>reportBuffs([{name:'Wachtschild',uptime:11.5},{name:'Wachtschild',uptime:9},{name:'Fury',uptime:99}]).map(b=>b.name+' '+b.uptime)),['Fury 99','Wachtschild 11.5']);
       assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),1000);
       await page.locator('#anonFight').check();
-      assert.equal(await page.locator('#pngPlayer').inputValue(),'1','PNG player defaults to the own character');
-      const pngTexts=async value=>{await page.selectOption('#pngPlayer',value);return page.evaluate(async actor=>{
+      assert.equal(await page.locator('#exportScope').inputValue(),'','exports default to the whole group');
+      const pngTexts=async value=>{await page.selectOption('#exportScope',value);return page.evaluate(async actor=>{
         const original=CanvasRenderingContext2D.prototype.fillText,texts=[],keep=window.download;window.download=()=>{};
         CanvasRenderingContext2D.prototype.fillText=function(text,...args){texts.push(text);return original.call(this,text,...args);};
         try{await exportPng(currentFight,document.querySelector('#anonFight').checked,actor||null);}finally{CanvasRenderingContext2D.prototype.fillText=original;window.download=keep;}
@@ -333,7 +333,16 @@ const server = http.createServer((req,res) => {
       await page.locator('#anonFight').uncheck();texts=await pngTexts('2');
       assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,1);assert.ok(texts.some(t=>t.startsWith('Moon · ')));
       texts=await pngTexts('');assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,3);
-      await page.locator('#anonFight').check();await page.selectOption('#pngPlayer','1');
+      await page.selectOption('#exportScope','2');
+      const [single]=await Promise.all([page.waitForEvent('download'),page.locator('#jsonFight').click()]);
+      assert.equal(single.suggestedFilename(),'aion2-kampf-spieler-2.json');const one=JSON.parse(fs.readFileSync(await single.path(),'utf8'));
+      assert.equal(one.players.length,1);assert.equal(one.players[0].name,'Moon');
+      await page.locator('#anonFight').check();
+      const [csv]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
+      const csvText=fs.readFileSync(await csv.path(),'utf8');assert.match(csvText,/"Spieler 2"/);assert.ok(!csvText.includes('Moon'));assert.match(csvText,/"Skill";"Art"/);assert.ok(!csvText.includes('FeroxTOO'));
+      await page.locator('#copyFight').click();
+      assert.equal((await page.evaluate(()=>window.copiedRanking)).split('\n').length,2);
+      await page.selectOption('#exportScope','');
       const [png]=await Promise.all([page.waitForEvent('download'),page.locator('#pngFight').click()]);
       const file=await png.path();const bytes=fs.readFileSync(file);assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.ok(bytes.length>5000);
       if(process.env.SCREENSHOT_DIR) {await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'player-comparison.png'),fullPage:true});fs.copyFileSync(file,path.join(process.env.SCREENSHOT_DIR,'fight-report.png'));}
