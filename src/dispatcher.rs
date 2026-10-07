@@ -21,6 +21,7 @@ use a2tools_dps_meter_lib::capture::stream_processor::StreamProcessor;
 
 use crate::buffs;
 use crate::engine::Engine;
+use crate::instances;
 use crate::tcp::TcpOrder;
 
 const COMBAT_SIGNATURES: [&[u8]; 2] = [&[0x0E, 0x00, 0x36], &[0x06, 0x00, 0x36]];
@@ -506,6 +507,9 @@ impl Dispatcher {
                                 if let Some(event) = buffs::parse(payload) {
                                     self.engine.buffs.record(event, packet.captured_at_ms);
                                 }
+                                if let Some(map) = instances::map_load(payload) {
+                                    self.engine.note_map_load(map, packet.captured_at_ms);
+                                }
                             });
                         }
                     }
@@ -556,6 +560,9 @@ impl Dispatcher {
                 effects.feed(&chunk, |payload| {
                     if let Some(event) = buffs::parse(payload) {
                         self.engine.buffs.record(event, now);
+                    }
+                    if let Some(map) = instances::map_load(payload) {
+                        self.engine.note_map_load(map, now);
                     }
                 });
             }

@@ -28,6 +28,8 @@
 | Tod / Wiederbelebung | Einzelner Tod, Respawn, neue Treffer nach Wiederbelebung; Death-Marker nicht in neuen Kampf übernehmen | Offen |
 | Buffs / Debuffs | Anwendung, Refresh, mehrere Caster, frühes Entfernen/Dispel; bekannte Entfernungslücke ausdrücklich messen | Offen |
 | Instanzwechsel | Eintritt, Wechsel Schwierigkeit, unmittelbar nach Boss verlassen, Partyauflösung; kurze Versuche gespeichert und Run-Zuordnung korrekt | Offen |
+| Expedition neu starten | Expedition abschließen (mindestens ein Boss getötet), dann im Spiel neu starten: Meldung „Neustart erkannt“, neuer Run unter **Runs**, Bosse des alten Durchgangs bleiben im alten Run. Neustart nach Wipe ohne Bosskill wird nicht automatisch erkannt: **Neuer Run** bzw. `aion2-meter ctl new-run` prüfen. Aufnahme mitschneiden | Offen |
+| Open World / Gruppe | Solo neben fremden Spielern am selben Mob: nur eigene Zeile. Mit Gruppe: Gruppenmitglieder sichtbar, Fremde nicht. Einstellung „Open World: andere Spieler anzeigen“ zeigt alle. Im Dungeon immer ganze Gruppe | Offen |
 | Disconnect / Reconnect | Ruhige und laufende Verbindung, neue IP/Port, VPN; neuer Stream ohne Doppelschaden, Lücken sichtbar | Offen |
 | Charakter-/Klassenwechsel | Mehrere Charaktere derselben Sitzung; Filter und Bestwerte nicht vermischen; Profile/Streaming unverändert | Offen |
 | Mehrere Kämpfe | Direkt aufeinanderfolgende Bosse, mehrere Ziele/Adds, Zielwechsel, fehlender Spawn, gleicher Boss nach Wipe | Offen |

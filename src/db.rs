@@ -492,7 +492,10 @@ impl Db {
     }
 
     /// The run a fight belongs to: the newest run of its dungeon that was
-    /// under way when the fight started.
+    /// under way when the fight started. A run may start up to a minute after
+    /// its first fight (the roster naming the instance comes late), but one
+    /// that had already started wins: after a restart of the same expedition
+    /// the old instance's last fight stays with the old run.
     fn run_for_fight(conn: &Connection, dungeon_id: i32, started_at: i64) -> Result<Option<i64>> {
         if dungeon_id <= 0 {
             return Ok(None);
@@ -501,7 +504,7 @@ impl Db {
             .query_row(
                 "SELECT id FROM runs WHERE dungeon_id = ?1 AND started_at <= ?2 + 60000
                    AND (ended_at IS NULL OR ended_at >= ?2)
-                 ORDER BY started_at DESC LIMIT 1",
+                 ORDER BY started_at <= ?2 DESC, started_at DESC LIMIT 1",
                 params![dungeon_id, started_at],
                 |r| r.get(0),
             )

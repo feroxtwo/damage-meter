@@ -285,6 +285,15 @@ async fn reset(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn new_run(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    engine.request_new_run();
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn toggle_record(
     State(engine): State<AppState>,
     headers: HeaderMap,
@@ -539,6 +548,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))
         .route("/api/reset", post(reset))
+        .route("/api/run/new", post(new_run))
         .route("/api/record", post(set_record))
         .route("/api/record/toggle", post(toggle_record))
         .route("/api/target-mode", post(target_mode))
