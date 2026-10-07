@@ -27,6 +27,7 @@ const SAVE_EVERY_TICKS: u64 = 60;
 /// Effects below this uptime in a fight are not kept.
 const MIN_UPTIME_PERCENT: f64 = 3.0;
 const MAX_EFFECTS_PER_ENTITY: usize = 16;
+const RECORD_SETTING: &str = "record_packets";
 
 pub fn now_ms() -> i64 {
     SystemTime::now()
@@ -177,6 +178,10 @@ impl Engine {
                 .unwrap_or_default()
                 .into_iter()
                 .collect();
+        let named = db.fill_missing_boss_names(|code| npcs.get_npc_name(code));
+        if let Ok(n @ 1..) = named {
+            tracing::info!("Named {n} saved fight(s)");
+        }
         if let Err(e) = db.close_dangling_runs() {
             tracing::warn!("Could not close old runs: {e}");
         }
@@ -207,6 +212,10 @@ impl Engine {
             record_wanted: AtomicBool::new(false),
             capture_dir,
         });
+
+        if engine.db.meta(RECORD_SETTING).ok().flatten().as_deref() == Some("1") {
+            engine.set_recording(true);
+        }
 
         // Combat data is cleared on zone changes and when a party ends; save
         // what is there first, or leaving right after a kill loses it.
@@ -263,6 +272,11 @@ impl Engine {
         s.recording_requested = on;
         if !on {
             s.recording = None;
+        }
+        drop(s);
+        // Remembered, so recording stays on across restarts until turned off.
+        if let Err(e) = self.db.set_meta(RECORD_SETTING, if on { "1" } else { "0" }) {
+            tracing::warn!("Could not save the recording setting: {e:#}");
         }
         on
     }
@@ -355,11 +369,47 @@ impl Engine {
             .collect()
     }
 
+    /// A monster's name comes from its spawn packet. When that was missed at
+    /// the fight's first snapshot, it may have arrived since.
+    fn name_fights(&self, records: &mut [FightRecord]) {
+        if records
+            .iter()
+            .all(|r| r.mob_code > 0 && !r.boss_name.is_empty())
+        {
+            return;
+        }
+        let mobs = self.storage.get_mob_data();
+        for r in records {
+            if r.mob_code <= 0
+                && let Some(&code) = mobs.get(&r.target_id)
+            {
+                r.mob_code = code;
+                r.is_train = r.is_train || self.npcs.is_training_dummy(code);
+            }
+            if r.boss_name.is_empty() && r.mob_code > 0 {
+                r.boss_name = self.npcs.get_npc_name(r.mob_code);
+            }
+        }
+    }
+
+    /// The live target's name, or a placeholder when its spawn was missed.
+    fn target_name(&self, dps: &DpsData) -> String {
+        if !dps.target_name.is_empty() || dps.target_id <= 0 {
+            return dps.target_name.clone();
+        }
+        self.storage
+            .get_mob_data()
+            .get(&dps.target_id)
+            .map(|&code| self.npcs.get_npc_name(code))
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "Unbekannter Gegner".into())
+    }
+
     fn save_fights(&self, force: bool) {
         if self.storage.damage_generation() <= 0 {
             return;
         }
-        let (records, local) = {
+        let (mut records, local) = {
             let mut calc = if force {
                 self.calc.lock()
             } else {
@@ -383,6 +433,7 @@ impl Engine {
                     .map(|r| r.id as i64),
             )
         };
+        self.name_fights(&mut records);
         let dungeon = self.storage.current_dungeon_id();
         let dead = self.storage.get_dead_entities();
         match self
@@ -563,7 +614,7 @@ impl Engine {
         let run = self.run.lock();
         Live {
             rows,
-            target_name: dps.target_name.clone(),
+            target_name: self.target_name(dps),
             target_id: dps.target_id,
             target_mode: dps.target_mode.clone(),
             target_hp,

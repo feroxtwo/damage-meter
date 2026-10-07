@@ -280,6 +280,49 @@ impl Db {
     }
 
     /// Runs left open by a meter that was closed mid-run.
+    pub fn meta(&self, key: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .lock()
+            .query_row("SELECT value FROM meta WHERE key = ?1", params![key], |r| {
+                r.get(0)
+            })
+            .optional()?)
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
+        self.conn.lock().execute(
+            "INSERT INTO meta(key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Name saved fights whose monster code is known but whose name was not
+    /// (saved before the name table had it, or in another language).
+    pub fn fill_missing_boss_names(&self, name_of: impl Fn(i32) -> String) -> Result<usize> {
+        let conn = self.conn.lock();
+        let unnamed: Vec<(String, i32)> = conn
+            .prepare(
+                "SELECT id, mob_code FROM fights
+                 WHERE COALESCE(boss_name, '') = '' AND COALESCE(mob_code, 0) > 0",
+            )?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut named = 0;
+        for (id, code) in unnamed {
+            let name = name_of(code);
+            if !name.is_empty() {
+                named += conn.execute(
+                    "UPDATE fights SET boss_name = ?2 WHERE id = ?1",
+                    params![id, name],
+                )?;
+            }
+        }
+        Ok(named)
+    }
+
     pub fn close_dangling_runs(&self) -> Result<()> {
         self.conn.lock().execute(
             "UPDATE runs SET ended_at = COALESCE(
@@ -964,6 +1007,38 @@ mod tests {
         .unwrap();
         assert_eq!(db.summary("Me").unwrap()["my_deaths"], 1);
         assert_eq!(db.summary("Other").unwrap()["my_deaths"], 0);
+    }
+
+    #[test]
+    fn settings_and_late_boss_names() {
+        let db = Db::in_memory().unwrap();
+        assert_eq!(db.meta("x").unwrap(), None);
+        db.set_meta("x", "1").unwrap();
+        db.set_meta("x", "0").unwrap();
+        assert_eq!(db.meta("x").unwrap().as_deref(), Some("0"));
+
+        let mut unnamed = record("u", 1_000, 100);
+        unnamed.boss_name.clear();
+        unnamed.mob_code = 2_400_001;
+        let mut unknown = record("k", 2_000, 100);
+        unknown.boss_name.clear();
+        db.save_fights(&[unnamed, unknown], 0, &[], None, &HashSet::new())
+            .unwrap();
+        let named = db
+            .fill_missing_boss_names(|c| {
+                if c == 2_400_001 {
+                    "Kargos".into()
+                } else {
+                    String::new()
+                }
+            })
+            .unwrap();
+        assert_eq!(named, 1);
+        assert_eq!(
+            db.fight_detail("u").unwrap().unwrap()["boss_name"],
+            "Kargos"
+        );
+        assert_eq!(db.fight_detail("k").unwrap().unwrap()["boss_name"], "");
     }
 
     #[test]

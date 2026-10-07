@@ -216,6 +216,8 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">Max. Zeilen <input type="range" min="1" max="24" step="1" data-k="max_rows"><output class="setting-value" data-for="max_rows"></output></label>
       <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
       <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
+      <label class="set">Pakete mitschneiden (bleibt nach Neustart an) <input type="checkbox" id="recAuto"></label>
+      <p class="muted">Der Mitschnitt hilft, Ausweichen und nDPS zu entschlüsseln. Die Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
     </div>
     <div class="card">
       <h2>Tastenkürzel unter KDE</h2>
@@ -293,6 +295,7 @@ function setStatus(c) {
   else if (c.recording_error) txt += ' · Mitschnitt-Fehler: ' + c.recording_error;
   $('#statusDot').style.background = col; $('#statusText').textContent = txt;
   $('#recBtn').textContent = c.recording_requested ? 'Mitschnitt stoppen' : 'Pakete mitschneiden';
+  if (document.activeElement !== $('#recAuto')) $('#recAuto').checked = !!c.recording_requested;
 }
 let pollTimer, livePolling = false;
 async function pollLive() {
@@ -320,6 +323,10 @@ async function pollLive() {
   finally { livePolling = false; if (!document.hidden) pollTimer = setTimeout(pollLive, 1000); }
 }
 $('#resetBtn').onclick = () => api('/api/reset', { method: 'POST' });
+$('#recAuto').onchange = async (e) => {
+  try { await api('/api/record', { method: 'POST', body: JSON.stringify({ on: e.target.checked }) }); }
+  catch (err) { e.target.checked = !e.target.checked; }
+};
 $('#recBtn').onclick = async () => {
   const r = await api('/api/record/toggle', { method: 'POST' });
   $('#recBtn').textContent = r.recording ? 'Mitschnitt stoppen' : 'Pakete mitschneiden';
@@ -395,7 +402,7 @@ async function openRun(id) {
     <button class="btn danger" id="delBtn">Löschen</button></div></div>
     <div style="margin-top:10px">${r.members.map(chip).join('')}</div></div>
   <div class="card"><h2>Gesamt über alle Bosse</h2>${bars(r.totals)}</div>
-  ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Boss')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
+  ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Unbekannter Gegner')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
     <span class="muted"> · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden · ${date(f.started_at)}</span>
     <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
     ${bars(f.players)}<div class="skills" id="sk-${esc(f.id)}"></div></details></div>`).join('')}`;
@@ -414,7 +421,7 @@ function uptimes(list, debuff) {
 async function openSkills(fid) {
   const f = await api('/api/fights/' + encodeURIComponent(fid));
   const box = document.getElementById('sk-' + fid);
-  box.innerHTML = (f.boss_debuffs && f.boss_debuffs.length ? `<h4>Debuffs auf ${esc(f.boss_name || 'dem Boss')} (Uptime)</h4>${uptimes(f.boss_debuffs, true)}` : '')
+  box.innerHTML = (f.boss_debuffs && f.boss_debuffs.length ? `<h4>Debuffs auf ${esc(f.boss_name || 'dem Gegner')} (Uptime)</h4>${uptimes(f.boss_debuffs, true)}` : '')
     + f.players.map(p => `<details><summary>${deathMark(p)}${chip(p)} <span class="num muted">${num(p.damage)} · ${num(p.dps)}/s${p.damage_received ? ` · ${num(p.damage_received)} erlitten in ${p.hits_received} Treffern` : ''}</span></summary>
     ${p.buffs && p.buffs.length ? `<h4>Buffs (Uptime)</h4>${uptimes(p.buffs, false)}` : ''}
     <div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer</th><th>Krit</th><th>Rücken</th><th>Perfekt</th><th>Pariert</th><th>Max</th></tr></thead><tbody>

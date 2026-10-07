@@ -225,6 +225,22 @@ async fn toggle_record(
 }
 
 #[derive(Deserialize)]
+struct RecordBody {
+    on: bool,
+}
+
+async fn set_record(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RecordBody>,
+) -> Result<Json<Value>, StatusCode> {
+    guard(&headers)?;
+    engine.set_recording(body.on);
+    let dir = engine.capture_dir().display().to_string();
+    Ok(Json(json!({ "recording": body.on, "dir": dir })))
+}
+
+#[derive(Deserialize)]
 struct ModeBody {
     mode: String,
 }
@@ -305,6 +321,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))
         .route("/api/reset", post(reset))
+        .route("/api/record", post(set_record))
         .route("/api/record/toggle", post(toggle_record))
         .route("/api/target-mode", post(target_mode))
         .with_state(engine)

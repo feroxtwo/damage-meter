@@ -88,8 +88,9 @@ und welche Debuffs wie lange auf dem Boss lagen, jeweils in Prozent der Kampfzei
 offenen Metern NOIA2 und AIon2-Dps-Meter übernommen.
 
 Ausweichen und nDPS entschlüsselt bisher kein offener Meter. Damit sich das ändern kann, schneidet
-`~/.local/bin/aion2-meter ctl record` (oder „Pakete mitschneiden“ im Dashboard bzw. im Overlay-Menü) die
-Spielverbindung mit, bis du es nochmal aufrufst. Die Dateien (`*.a2mcap`, rohe TCP-Daten der Spielverbindung
+der Haken „Pakete mitschneiden“ (Overlay-Menü per Rechtsklick oder Dashboard-Tab „Overlay“, alternativ
+`~/.local/bin/aion2-meter ctl record`) die Spielverbindung mit. Der Haken bleibt nach einem Neustart gesetzt,
+bis du ihn entfernst; über 2 GB werden die ältesten Mitschnitte gelöscht. Die Dateien (`*.a2mcap`, rohe TCP-Daten der Spielverbindung
 mit Zeitstempel) landen in `~/.local/share/aion2-meter/captures/`. Sie enthalten alles, was der Server
 deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zeigen willst.
 

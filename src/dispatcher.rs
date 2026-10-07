@@ -6,7 +6,7 @@
 //! per-record terminator count, and a flow locks once it sustains that marker
 //! at the rate only the live game produces.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -32,11 +32,14 @@ const PROCESS_CHECK_RUNNING_MS: i64 = 60_000;
 const MAX_SCAN_BUFFER: usize = 2 << 20;
 /// Bundles inside bundles, at most this deep.
 const MAX_BUNDLE_DEPTH: u8 = 3;
-const MAX_CANDIDATE_FLOWS: usize = 128;
+/// Streams watched for the game at once; past this the quietest is dropped.
+const MAX_CANDIDATE_FLOWS: usize = 32;
+/// A watched stream silent this long is forgotten.
+const CANDIDATE_IDLE_MS: i64 = 60_000;
+/// Recent payloads kept per watched stream, replayed when it locks.
+const CANDIDATE_BUFFER_BYTES: usize = 1 << 20;
 /// A locked connection silent this long may hand over to another stream.
 const LOCK_QUIET_MS: i64 = 3_000;
-/// What a takeover candidate may buffer before it is locked.
-const HANDOVER_BUFFER_BYTES: usize = 1 << 20;
 
 fn now_ms() -> i64 {
     SystemTime::now()
@@ -130,6 +133,35 @@ impl EffectScanner {
     }
 }
 
+/// Recordings kept at most, all files together; the oldest go first.
+const MAX_CAPTURE_BYTES: u64 = 2 << 30;
+
+/// Delete the oldest recordings until the rest fit in `keep` bytes.
+fn prune_captures(dir: &std::path::Path, keep: u64) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = entries
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "a2mcap"))
+        .filter_map(|e| {
+            let m = e.metadata().ok()?;
+            Some((m.modified().ok()?, m.len(), e.path()))
+        })
+        .collect();
+    files.sort();
+    let mut total: u64 = files.iter().map(|f| f.1).sum();
+    for (_, len, path) in files {
+        if total <= keep {
+            break;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            tracing::info!("Deleted old recording {}", path.display());
+            total -= len;
+        }
+    }
+}
+
 /// Packet recordings (`aion2-meter ctl record`): the game connection's raw
 /// TCP payloads, for working out packets no meter decodes yet.
 ///
@@ -146,6 +178,7 @@ impl Recorder {
 
     pub fn create(dir: &std::path::Path, now: i64) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
+        prune_captures(dir, MAX_CAPTURE_BYTES);
         let path = dir.join(format!("aion2-{now}.a2mcap"));
         let mut out = BufWriter::new(File::options().write(true).create_new(true).open(&path)?);
         out.write_all(Self::MAGIC)?;
@@ -230,57 +263,81 @@ impl FlowKey {
     }
 }
 
-/// While locked: other server streams carrying the combat marker, with what
-/// they sent so far. The game opens a new connection when it reconnects or
-/// changes servers; once the old one has gone quiet, the new one takes over
-/// with nothing lost.
+/// Every stream that is not the locked game connection, with what it sent
+/// recently. Nothing is parsed before a stream is known to be the game's, but
+/// its recent payloads are replayed when it is: the monsters of an instance
+/// spawn when you enter, long before the first fight shows the combat marker,
+/// and without those packets the meter cannot name them.
+///
+/// While locked, the same rule lets a new connection (reconnect, server
+/// change) take over once the old one has gone quiet.
 #[derive(Default)]
-struct Handover {
-    candidates: HashMap<FlowKey, Candidate>,
+struct Candidates {
+    flows: HashMap<FlowKey, Candidate>,
 }
 
 #[derive(Default)]
 struct Candidate {
     hits: u32,
     last_hit: i64,
-    chunks: Vec<Vec<u8>>,
+    last_seen: i64,
+    /// Looked like TLS: never the game, nothing buffered.
+    tls: bool,
+    chunks: VecDeque<Vec<u8>>,
     bytes: usize,
 }
 
-impl Handover {
-    /// Returns the stream and its buffered payloads once it should become the
-    /// game connection.
+impl Candidates {
+    /// Returns the stream and its buffered payloads (oldest first) once it
+    /// should become the game connection. `may_lock` is false while a locked
+    /// connection is still talking.
     fn observe(
         &mut self,
-        cap: &CapturedPayload,
+        cap: CapturedPayload,
         now: i64,
-        lock_quiet: bool,
+        may_lock: bool,
     ) -> Option<(FlowKey, Vec<Vec<u8>>)> {
-        if looks_like_tls(&cap.data) {
+        let key = FlowKey::from_server(&cap);
+        if !self.flows.contains_key(&key) {
+            self.flows
+                .retain(|_, c| now - c.last_seen <= CANDIDATE_IDLE_MS);
+            if self.flows.len() >= MAX_CANDIDATE_FLOWS {
+                // Make room by forgetting the stream silent the longest.
+                let oldest = self
+                    .flows
+                    .iter()
+                    .min_by_key(|(_, c)| c.last_seen)
+                    .map(|(k, _)| k.clone())?;
+                self.flows.remove(&oldest);
+            }
+        }
+        let c = self.flows.entry(key.clone()).or_default();
+        c.last_seen = now;
+        if c.tls || looks_like_tls(&cap.data) {
+            c.tls = true;
+            c.chunks.clear();
+            c.bytes = 0;
             return None;
         }
-        self.candidates
-            .retain(|_, c| now - c.last_hit <= SIGNATURE_WINDOW_MS);
-        let key = FlowKey::from_server(cap);
-        let signature = contains_signature(&cap.data);
-        if !self.candidates.contains_key(&key)
-            && (!signature || self.candidates.len() >= MAX_CANDIDATE_FLOWS)
-        {
-            return None;
-        }
-        let c = self.candidates.entry(key.clone()).or_default();
-        if signature {
+        if contains_signature(&cap.data) {
+            if now - c.last_hit > SIGNATURE_WINDOW_MS {
+                c.hits = 0;
+            }
             c.hits += 1;
             c.last_hit = now;
         }
-        if c.bytes + cap.data.len() <= HANDOVER_BUFFER_BYTES {
-            c.bytes += cap.data.len();
-            c.chunks.push(cap.data.clone());
+        c.bytes += cap.data.len();
+        c.chunks.push_back(cap.data);
+        while c.bytes > CANDIDATE_BUFFER_BYTES {
+            match c.chunks.pop_front() {
+                Some(old) => c.bytes -= old.len(),
+                None => break,
+            }
         }
-        if c.hits >= SIGNATURE_LOCK_THRESHOLD && lock_quiet {
-            let c = self.candidates.remove(&key)?;
-            self.candidates.clear();
-            return Some((key, c.chunks));
+        if c.hits >= SIGNATURE_LOCK_THRESHOLD && may_lock {
+            let c = self.flows.remove(&key)?;
+            self.flows.clear();
+            return Some((key, c.chunks.into()));
         }
         None
     }
@@ -305,9 +362,8 @@ impl Dispatcher {
         let mut flows: HashMap<FlowKey, (StreamAssembler, StreamProcessor, EffectScanner)> =
             HashMap::new();
         let mut recorder: Option<Recorder> = None;
-        let mut sig_hits: HashMap<FlowKey, (u32, i64)> = HashMap::new();
+        let mut candidates = Candidates::default();
         let mut lock: Option<FlowKey> = None;
-        let mut handover = Handover::default();
         let mut last_lock_packet_ms = 0i64;
         let mut last_parsed_ms = 0i64;
         let mut last_process_check = 0i64;
@@ -345,7 +401,7 @@ impl Dispatcher {
                     if !running && game {
                         lock = None;
                         flows.clear();
-                        sig_hits.clear();
+                        candidates = Candidates::default();
                         self.engine.ping.reset();
                     }
                     game = running;
@@ -365,7 +421,6 @@ impl Dispatcher {
                 );
                 lock = None;
                 flows.clear();
-                sig_hits.clear();
                 self.engine.ping.reset();
                 self.engine.set_locked(None);
             }
@@ -375,24 +430,29 @@ impl Dispatcher {
             } else {
                 recorder = None;
                 self.engine.recording_paused();
-                sig_hits.retain(|_, (_, seen)| now - *seen <= SIGNATURE_WINDOW_MS);
-                flows.retain(|key, _| sig_hits.contains_key(key));
             }
 
             let Some(cap) = cap else {
                 continue;
             };
-            let device = cap.device_name.clone().unwrap_or_default();
-            if lock.as_ref().is_some_and(|l| l.direction(&cap).is_none()) {
-                let quiet = now - last_lock_packet_ms >= LOCK_QUIET_MS;
-                if let Some((key, chunks)) = handover.observe(&cap, now, quiet) {
-                    tracing::info!(
-                        "Game connection moved to server port {} on {}",
-                        key.server_port,
-                        key.device
-                    );
+            let Some(from_server) = lock.as_ref().and_then(|l| l.direction(&cap)) else {
+                let may_lock = lock.is_none() || now - last_lock_packet_ms >= LOCK_QUIET_MS;
+                if let Some((key, chunks)) = candidates.observe(cap, now, may_lock) {
+                    if lock.is_some() {
+                        tracing::info!(
+                            "Game connection moved to server port {} on {}",
+                            key.server_port,
+                            key.device
+                        );
+                        self.engine.ping.reset();
+                    } else {
+                        tracing::info!(
+                            "Locked onto game server port {} on {}",
+                            key.server_port,
+                            key.device
+                        );
+                    }
                     flows.clear();
-                    self.engine.ping.reset();
                     self.engine
                         .set_locked(Some((key.server_port, key.device.clone())));
                     let (assembler, processor, effects) =
@@ -410,76 +470,37 @@ impl Dispatcher {
                     last_lock_packet_ms = now;
                 }
                 continue;
-            }
-            if let Some(l) = &lock {
-                let Some(from_server) = l.direction(&cap) else {
-                    continue;
-                };
-                last_lock_packet_ms = now;
-                if let Some(rec) = &mut recorder
-                    && let Err(e) = rec.write(now, from_server, l.server_port, &cap.data)
-                {
-                    tracing::error!("Recording failed: {e}");
-                    recorder = None;
-                    self.engine.stop_recording(Some(e.to_string()));
-                }
-                let before = self.engine.ping.current_ping_ms();
-                self.engine.ping.on_packet(&cap, l.server_port);
-                if self.engine.ping.current_ping_ms() != before {
-                    last_parsed_ms = now;
-                }
-                if !from_server {
-                    continue; // only server -> client carries combat
-                }
-            } else if looks_like_tls(&cap.data) || !contains_signature(&cap.data) {
+            };
+            let Some(l) = lock.as_ref() else {
                 continue;
+            };
+            last_lock_packet_ms = now;
+            if let Some(rec) = &mut recorder
+                && let Err(e) = rec.write(now, from_server, l.server_port, &cap.data)
+            {
+                tracing::error!("Recording failed: {e}");
+                recorder = None;
+                self.engine.stop_recording(Some(e.to_string()));
+            }
+            let before = self.engine.ping.current_ping_ms();
+            self.engine.ping.on_packet(&cap, l.server_port);
+            if self.engine.ping.current_ping_ms() != before {
+                last_parsed_ms = now;
+            }
+            if !from_server {
+                continue; // only server -> client carries combat
             }
 
-            let key = FlowKey::from_server(&cap);
-            if lock.is_none() && !flows.contains_key(&key) && flows.len() >= MAX_CANDIDATE_FLOWS {
-                continue;
-            }
             let (assembler, processor, effects) =
-                flows.entry(key.clone()).or_insert_with(|| self.new_flow());
-
-            if lock.is_none() {
-                let slot = sig_hits.entry(key.clone()).or_insert((0, now));
-                if now - slot.1 > SIGNATURE_WINDOW_MS {
-                    slot.0 = 0;
-                }
-                slot.0 += 1;
-                slot.1 = now;
-            }
-
+                flows.entry(l.clone()).or_insert_with(|| self.new_flow());
             if assembler.process_chunk(&cap.data, processor) {
                 last_parsed_ms = now;
             }
-            if lock.is_some() {
-                effects.feed(&cap.data, |payload| {
-                    if let Some(event) = buffs::parse(payload) {
-                        self.engine.buffs.record(event, now);
-                    }
-                });
-            }
-
-            if lock.is_none()
-                && sig_hits
-                    .get(&key)
-                    .is_some_and(|(c, _)| *c >= SIGNATURE_LOCK_THRESHOLD)
-            {
-                tracing::info!(
-                    "Locked onto game server port {} on {}",
-                    cap.src_port,
-                    device
-                );
-                lock = Some(key.clone());
-                last_parsed_ms = now;
-                last_lock_packet_ms = now;
-                handover = Handover::default();
-                flows.retain(|k, _| *k == key);
-                sig_hits.clear();
-                self.engine.set_locked(Some((cap.src_port, device)));
-            }
+            effects.feed(&cap.data, |payload| {
+                if let Some(event) = buffs::parse(payload) {
+                    self.engine.buffs.record(event, now);
+                }
+            });
         }
     }
 }
@@ -549,6 +570,33 @@ mod tests {
     }
 
     #[test]
+    fn old_recordings_make_room() {
+        let dir = std::env::temp_dir().join(format!("a2m-prune-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (i, name) in ["a.a2mcap", "b.a2mcap", "c.a2mcap"].iter().enumerate() {
+            std::fs::write(dir.join(name), vec![0u8; 100]).unwrap();
+            let t =
+                std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(i as u64 + 1);
+            File::options()
+                .write(true)
+                .open(dir.join(name))
+                .unwrap()
+                .set_modified(t)
+                .unwrap();
+        }
+        std::fs::write(dir.join("notes.txt"), vec![0u8; 500]).unwrap();
+        prune_captures(&dir, 250);
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(left, ["b.a2mcap", "c.a2mcap", "notes.txt"]);
+    }
+
+    #[test]
     fn recorder_writes_framed_payloads() {
         let dir = std::env::temp_dir().join(format!("a2m-rec-{}", std::process::id()));
         let path = {
@@ -599,38 +647,62 @@ mod tests {
     }
 
     #[test]
-    fn a_reconnect_takes_over_once_the_old_connection_is_quiet() {
-        let mut handover = Handover::default();
+    fn packets_before_the_lock_are_replayed() {
+        let mut c = Candidates::default();
         let combat = [0x0E, 0x00, 0x36];
-        // Unrelated traffic is never a candidate.
+        // Spawn packets arrive long before the first fight.
+        assert!(c.observe(server_payload(50001, &[7]), 0, true).is_none());
+        // A TLS stream is never buffered.
+        let tls = server_payload(50002, &[0x17, 0x03, 0x03, 0, 1]);
+        assert!(c.observe(tls, 0, true).is_none());
+        assert!(c.observe(server_payload(50002, &combat), 1, true).is_none());
         assert!(
-            handover
-                .observe(&server_payload(50001, &[1, 2, 3]), 0, true)
-                .is_none()
+            c.flows[&FlowKey::from_server(&server_payload(50002, &[]))]
+                .chunks
+                .is_empty()
         );
         for i in 0..SIGNATURE_LOCK_THRESHOLD - 1 {
             let cap = server_payload(50001, &combat);
-            assert!(handover.observe(&cap, i as i64 * 10, false).is_none());
+            assert!(c.observe(cap, 30_000 + i as i64, true).is_none());
         }
-        // Payloads without the marker are kept for the new parser too.
-        assert!(
-            handover
-                .observe(&server_payload(50001, &[7]), 200, false)
-                .is_none()
-        );
-        // Enough markers, but the old connection is still talking.
-        assert!(
-            handover
-                .observe(&server_payload(50001, &combat), 210, false)
-                .is_none()
-        );
-        let (key, chunks) = handover
-            .observe(&server_payload(50001, &combat), 220, true)
-            .expect("takes over");
+        let (key, chunks) = c
+            .observe(server_payload(50001, &combat), 30_100, true)
+            .expect("locks");
         assert_eq!(key.client_port, 50001);
-        assert_eq!(chunks.len(), SIGNATURE_LOCK_THRESHOLD as usize + 2);
-        assert_eq!(chunks[SIGNATURE_LOCK_THRESHOLD as usize - 1], vec![7]);
-        assert!(handover.candidates.is_empty());
+        assert_eq!(chunks.len(), SIGNATURE_LOCK_THRESHOLD as usize + 1);
+        assert_eq!(chunks[0], vec![7]);
+        assert!(c.flows.is_empty());
+    }
+
+    #[test]
+    fn a_reconnect_waits_until_the_old_connection_is_quiet() {
+        let mut c = Candidates::default();
+        let combat = [0x0E, 0x00, 0x36];
+        for i in 0..SIGNATURE_LOCK_THRESHOLD {
+            assert!(
+                c.observe(server_payload(50001, &combat), i as i64, false)
+                    .is_none()
+            );
+        }
+        assert!(
+            c.observe(server_payload(50001, &combat), 20, true)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn candidate_buffers_and_count_are_bounded() {
+        let mut c = Candidates::default();
+        for port in 0..MAX_CANDIDATE_FLOWS as u16 + 5 {
+            c.observe(server_payload(40000 + port, &[1]), port as i64, true);
+        }
+        assert_eq!(c.flows.len(), MAX_CANDIDATE_FLOWS);
+        let big = vec![1u8; 300_000];
+        for _ in 0..10 {
+            c.observe(server_payload(60000, &big), 100, true);
+        }
+        let flow = &c.flows[&FlowKey::from_server(&server_payload(60000, &[]))];
+        assert!(flow.bytes <= CANDIDATE_BUFFER_BYTES && flow.chunks.len() == 3);
     }
 
     #[test]

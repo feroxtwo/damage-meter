@@ -154,17 +154,13 @@ impl Overlay {
             self.engine.overlay.write().locked = true;
             ui.close();
         }
-        let recording = self.engine.recording_wanted();
+        let mut recording = self.engine.recording_wanted();
         if ui
-            .button(if recording {
-                "Mitschnitt stoppen"
-            } else {
-                "Pakete mitschneiden"
-            })
-            .clicked()
+            .checkbox(&mut recording, "Pakete mitschneiden")
+            .on_hover_text("Bleibt nach einem Neustart an, bis du den Haken entfernst")
+            .changed()
         {
-            self.engine.toggle_recording();
-            ui.close();
+            self.engine.set_recording(recording);
         }
         ui.separator();
         ui.label("Ziel");
