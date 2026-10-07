@@ -76,7 +76,9 @@ pub struct Live {
     pub rows: Vec<LiveRow>,
     pub target_name: String,
     pub target_id: i32,
+    pub target_started_at: Option<i64>,
     pub target_mode: String,
+    pub reset_notice: Option<String>,
     /// 0..=1, or `None` when the target's HP is unknown.
     pub target_hp: Option<f64>,
     pub hp_estimated: bool,
@@ -111,6 +113,11 @@ pub struct OverlaySettings {
     pub pin_self: bool,
     pub metric: String,
     pub position: Option<[f32; 2]>,
+    pub theme: String,
+    pub compact: bool,
+    /// Zero disables idle reset. Stored with profiles.
+    pub idle_reset_seconds: u64,
+    pub wipe_reset: bool,
 }
 
 impl Default for OverlaySettings {
@@ -126,6 +133,10 @@ impl Default for OverlaySettings {
             pin_self: true,
             metric: "damage".into(),
             position: None,
+            theme: "midnight".into(),
+            compact: false,
+            idle_reset_seconds: 0,
+            wipe_reset: false,
         }
     }
 }
@@ -139,6 +150,7 @@ struct RunState {
 
 pub struct Engine {
     pub storage: Arc<DataStorage>,
+    pub combat_gate: Mutex<()>,
     pub skills: Arc<SkillLookup>,
     pub npcs: Arc<NpcLookup>,
     pub ping: Arc<PingTracker>,
@@ -156,6 +168,8 @@ pub struct Engine {
     capture_dir: PathBuf,
     series: Mutex<HashMap<(i32, i64), Series>>,
     training: Mutex<Value>,
+    encounter: Mutex<crate::encounters::Monitor>,
+    reset_notice: RwLock<Option<String>>,
 }
 
 fn load_lookups(language: &str) -> (SkillLookup, NpcLookup) {
@@ -217,6 +231,7 @@ impl Engine {
         calc.lock().set_target_selection_mode(&target_mode);
         let engine = Arc::new(Self {
             storage,
+            combat_gate: Mutex::new(()),
             skills,
             npcs,
             ping,
@@ -242,6 +257,8 @@ impl Engine {
             capture_dir,
             series: Mutex::new(HashMap::new()),
             training: Mutex::new(json!({"state":"idle"})),
+            encounter: Mutex::new(crate::encounters::Monitor::default()),
+            reset_notice: RwLock::new(None),
         });
 
         if engine.db.meta(RECORD_SETTING).ok().flatten().as_deref() == Some("1") {
@@ -274,9 +291,11 @@ impl Engine {
         }
     }
     pub fn replay_tick(&self) {
+        self.process_reset();
         let dps = self.calc.lock().get_dps();
         self.observe();
         let live = self.build_live(&dps);
+        self.automatic_reset(&live);
         *self.live.write() = live;
     }
     pub fn replay_report(&self) -> Value {
@@ -286,7 +305,7 @@ impl Engine {
             let d=self.calc.lock().get_target_details(t.target_id,None);
             json!({"target":t,"details":d,"analytics":self.series.lock().get(&(t.target_id,d.start_time)).map(|s|s.json())})
         }).collect();
-        json!({"live":self.live(),"context":c,"targets":targets,"parser_rev":"1f3a1777f43088da8e7c8915c841a0f50afe72e3"})
+        json!({"live":self.live(),"context":c,"targets":targets,"parser_rev":crate::updates::PARSER_REV})
     }
     pub fn set_capture_error(&self, error: Option<String>) {
         self.status.write().error = error;
@@ -419,6 +438,12 @@ impl Engine {
         body.opacity = body.opacity.clamp(0.0, 1.0);
         body.scale = body.scale.clamp(0.6, 2.5);
         body.max_rows = body.max_rows.clamp(1, 24);
+        if !["midnight", "aether", "ember"].contains(&body.theme.as_str()) {
+            body.theme = "midnight".into();
+        }
+        if body.idle_reset_seconds != 0 {
+            body.idle_reset_seconds = body.idle_reset_seconds.clamp(15, 900);
+        }
         if !["damage", "heal", "damage_received"].contains(&body.metric.as_str()) {
             body.metric = "damage".into();
         }
@@ -467,8 +492,8 @@ impl Engine {
         let details = calc.get_target_details(target, Some(&[id]));
         let context = calc.get_details_context();
         let actor = context.actors.iter().find(|a| a.actor_id == id);
-        json!({"id":id,"target_id":target,"duration_ms":details.battle_time,
-          "skills":crate::db::skill_rows(&details.skills,id),"heal_skills":crate::db::skill_rows(&details.heal_skills,id),"actor":actor})
+        json!({"id":id,"target_id":target,"start_time":details.start_time,"duration_ms":details.battle_time,
+          "skills":crate::db::skill_rows(&details.skills,id),"heal_skills":crate::db::skill_rows(&details.heal_skills,id),"actor":actor,"analytics":self.series.lock().get(&(target,details.start_time)).map(|s|s.json()),"data_quality":"observed_hits_unknown_quality_coverage"})
     }
     pub fn start_training(&self, seconds: i64) {
         self.set_target_mode("trainTargets");
@@ -604,9 +629,9 @@ impl Engine {
             .unwrap_or_else(|| "Unbekannter Gegner".into())
     }
 
-    fn save_fights(&self, force: bool) {
+    fn save_fights(&self, force: bool) -> bool {
         if self.storage.damage_generation() <= 0 {
-            return;
+            return true;
         }
         let (mut records, local) = {
             let mut calc = if force {
@@ -614,14 +639,63 @@ impl Engine {
             } else {
                 match self.calc.try_lock() {
                     Some(c) => c,
-                    None => return,
+                    None => return false,
                 }
             };
-            let records = if force {
+            let mut records = if force {
                 calc.snapshot_boss_fights_force()
             } else {
                 calc.snapshot_boss_fights()
             };
+            if force {
+                // The upstream periodic saver omits short attempts and already-idle targets.
+                // Before a reset retain every target with observed damage by our player.
+                let context = calc.get_details_context();
+                if let Some(local_id) = self.storage.local_player_id() {
+                    for target in &context.targets {
+                        if !target.actor_damage.contains_key(&(local_id as i32)) {
+                            continue;
+                        }
+                        let details = calc.get_target_details(target.target_id, None);
+                        let start = target.last_damage_time - target.battle_time;
+                        let id = format!("auto_{}_{}", target.target_id, start);
+                        if records.iter().any(|r| r.id == id) {
+                            continue;
+                        }
+                        let mob_code = self
+                            .storage
+                            .get_mob_data()
+                            .get(&target.target_id)
+                            .copied()
+                            .unwrap_or(0);
+                        let actors: Vec<_> = context
+                            .actors
+                            .iter()
+                            .filter(|a| {
+                                details
+                                    .skills
+                                    .iter()
+                                    .any(|skill| skill.actor_id == a.actor_id)
+                            })
+                            .cloned()
+                            .collect();
+                        let record = serde_json::from_value(
+                            json!({"id":id,"bossName":target.target_name,
+                            "targetId":target.target_id,"startTimeMs":start,"durationMs":target.battle_time,
+                            "totalDamage":target.total_damage,"jobs":[],"dungeonId":self.storage.current_dungeon_id(),
+                            "mobCode":mob_code,"isTrain":self.npcs.is_training_dummy(mob_code),
+                            "details":details,"actors":actors}),
+                        );
+                        match record {
+                            Ok(r) => records.push(r),
+                            Err(e) => {
+                                tracing::error!("Attempt snapshot: {e}");
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
             (
                 records,
                 self.live
@@ -649,11 +723,11 @@ impl Engine {
             .db
             .save_fights(&records, dungeon, &self.self_names(), local, &dead)
         {
-            Ok(0) => return,
+            Ok(0) => return true,
             Ok(n) => tracing::info!("Saved {n} fight(s)"),
             Err(e) => {
                 tracing::error!("Saving fights failed: {e:#}");
-                return;
+                return false;
             }
         }
         for record in &records {
@@ -688,6 +762,7 @@ impl Engine {
                     record.start_time_ms,
                     record.start_time_ms + record.duration_ms,
                 );
+                data["parser_rev"] = json!(crate::updates::PARSER_REV);
                 data["outcome"] = json!(if self.storage.is_entity_dead(record.target_id) {
                     "kill"
                 } else {
@@ -695,13 +770,16 @@ impl Engine {
                 });
                 if let Err(e) = self.db.save_analytics(&record.id, &data) {
                     tracing::error!("Saving analytics: {e}");
+                    return false;
                 }
             }
         }
         let effects = self.fight_effects(&records);
         if let Err(e) = self.db.save_effects(&records, &effects) {
             tracing::error!("Saving buffs failed: {e:#}");
+            return false;
         }
+        true
     }
 
     /// Follow instance entries and exits, and record who was in the party.
@@ -918,7 +996,9 @@ impl Engine {
             rows,
             target_name: self.target_name(dps),
             target_id: dps.target_id,
+            target_started_at: (total > 0.0).then_some(details.start_time),
             target_mode: dps.target_mode.clone(),
+            reset_notice: self.reset_notice.read().clone(),
             target_hp,
             hp_estimated: dps.target_current_hp < 0,
             training: self.training.lock().clone(),
@@ -935,6 +1015,111 @@ impl Engine {
         }
     }
 
+    fn automatic_reset(&self, live: &Live) {
+        if live.total_damage <= 0.0
+            || live.target_id <= 0
+            || live.target_mode == "trainTargets"
+            || ["armed", "running"].contains(&self.training.lock()["state"].as_str().unwrap_or(""))
+        {
+            return;
+        }
+        let context = self.calc.lock().get_details_context();
+        let Some(target) = context
+            .targets
+            .iter()
+            .find(|t| t.target_id == live.target_id)
+        else {
+            return;
+        };
+        let settings = self.overlay.read().clone();
+        let reason = self.encounter.lock().update(
+            crate::encounters::Observation {
+                key: (
+                    target.target_id,
+                    target.last_damage_time - target.battle_time,
+                ),
+                now: now_ms(),
+                last_damage: context
+                    .targets
+                    .iter()
+                    .map(|t| t.last_damage_time)
+                    .max()
+                    .unwrap_or(target.last_damage_time),
+                hp: if live.hp_estimated {
+                    None
+                } else {
+                    live.target_hp
+                },
+                all_dead: live.rows.len() >= 2
+                    && live.rows.iter().any(|r| r.is_self)
+                    && live.rows.iter().all(|r| r.dead),
+                target_dead: self.storage.is_entity_dead(live.target_id),
+            },
+            settings.idle_reset_seconds,
+            settings.wipe_reset && live.target_mode == "bossTargets",
+        );
+        if let Some(reason) = reason {
+            self.reset_combat(reason);
+        }
+    }
+    fn process_reset(&self) {
+        if self.reset_requested.swap(false, Ordering::SeqCst) {
+            self.reset_combat("manual");
+        }
+    }
+    fn reset_combat(&self, reason: &str) -> bool {
+        let _gate = self.combat_gate.lock();
+        if reason != "manual" {
+            let context = self.calc.lock().get_details_context();
+            let newest = context
+                .targets
+                .iter()
+                .map(|t| t.last_damage_time)
+                .max()
+                .unwrap_or(now_ms());
+            let quiet = if reason == "wipe" {
+                5_000
+            } else {
+                self.overlay.read().idle_reset_seconds as i64 * 1000
+            };
+            if quiet <= 0 || now_ms() - newest < quiet {
+                return false;
+            }
+        }
+        if !self.save_fights(true) {
+            *self.reset_notice.write() =
+                Some("Reset abgebrochen: Kampf konnte nicht gespeichert werden.".into());
+            return false;
+        }
+        let ids: Vec<_> = self
+            .storage
+            .get_combat_snapshot_light()
+            .values()
+            .map(|t| format!("auto_{}_{}", t.target_id, t.first_damage_time))
+            .collect();
+        if let Err(e) = self.db.finish_attempts(&ids, reason) {
+            tracing::error!("Finishing attempts: {e}");
+            *self.reset_notice.write() =
+                Some("Reset abgebrochen: Abschluss konnte nicht gespeichert werden.".into());
+            return false;
+        }
+        if self.training.lock()["state"] == "running" {
+            self.training.lock()["state"] = json!("interrupted");
+        }
+        self.calc.lock().restart_target_selection(true);
+        self.storage.hide_party_placeholders();
+        *self.encounter.lock() = crate::encounters::Monitor::default();
+        *self.reset_notice.write() = Some(
+            match reason {
+                "wipe" => "Wipe erkannt: Versuch gespeichert und Meter zurückgesetzt.",
+                "idle" => "Leerlauf: Versuch gespeichert und Meter zurückgesetzt.",
+                _ => "Versuch gespeichert und Meter zurückgesetzt.",
+            }
+            .into(),
+        );
+        true
+    }
+
     /// The meter's heartbeat. Runs on its own thread forever.
     pub fn run_ticks(self: Arc<Self>) {
         let mut tick: u64 = 0;
@@ -942,19 +1127,12 @@ impl Engine {
             std::thread::sleep(TICK);
             tick += 1;
 
-            if self.reset_requested.swap(false, Ordering::SeqCst) {
-                if self.training.lock()["state"] == "running" {
-                    self.training.lock()["state"] = json!("interrupted");
-                }
-                self.save_fights(true);
-                let mut calc = self.calc.lock();
-                calc.restart_target_selection(true);
-                self.storage.hide_party_placeholders();
-            }
+            self.process_reset();
 
             let dps = self.calc.lock().get_dps();
             self.observe();
             let live = self.build_live(&dps);
+            self.automatic_reset(&live);
             self.tick_training(&live);
             *self.live.write() = live;
 
@@ -1110,6 +1288,77 @@ mod tests {
         e.tick_training(&live);
         assert_eq!(e.training.lock()["best_dps"], 100.0);
         assert!(e.db.meta("last_training").unwrap().is_some());
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+    fn short_attempt() -> Arc<Engine> {
+        use a2tools_dps_meter_lib::entity::damage_packet::ParsedDamagePacket;
+        let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
+        e.set_target_mode("mostDamage");
+        e.storage.set_local_player_id(Some(2259));
+        for (time, damage) in [(1000, 100), (2000, 200)] {
+            a2tools_dps_meter_lib::clock::set_override(Some(time));
+            let mut p = ParsedDamagePacket::new();
+            p.set_actor_id(2259);
+            p.set_target_id(50_000);
+            p.set_skill_code(11010000);
+            p.set_damage(damage);
+            e.storage.append_damage(p);
+            e.storage.append_nickname_authoritative(2259, "Me");
+            e.replay_tick();
+        }
+        e
+    }
+    #[test]
+    fn reset_persists_short_attempt_before_clearing_and_does_not_overwrite_it() {
+        let e = short_attempt();
+        e.request_reset();
+        e.replay_tick();
+        let saved = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        assert_eq!(saved["total_damage"], 300);
+        assert_eq!(saved["duration_ms"], 1000);
+        assert_eq!(saved["analytics"]["end_reason"], "manual");
+        assert_eq!(e.live().total_damage, 0.0);
+        e.request_reset();
+        e.replay_tick();
+        assert_eq!(
+            e.db.fight_detail("auto_50000_1000").unwrap().unwrap()["total_damage"],
+            300
+        );
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+    #[test]
+    fn idle_reset_saves_attempt_and_training_is_exempt() {
+        let e = short_attempt();
+        e.modify_overlay(|s| s.idle_reset_seconds = 15).unwrap();
+        *e.training.lock() = json!({"state":"armed","seconds":60});
+        a2tools_dps_meter_lib::clock::set_override(Some(18_000));
+        e.replay_tick();
+        assert_eq!(e.live().total_damage, 300.0);
+        e.cancel_training();
+        e.replay_tick();
+        e.replay_tick();
+        assert_eq!(e.live().total_damage, 0.0);
+        assert_eq!(
+            e.db.fight_detail("auto_50000_1000").unwrap().unwrap()["analytics"]["end_reason"],
+            "idle"
+        );
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+    #[test]
+    fn storage_failure_prevents_reset_and_retry_retains_the_attempt() {
+        let e = short_attempt();
+        e.db.fail_fight_writes(true);
+        assert!(!e.reset_combat("manual"));
+        assert_eq!(
+            e.storage.get_combat_snapshot_light()[&50000].total_damage,
+            300
+        );
+        e.db.fail_fight_writes(false);
+        assert!(e.reset_combat("manual"));
+        assert_eq!(
+            e.db.fight_detail("auto_50000_1000").unwrap().unwrap()["total_damage"],
+            300
+        );
         a2tools_dps_meter_lib::clock::set_override(None);
     }
     #[test]

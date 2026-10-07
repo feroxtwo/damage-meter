@@ -221,6 +221,9 @@ fn decorate_job(rows: &mut [Value]) {
     }
 }
 
+fn observed_rate(count: i32, hits: f64) -> Option<f64> {
+    (count > 0).then_some(count as f64 * 100.0 / hits)
+}
 pub fn skill_rows(
     skills: &[a2tools_dps_meter_lib::entity::details_context::DetailSkillEntry],
     actor: i32,
@@ -228,11 +231,14 @@ pub fn skill_rows(
     let mut rows: Vec<Value> = skills.iter().filter(|s|s.actor_id==actor).map(|s| {
         let hits=s.time.max(1) as f64;
         json!({"code":s.code,"name":if s.name.is_empty(){format!("#{}",s.code)}else{s.name.clone()},
-          "damage":s.dmg,"hits":s.time,"crit_rate":s.crit as f64*100.0/hits,
-          "back_rate":s.back as f64*100.0/hits,"frontal_rate":s.frontal as f64*100.0/hits,
-          "perfect_rate":s.perfect as f64*100.0/hits,"parry_rate":s.parry as f64*100.0/hits,
-          "double_rate":s.double as f64*100.0/hits,"multi_hit_count":s.multi_hit_count,
-          "multi_hit_damage":s.multi_hit_damage,"max":s.max_dmg,"min":s.min_dmg,
+          "damage":s.dmg,"hits":s.time,"quality_coverage":"unknown","crit_rate":observed_rate(s.crit,hits),
+          "back_rate":observed_rate(s.back,hits),"frontal_rate":observed_rate(s.frontal,hits),
+          "perfect_rate":observed_rate(s.perfect,hits),"parry_rate":observed_rate(s.parry,hits),
+          "double_rate":observed_rate(s.double,hits),"multi_hit_count":(s.multi_hit_count>0).then_some(s.multi_hit_count),
+          "multi_hit_damage":(s.multi_hit_damage>0).then_some(s.multi_hit_damage),
+          "block_rate":observed_rate(s.shield_block,hits),"perfect_block_rate":observed_rate(s.perfect_block,hits),
+          "endurance_rate":observed_rate(s.iron_wall,hits),"regeneration_rate":observed_rate(s.regeneration,hits),
+          "miss_count":(s.miss>0).then_some(s.miss),"resist_count":(s.resist>0).then_some(s.resist),"max":s.max_dmg,"min":s.min_dmg,
           "is_dot":s.is_dot,"hit_timestamps":s.hit_timestamps})
     }).collect();
     rows.sort_by_key(|r| std::cmp::Reverse(r["damage"].as_i64().unwrap_or(0)));
@@ -253,6 +259,12 @@ impl Db {
         })
     }
 
+    #[cfg(test)]
+    pub fn fail_fight_writes(&self, fail: bool) {
+        self.conn.lock().execute_batch(if fail {
+            "CREATE TRIGGER test_write_error BEFORE INSERT ON fights BEGIN SELECT RAISE(ABORT,'test disk failure'); END;"
+        } else {"DROP TRIGGER test_write_error;"}).unwrap();
+    }
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
@@ -811,6 +823,41 @@ impl Db {
         self.conn.lock().execute("INSERT INTO fight_analytics(fight_id,data) VALUES(?1,?2) ON CONFLICT(fight_id) DO UPDATE SET data=excluded.data",params![id,data.to_string()])?;
         Ok(())
     }
+    pub fn finish_attempts(&self, ids: &[String], reason: &str) -> Result<()> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        for id in ids {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM fights WHERE id=?1)",
+                params![id],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                continue;
+            }
+            let raw: Option<String> = tx
+                .query_row(
+                    "SELECT data FROM fight_analytics WHERE fight_id=?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let mut data = raw
+                .and_then(|r| serde_json::from_str::<Value>(&r).ok())
+                .unwrap_or_else(|| json!({}));
+            // A reset after a kill must not turn it into a wipe.
+            if data["end_reason"].is_string() {
+                continue;
+            }
+            data["end_reason"] = json!(reason);
+            if reason == "wipe" && data["outcome"] != "kill" {
+                data["outcome"] = json!("wipe");
+            }
+            tx.execute("INSERT INTO fight_analytics(fight_id,data) VALUES(?1,?2) ON CONFLICT(fight_id) DO UPDATE SET data=excluded.data",params![id,data.to_string()])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
     pub fn annotate(&self, id: &str, favorite: bool, note: &str, tags: &str) -> Result<bool> {
         let conn = self.conn.lock();
         let exists: bool = conn.query_row(
@@ -1067,6 +1114,30 @@ mod tests {
         .unwrap()
     }
 
+    #[test]
+    fn attempt_ending_keeps_kills_and_absent_quality_is_not_a_zero_measurement() {
+        let db = Db::in_memory().unwrap();
+        db.save_fights(
+            &[record("a", 1000, 1500)],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        db.save_analytics("a", &json!({"outcome":"kill"})).unwrap();
+        db.finish_attempts(&["a".into()], "wipe").unwrap();
+        let f = db.fight_detail("a").unwrap().unwrap();
+        assert_eq!(f["analytics"]["outcome"], "kill");
+        let rows = &f["players"][0]["skills"];
+        assert!(rows[0]["perfect_rate"].is_null());
+        assert!(rows[0]["miss_count"].is_null());
+        db.finish_attempts(&["a".into()], "manual").unwrap();
+        assert_eq!(
+            db.fight_detail("a").unwrap().unwrap()["analytics"]["end_reason"],
+            "wipe"
+        );
+    }
     #[test]
     fn fights_keep_deaths_damage_taken_and_feed_the_boss_history() {
         let db = Db::in_memory().unwrap();

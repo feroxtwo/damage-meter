@@ -13,3 +13,21 @@ input[type=search],input[type=date],input[type=text],input:not([type]) {backgrou
 .save-status {color:var(--muted);font-size:12px} .save-error {color:var(--red)}
 #trainingResult .row {margin-top:8px} .fight-tools {flex-wrap:wrap;margin:12px 0}
 @media(max-width:600px) {dialog {padding:14px;width:calc(100vw - 16px)} .dialog-head{top:-14px} #fightLibrary .row>*{max-width:100%} }
+
+html[data-theme=aether] {--bg:#081a20;--panel:#102930;--panel2:#14353c;--accent:#75e0ce;--gold:#b8eee7;--line:#32606b}
+html[data-theme=ember] {--bg:#191115;--panel:#2a1d24;--panel2:#35242b;--accent:#f6b179;--gold:#f4d8a7;--line:#69404b}
+html[data-theme] body {background:var(--bg);color:var(--text)}
+html[data-theme] .card,html[data-theme] header,html[data-theme] .dialog-head {background:var(--panel)}
+html[data-theme] .bar {background:var(--panel2)}
+html[data-theme] .bar.compact {margin-bottom:5px}
+html[data-theme] .compact .bar {padding-top:7px;padding-bottom:7px}
+.player-pair {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.player-pair>div {min-width:0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.player-pair .table-scroll table {min-width:380px;font-size:12px}
+.player-pair .table-scroll th,.player-pair .table-scroll td {padding:8px 5px}
+.chart-legend {display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12px;margin:8px 0}
+.chart-legend span {display:flex;align-items:center;gap:7px}
+.chart-legend i {width:12px;height:3px;display:inline-block}
+@media(max-width:800px) {.player-pair {grid-template-columns:1fr}}
+
+.player-pair .timeline {min-height:0}

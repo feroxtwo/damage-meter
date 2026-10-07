@@ -20,6 +20,16 @@ pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
 const ROW: f32 = 26.0;
+fn row_height(compact: bool) -> f32 {
+    if compact { 22.0 } else { ROW }
+}
+fn palette(theme: &str) -> ([u8; 3], [u8; 3], [u8; 3]) {
+    match theme {
+        "aether" => ([8, 26, 32], [16, 41, 48], [184, 238, 231]),
+        "ember" => ([25, 17, 21], [42, 29, 36], [244, 216, 167]),
+        _ => ([11, 16, 24], [16, 28, 44], [240, 220, 170]),
+    }
+}
 const FOOTER: f32 = 22.0;
 const ICON: f32 = 18.0;
 
@@ -85,7 +95,10 @@ impl Overlay {
                 sw: 0,
                 se: 0,
             },
-            Color32::from_rgba_unmultiplied(16, 28, 44, bg.saturating_add(40)),
+            with_alpha(
+                palette(&self.engine.overlay.read().theme).1,
+                bg.saturating_add(40),
+            ),
         );
 
         let mut title = if live.target_name.is_empty() {
@@ -123,7 +136,7 @@ impl Overlay {
             Align2::LEFT_TOP,
             title,
             FontId::proportional(13.5),
-            Color32::from_rgb(240, 220, 170),
+            with_alpha(palette(&self.engine.overlay.read().theme).2, 255),
         );
         p.text(
             rect.right_top() + Vec2::new(-8.0, 4.0),
@@ -184,6 +197,20 @@ impl Overlay {
             self.engine.set_recording(recording);
         }
         ui.separator();
+        let mut compact = self.engine.overlay.read().compact;
+        if ui.checkbox(&mut compact, "Kompakte Zeilen").changed() {
+            let _ = self.engine.modify_overlay(|s| s.compact = compact);
+        }
+        for (key, label) in [
+            ("midnight", "Midnight"),
+            ("aether", "Aether"),
+            ("ember", "Ember"),
+        ] {
+            if ui.button(label).clicked() {
+                let _ = self.engine.modify_overlay(|s| s.theme = key.into());
+            }
+        }
+        ui.separator();
         ui.label("Ziel");
         for (id, label) in [
             ("bossTargets", "Bosse"),
@@ -237,7 +264,10 @@ impl Overlay {
                 "damage_received" => value * 1000.0 / live.battle_time_ms.max(1000) as f64,
                 _ => row.dps,
             };
-            let (rect, response) = ui.allocate_exact_size(Vec2::new(width, ROW), Sense::click());
+            let (rect, response) = ui.allocate_exact_size(
+                Vec2::new(width, row_height(settings.compact)),
+                Sense::click(),
+            );
             if response.clicked() && !settings.locked {
                 let _ = std::process::Command::new("xdg-open")
                     .arg(format!("{}?player={}#live", self.web_url, row.id))
@@ -311,7 +341,10 @@ impl Overlay {
                 sw: 8,
                 se: 8,
             },
-            Color32::from_rgba_unmultiplied(16, 28, 44, bg.saturating_add(40)),
+            with_alpha(
+                palette(&self.engine.overlay.read().theme).1,
+                bg.saturating_add(40),
+            ),
         );
         let c = &live.capture;
         let (dot, state) = if c.error.is_some() {
@@ -518,7 +551,10 @@ impl eframe::App for Overlay {
         }
 
         let rows = live.rows.len().min(settings.max_rows);
-        let size = Vec2::new(WIDTH, HEADER + FOOTER + ROW * rows.max(1) as f32 + 4.0);
+        let size = Vec2::new(
+            WIDTH,
+            HEADER + FOOTER + row_height(settings.compact) * rows.max(1) as f32 + 4.0,
+        );
         if size != self.last_size {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
             self.last_size = size;
@@ -534,7 +570,7 @@ impl eframe::App for Overlay {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
                 let full = Rect::from_min_size(Pos2::ZERO, size);
                 ui.painter()
-                    .rect_filled(full, 8, Color32::from_rgba_unmultiplied(11, 16, 24, bg));
+                    .rect_filled(full, 8, with_alpha(palette(&settings.theme).0, bg));
                 self.header(ui, &live, WIDTH, bg);
                 if live.rows.is_empty() {
                     let (rect, _) = ui.allocate_exact_size(Vec2::new(WIDTH, ROW), Sense::hover());

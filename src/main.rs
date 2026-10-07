@@ -5,11 +5,13 @@ mod buffs;
 mod capture;
 mod db;
 mod dispatcher;
+mod encounters;
 mod engine;
 mod names;
 mod overlay;
 mod replay;
 mod tcp;
+mod updates;
 mod web;
 
 use std::net::{IpAddr, SocketAddr};
