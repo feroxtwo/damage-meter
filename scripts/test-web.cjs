@@ -317,6 +317,8 @@ const server = http.createServer((req,res) => {
       await page.evaluate(()=>openFight('f1'));await page.locator('#pairCompare').click();
       assert.equal(await page.locator('#playerPair .player-pair>div').count(),2);
       assert.equal(await page.locator('svg[aria-label="DPS-Verlauf aller Spieler"] path[stroke-width="2"]').count(),3);
+      assert.deepEqual(await page.evaluate(()=>reportBuffs([{name:'Wachtschild',uptime:11.5},{name:'Wachtschild',uptime:9},{name:'Fury',uptime:99}]).map(b=>b.name+' '+b.uptime)),['Fury 99','Wachtschild 11.5']);
+      assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),1000);
       await page.locator('#anonFight').check();
       const [png]=await Promise.all([page.waitForEvent('download'),page.locator('#pngFight').click()]);
       const file=await png.path();const bytes=fs.readFileSync(file);assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.ok(bytes.length>5000);
@@ -329,11 +331,11 @@ const server = http.createServer((req,res) => {
       await page.evaluate(async()=>{
         const original=CanvasRenderingContext2D.prototype.fillText;window.pngTexts=[];
         CanvasRenderingContext2D.prototype.fillText=function(text,...args){window.pngTexts.push(text);return original.call(this,text,...args);};
-        try {const f={...fightExport({boss_name:'Boss',duration_ms:90000,players:[]},true),boss_name:'Boss',players:[{name:'PrivateName',skills:Array.from({length:70},(_,i)=>({name:'Skill '+i,damage:100,hits:1})),heal_skills:[],buffs:[]}]};await exportPng(f,true);}
+        try {const f={...fightExport({boss_name:'Boss',duration_ms:90000,players:[]},true),boss_name:'Boss',players:[{name:'PrivateName',skills:Array.from({length:200},(_,i)=>({name:'Skill '+i,damage:100,hits:1})),heal_skills:[],buffs:[]}]};await exportPng(f,true);}
         finally{CanvasRenderingContext2D.prototype.fillText=original;}
       });
       await delay(200);page.off('download',receive);assert.equal(downloads.length,2);
-      const text=await page.evaluate(()=>pngTexts.join(' '));assert.ok(!text.includes('PrivateName'));assert.match(text,/Skill 69/);assert.match(text,/Spieler 1/);
+      const text=await page.evaluate(()=>pngTexts.join(' '));assert.ok(!text.includes('PrivateName'));assert.match(text,/Skill 0\b/);assert.match(text,/Skill 199/);assert.match(text,/Spieler 1/);assert.match(text,/Seite 2 von 2/);
       assert.equal(downloads[1].suggestedFilename(),'aion2-kampf-2.png');
     });
     await check('chat output is one line, bounded, ordered and anonymized',async()=>{
