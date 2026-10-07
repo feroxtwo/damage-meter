@@ -15,13 +15,48 @@ window.metricRows = metricRows;
 window.bindLiveRows = l => {
   const rows=metricRows(l.rows);
   document.querySelectorAll('#liveRows .bar').forEach((el,i) => {
-    el.tabIndex=0; el.setAttribute('role','button'); el.setAttribute('aria-label',rows[i].name+' Skilldetails');
+    el.dataset.playerId=rows[i].id; el.tabIndex=0; el.setAttribute('role','button'); el.setAttribute('aria-label',rows[i].name+' Skilldetails');
     el.onclick=()=>task(openLivePlayer(rows[i].id));
     el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click();}};
   });
 };
+function renderLiveMetrics(l) {
+  const metric=metricKey(),rows=metricRows(l.rows),total=rows.reduce((n,r)=>n+r.damage,0);
+  const rate=metric==='heal'?'HPS':metric==='damage_received'?'Schaden/s':'DPS';
+  $('#groupDpsLabel').textContent='Gruppe · '+rate;
+  $('#selfDpsLabel').textContent='Ich · '+rate;
+  $('#totalDamageLabel').textContent=metric==='heal'?'Erfasste Heilung':metric==='damage_received'?'Erlittener Schaden':'Gesamtschaden';
+  const dps=metric==='damage'?total*1000/Math.max(l.battle_time_ms,1000):rows.reduce((n,r)=>n+r.dps,0);
+  for(const [id,value] of [['groupDps',dps],['selfDps',rows.find(r=>r.is_self)?.dps||0],['totalDamage',total]]) {
+    $('#'+id).textContent=num(value);$('#'+id).title=Number(value).toLocaleString('de-DE',{maximumFractionDigits:2});
+  }
+  $('#selfBurst').hidden=metric!=='damage';
+}
+function updateLiveRows(l) {
+  const box=$('#liveRows'),focused=document.activeElement?.closest('#liveRows [data-player-id]')?.dataset.playerId;
+  const html=bars(metricRows(l.rows),{empty:'<svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><b>Bereit für den nächsten Kampf</b><p>Deine Gruppe erscheint, sobald Kampfdaten ankommen. Nutze „Höchster Schaden“ für normale Gegner oder „Trainingspuppe“ für einen Test.</p>'});
+  if(box.innerHTML!==html) {
+    box.innerHTML=html;bindLiveRows(l);
+    if(focused)box.querySelector('[data-player-id="'+CSS.escape(focused)+'"]')?.focus({preventScroll:true});
+  }
+}
+function captureHelp(c) {
+  const age=c.last_packet_ms==null?null:Math.max(0,Date.now()-c.last_packet_ms);
+  let text='';
+  if(!c.permission)text='Paketmitschnitt nicht freigegeben. Nach Installation oder Update einmal ausführen: sudo setcap cap_net_raw=ep '+(c.binary?"'"+c.binary.replaceAll("'","'\\''")+"'":'/pfad/zur/aion2-meter')+' und danach das Meter neu starten.';
+  else if(c.error)text='Der Paketmitschnitt ist gestoppt. Prüfe Capture-Berechtigung und Terminalmeldung, starte das Meter anschließend neu.';
+  else if(!c.game_running)text='Starte AION 2 auf diesem Rechner. Das Meter erkennt den Prozess AION2.exe unter Proton. Eine abweichende Prozessbezeichnung kann mit --any-process getestet werden.';
+  else if(!c.locked_port)text='Das Spiel läuft. Logge deinen Charakter ein und greife ein Ziel an. Die Verbindungserkennung braucht mehrere passende Pakete. Bei VPN-Problemen Verbindung wechseln und erneut testen.';
+  else if(age>15000)text='Seit '+Math.floor(age/1000)+' Sekunden kein Paket der Spielverbindung. Außerhalb eines Kampfes kann das normal sein. Bei laufendem Kampf Verbindung und VPN prüfen. Die Anzeige enthält die letzten erfassten Werte.';
+  $('#captureHelp').hidden=!text;$('#captureHelp').textContent=text;
+}
+$('#copyDiagnostics').onclick=()=>task((async()=>{
+  const v=await api('/api/version'),c=latestLive?.capture||{};
+  await copyText(JSON.stringify({version:v.version,parser:v.parser_version,permission:!!c.permission,game_running:!!c.game_running,connected:!!c.locked_port,packets:c.packets||0,packet_age_seconds:c.last_packet_ms==null?null:Math.max(0,Math.round((Date.now()-c.last_packet_ms)/1000)),stream_gaps:c.stream_gaps||0,capture_error:!!c.error,recording_error:!!c.recording_error},null,2));
+})());
 function renderEnhancedLive(l) {
-  latestLive=l;
+  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);
+  $('#numericWarning').hidden=!l.numeric_limited;
   $(".ranking-head span").textContent=metricKey()==="heal"?"Heilung · HPS · Anteil":metricKey()==="damage_received"?"Erlittener Schaden · pro Sekunde · Anteil":"Schaden · DPS · Anteil";
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";
   $('#metricHint').textContent=metricKey()==='heal' ? 'Heilung seit Parser-Reset. HPS nutzt die angezeigte Kampfdauer. Overheal wird nicht abgezogen.' : metricKey()==='damage_received' ? 'Erlittener Schaden aus erfassten NPC-Treffern.' : 'Spieler anklicken für Skilldetails. Burst-DPS: gleitende 5 Sekunden, Beobachtung alle 500 ms.';
@@ -36,7 +71,7 @@ function renderEnhancedLive(l) {
   if(player && l.rows.some(r=>String(r.id)===player)) { history.replaceState(null,'',location.pathname+location.hash);task(openLivePlayer(Number(player))); }
 }
 window.renderEnhancedLive=renderEnhancedLive;
-$('#liveMetric').onchange=()=>{if(latestLive){renderEnhancedLive(latestLive);$('#liveRows').innerHTML=bars(metricRows(latestLive.rows));bindLiveRows(latestLive);}};
+$('#liveMetric').onchange=()=>{if(latestLive){renderEnhancedLive(latestLive);updateLiveRows(latestLive);}};
 $('#startTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON.stringify({seconds:Number($('#trainingDuration').value)})}).then(()=>toast('Training wartet auf den ersten Treffer.')));
 $('#stopTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON.stringify({seconds:0})}));
 api('/api/training').then(t=>{lastTraining=t;if(latestLive)renderEnhancedLive(latestLive);}).catch(()=>{});
@@ -67,11 +102,12 @@ function fightExport(f,anonymous) {
   // Deliberately allowlist fields: notes, network addresses and database IDs stay local.
   const players=exportPlayers(f.players,anonymous).map(p=>({name:p.name,class_name:p.class_name,damage:p.damage,dps:p.dps,heal:p.heal,hps:p.hps,damage_received:p.damage_received,
     skills:p.skills,heal_skills:p.heal_skills,buffs:(p.buffs||[]).map(b=>({name:b.name,uptime:b.uptime}))}));
-  return {boss:f.boss_name,difficulty:f.difficulty,started_at:f.started_at,duration_ms:f.duration_ms,healing_scope:f.healing_scope,players};
+  return {boss:f.boss_name,difficulty:f.difficulty,started_at:f.started_at,duration_ms:f.duration_ms,healing_scope:f.healing_scope,numeric_limited:!!f.numeric_limited,players};
 }
 
 async function loadFights(reset=true) {
   if(!reset && fightSearchBusy)return;
+  if($('#fightFrom').value&&$('#fightTo').value&&$('#fightFrom').value>$('#fightTo').value){toast('Das Von-Datum muss vor dem Bis-Datum liegen.',true);return;}
   const request=++fightSearchRequest;fightSearchBusy=true;
   if(reset){fightOffset=0;$('#fightResults').textContent='Kämpfe werden geladen …';}
   $('#moreFights').disabled=true;
@@ -92,17 +128,51 @@ window.loadFights=loadFights;
 $('#searchFights').onclick=()=>task(loadFights());$('#moreFights').onclick=()=>task(loadFights(false));
 $('#fightSearch').onkeydown=e=>{if(e.key==='Enter')task(loadFights());};
 $('#fightFavorites').onchange=()=>task(loadFights());
+$('#clearFightFilters').onclick=()=>{$('#fightSearch').value='';$('#fightFrom').value='';$('#fightTo').value='';$('#fightFavorites').checked=false;task(loadFights());};
 function invalidateDetails() {detailRequest++;comparisonRequest++;currentFight=null;}
 $('#closeDialog').onclick=()=>{invalidateDetails();$('#fightDialog').close();};
 $('#fightDialog').addEventListener('cancel',invalidateDetails);
 
 function skillTable(skills,heal=false) {
   if(!skills?.length)return '<p class="muted">Keine Skilldaten vorhanden.</p>';
-  return `<p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt. — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>${heal?'Heilung':'Schaden'}</th><th>Treffer / Ticks</th>${heal?'':'<th>Krit</th><th>Rücken</th><th>Frontal</th><th>Perfekt</th><th>Double</th><th>Pariert</th><th>Multihit</th><th>Block</th><th>Perfektblock</th><th>Ausdauer</th><th>Regeneration</th><th>Verfehlt</th><th>Effekt resistiert</th><th>Min</th><th>Max</th>'}</tr></thead><tbody>${skills.map(s=>`<tr><td>${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}</td><td class="num">${num(s.damage)}</td><td>${s.hits||0}</td>${heal?'':`<td>${pct(s.crit_rate)}</td><td>${pct(s.back_rate)}</td><td>${pct(s.frontal_rate)}</td><td>${pct(s.perfect_rate)}</td><td>${pct(s.double_rate)}</td><td>${pct(s.parry_rate)}</td><td title="${num(s.multi_hit_damage)} zusätzlicher Schaden">${s.multi_hit_count??'—'}</td><td>${pct(s.block_rate)}</td><td>${pct(s.perfect_block_rate)}</td><td>${pct(s.endurance_rate)}</td><td>${pct(s.regeneration_rate)}</td><td>${s.miss_count??'—'}</td><td>${s.resist_count??'—'}</td><td>${s.min>0?num(s.min):'—'}</td><td>${s.max>0?num(s.max):'—'}</td>`}</tr>`).join('')}</tbody></table></div>`;
+  const total=skills.reduce((n,s)=>n+Number(s.damage||0),0);
+  const rows=skills.map(s=>({...s,share:s.share??(total>0?s.damage*100/total:null),average:s.average??(s.hits>0?s.damage/s.hits:null)}));
+  const columns=[['name','Skill'],['damage',heal?'Heilung':'Schaden'],['share','Anteil'],['dps',heal?'HPS':'DPS'],['hits','Treffer / Ticks'],['average','Ø Treffer']];
+  if(!heal)columns.push(['crit_rate','Krit']);
+  columns.push(['min','Min'],['max','Max']);
+  const extra=heal?[]:[['back_rate','Rücken'],['frontal_rate','Frontal'],['perfect_rate','Perfekt'],['double_rate','Double'],['parry_rate','Pariert'],['multi_hit_count','Multihit'],['block_rate','Block'],['perfect_block_rate','Perfektblock'],['endurance_rate','Ausdauer'],['regeneration_rate','Regeneration'],['miss_count','Verfehlt'],['resist_count','Effekt resistiert']];
+  const cell=(s,key)=>key==='name'?`${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}`:key==='share'||key.endsWith('_rate')?pct(s[key]):s[key]==null||(['min','max'].includes(key)&&s[key]<=0)?'—':num(s[key]);
+  return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Skill suchen"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''} aria-sort="${k==='damage'?'descending':'none'}"><button type="button" class="sort-head" data-sort="${k}" title="Nach ${esc(label)} sortieren">${label}</button></th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
+}
+function bindSkillTables(root) {
+  root.querySelectorAll('.skill-browser').forEach(box=>{
+    const skills=JSON.parse(box.dataset.skills);delete box.dataset.skills;
+    const records=[...box.querySelectorAll('tbody tr')].map((el,i)=>({el,s:skills[i]}));
+    // Column headers sort too; a second click on the same column reverses it.
+    const sort={key:'damage',dir:-1};
+    const value=(s,key)=>s[key]==null||!Number.isFinite(Number(s[key]))?-Infinity:Number(s[key]);
+    const update=()=>{
+      const search=box.querySelector('.skill-search').value.trim().toLocaleLowerCase('de-DE'),{key,dir}=sort;
+      const sorted=records.slice().sort((a,b)=>key==='name'?dir*a.s.name.localeCompare(b.s.name,'de'):dir*(value(a.s,key)-value(b.s,key))||a.s.name.localeCompare(b.s.name,'de'));
+      box.querySelectorAll('th').forEach(th=>th.setAttribute('aria-sort',th.querySelector('.sort-head')?.dataset.sort===key?(dir>0?'ascending':'descending'):'none'));
+      const body=box.querySelector('tbody');let count=0;
+      for(const {el,s} of sorted){el.hidden=!s.name.toLocaleLowerCase('de-DE').includes(search);if(!el.hidden)count++;body.append(el);}
+      box.querySelector('.skill-count').textContent=count+' / '+skills.length+' Skills';box.querySelector('.skill-empty').hidden=count!==0;
+    };
+    const select=box.querySelector('.skill-sort');
+    box.querySelector('.skill-search').oninput=update;
+    select.onchange=()=>{sort.key=select.value;sort.dir=select.value==='name'?1:-1;update();};
+    box.querySelectorAll('.sort-head').forEach(b=>b.onclick=()=>{
+      const key=b.dataset.sort;sort.dir=sort.key===key?-sort.dir:key==='name'?1:-1;sort.key=key;
+      if([...select.options].some(o=>o.value===key))select.value=key;update();
+    });
+    const extra=box.querySelector('.skill-extra');if(extra)extra.onchange=()=>box.classList.toggle('show-advanced',extra.checked);
+  });
 }
 function svgCurve(points,value,label) {
   if(!points.length)return '<p class="muted">Für diesen Kampf wurden keine Verlaufsdaten gespeichert.</p>';
-  const W=900,H=180,L=55,R=15,T=12,B=28, end=Math.max(1000,...points.map(p=>p.ms)), max=Math.max(1,...points.map(value));
+  const W=900,H=180,L=55,R=15,T=12,B=28, end=points.reduce((n,p)=>Math.max(n,p.ms),1000), max=points.reduce((n,p)=>Math.max(n,value(p)),1);
+  const step=Math.max(1,Math.ceil(points.length/600));points=points.filter((_,i)=>i%step===0||i===points.length-1);
   const x=ms=>L+ms/end*(W-L-R),y=v=>T+(1-v/max)*(H-T-B);
   const line=points.map((p,i)=>`${i?'L':'M'}${x(p.ms).toFixed(2)},${y(value(p)).toFixed(2)}`).join(' ');
   return `<svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}"><path d="M${L},${T}V${H-B}H${W-R}" fill="none" stroke="#7898b655"/><path d="${line}" fill="none" stroke="#5ad2c8" stroke-width="2"/><text x="0" y="20">${num(max)}</text><text x="${L}" y="${H-5}">0:00</text><text x="${W-65}" y="${H-5}">${dur(end)}</text>${points.filter((_,i)=>i%Math.max(1,Math.ceil(points.length/300))===0).map(p=>`<circle cx="${x(p.ms)}" cy="${y(value(p))}" r="3" fill="transparent"><title>${dur(p.ms)}: ${num(value(p))} ${esc(label)}</title></circle>`).join('')}</svg>`;
@@ -111,7 +181,7 @@ function damageCurve(f,actor=null) {
   const points=f.analytics?.points||[];
   const total=p=>actor==null?Object.values(p.damage).reduce((a,b)=>a+Number(b),0):Number(p.damage[actor]||0);
   const curves=points.map((p,i)=>{const prev=points[i-1];return {ms:p.ms,dps:Math.max(0,total(p)-(prev?total(prev):0))*1000/Math.max(500,p.ms-(prev?prev.ms:0))};});
-  return svgCurve(curves,p=>p.dps,'beobachtete Intervall-DPS');
+  return svgCurve(f.analytics?.partial?curves.slice(1):curves,p=>p.dps,'beobachtete Intervall-DPS');
 }
 function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';
@@ -125,7 +195,15 @@ function effectTimeline(f,actor,W=900) {
   return `<h4>Buff-Zeitlinie</h4><p class="analysis-note">Aus beobachteter Anwendung und gemeldeter Dauer. Vorzeitiges Entfernen wird derzeit nicht erkannt.</p><svg class="timeline" viewBox="0 0 ${W} ${keys.length*24+20}" role="img" aria-label="Buff-Zeitlinie">${keys.map((code,i)=>`<text x="0" y="${i*24+17}">${esc((names[code]||'#'+code).slice(0,28))}</text>${effects.filter(e=>e.code===code).map(e=>`<rect x="${L+e.start_ms/end*(W-L)}" y="${i*24+5}" width="${Math.max(1,(e.end_ms-e.start_ms)/end*(W-L))}" height="13" rx="3" fill="#966ee6"><title>${esc(names[code]||code)} · ${(e.start_ms/1000).toFixed(1)}–${(e.end_ms/1000).toFixed(1)} s</title></rect>`).join('')}`).join('')}</svg>`;
 }
 function playerReport(p,f) {
-  return `<details><summary>${chip(p)} · ${num(p.dps)}/s · ${num(p.heal||0)} Heilung · ${num(p.damage_received||0)} erlitten</summary><h4>Schadensskills</h4>${skillTable(p.skills)}<h4>Heilungsskills</h4>${skillTable(p.heal_skills,true)}${uptimes(p.buffs,false)}<h4>Skill-Trefferzeitlinie</h4>${hitTimeline(p.skills,f.duration_ms)}${effectTimeline(f,p.actor_id)}<h4>DPS-Verlauf</h4>${damageCurve(f,p.actor_id)}</details>`;
+  return `<details class="player-report" data-actor="${Number(p.actor_id)}"><summary>${chip(p)} · ${num(p.dps)}/s · ${num(p.heal||0)} Heilung · ${num(p.damage_received||0)} erlitten</summary><div class="player-analysis"></div></details>`;
+}
+function bindPlayerReports(f) {
+  $('#fightContent').querySelectorAll('.player-report').forEach(el=>el.addEventListener('toggle',()=>{
+    const content=el.querySelector('.player-analysis');if(!el.open||content.childElementCount)return;
+    const p=f.players.find(p=>String(p.actor_id)===el.dataset.actor);if(!p)return;
+    content.innerHTML=`<h4>Schadensskills</h4>${skillTable(p.skills)}<h4>Heilungsskills</h4>${skillTable(p.heal_skills,true)}${uptimes(p.buffs,false)}<h4>Skill-Trefferzeitlinie</h4>${hitTimeline(p.skills,f.duration_ms)}${effectTimeline(f,p.actor_id)}<h4>DPS-Verlauf</h4>${damageCurve(f,p.actor_id)}`;
+    bindSkillTables(content);
+  }));
 }
 async function openLivePlayer(id) {
   comparisonRequest++;currentFight=null;
@@ -133,6 +211,7 @@ async function openLivePlayer(id) {
   const row=latestLive?.rows.find(r=>r.id===id);
   $('#dialogTitle').textContent=row?.name||'Spielerdetails';
   $('#fightContent').innerHTML=`<p class="analysis-note">Aktueller Stand. ${num(row?.burst_dps||0)}/s Burst über 5 Sekunden. Heilung seit Parser-Reset.</p><button class="btn" id="refreshPlayer">Aktualisieren</button><h3>Schaden</h3>${skillTable(p.skills)}<h3>Heilung</h3>${skillTable(p.heal_skills,true)}${hitTimeline(p.skills,p.duration_ms)}`;
+  bindSkillTables($('#fightContent'));
   if(window.installLiveComparison)installLiveComparison(p,row);
   $('#refreshPlayer').onclick=()=>task(openLivePlayer(id));if(!$('#fightDialog').open)$('#fightDialog').showModal();
 }
@@ -141,12 +220,13 @@ async function openFight(id) {
   const request=++detailRequest;const f=await api('/api/fights/'+encodeURIComponent(id));if(request!==detailRequest)return;
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
-    <p class="analysis-note">${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
+    <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
     <div class="row fight-tools"><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Namen anonymisieren</label></div>
-    <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
+    <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
     <h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
     <h3>Gruppen-DPS im Kampfverlauf</h3>${damageCurve(f)}<h3>Ping-Verlauf</h3>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
+  bindPlayerReports(f);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights());}));
   $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,exportPlayers(f.players,$('#anonFight').checked),f.duration_ms)));
@@ -185,5 +265,5 @@ async function overlayAction(action, message) {
 const profileKey=()=>$('#profileName').value.trim()||latestLive?.character||'Standard';
 $('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:true})}),'Profil gespeichert.'));
 $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
-$('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay').then(s=>api('/api/overlay',{method:'POST',body:JSON.stringify({...s,position:[40,40],visible:true,locked:false})})),'Overlay auf Startposition zurückgeholt.'));
+$('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());

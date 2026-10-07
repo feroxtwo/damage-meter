@@ -32,7 +32,10 @@ const MAX_DURATION_MS: u32 = 3_600_000;
 const MERGE_TOLERANCE_MS: i64 = 100;
 /// Intervals older than this are dropped.
 const KEEP_MS: i64 = 2 * 3_600_000;
-const INTERVALS_PER_EFFECT: usize = 512;
+const INTERVALS_PER_EFFECT: usize = 128;
+const MAX_TARGETS: usize = 256;
+const MAX_EFFECTS_PER_TARGET: usize = 64;
+const MAX_INTERVALS: usize = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuffEvent {
@@ -148,7 +151,13 @@ type EffectCoverage = (Vec<(i64, i64)>, u32, i64);
 #[derive(Default)]
 pub struct BuffTracker {
     inner: Mutex<EffectIntervals>,
+    /// Time spans whose observations were dropped by the limits below, so a
+    /// fight is marked incomplete only when its own window lost data.
+    lost: Mutex<VecDeque<(i64, i64)>>,
+    intervals: std::sync::atomic::AtomicUsize,
 }
+
+const MAX_LOST_SPANS: usize = 64;
 
 fn covered(intervals: &[(i64, i64)], from: i64, to: i64) -> i64 {
     let mut clipped: Vec<(i64, i64)> = intervals
@@ -176,24 +185,125 @@ fn covered(intervals: &[(i64, i64)], from: i64, to: i64) -> i64 {
     total
 }
 
+/// The time span an effect list covers.
+fn span(list: &VecDeque<Interval>) -> Option<(i64, i64)> {
+    Some((list.front()?.start, list.iter().map(|i| i.end).max()?))
+}
+
+fn last_end(effects: &HashMap<(u32, u32), VecDeque<Interval>>) -> i64 {
+    effects
+        .values()
+        .filter_map(span)
+        .map(|s| s.1)
+        .max()
+        .unwrap_or(i64::MIN)
+}
+
 impl BuffTracker {
+    fn note_lost(&self, from: i64, to: i64) {
+        let mut lost = self.lost.lock();
+        if let Some(last) = lost.back_mut()
+            && from <= last.1
+            && to >= last.0
+        {
+            *last = (last.0.min(from), last.1.max(to));
+        } else {
+            lost.push_back((from, to));
+        }
+        while lost.len() > MAX_LOST_SPANS {
+            // Merge the two oldest spans: coarser, but never forgets a loss.
+            let a = lost.pop_front().unwrap();
+            let b = lost.front_mut().unwrap();
+            *b = (a.0.min(b.0), a.1.max(b.1));
+        }
+    }
+
+    fn forget(&self, list: &VecDeque<Interval>) {
+        if let Some((from, to)) = span(list) {
+            self.note_lost(from, to);
+        }
+        self.intervals
+            .fetch_sub(list.len(), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Drop the target whose effects ended longest ago (never `keep`): a
+    /// crowded town must not block the boss and party seen afterwards.
+    fn evict_stalest_target(&self, inner: &mut EffectIntervals, keep: u32) -> bool {
+        let Some(victim) = inner
+            .iter()
+            .filter(|(t, _)| **t != keep)
+            .min_by_key(|(_, e)| last_end(e))
+            .map(|(t, _)| *t)
+        else {
+            return false;
+        };
+        if let Some(effects) = inner.remove(&victim) {
+            for list in effects.values() {
+                self.forget(list);
+            }
+        }
+        true
+    }
+
     pub fn record(&self, event: BuffEvent, now_ms: i64) {
-        let end = now_ms + event.duration_ms as i64;
+        let end = now_ms.saturating_add(event.duration_ms as i64);
         let mut inner = self.inner.lock();
+        if !inner.contains_key(&event.target) && inner.len() >= MAX_TARGETS {
+            self.evict_stalest_target(&mut inner, event.target);
+        }
+        let key = (event.code, event.caster);
+        if let Some(effects) = inner.get_mut(&event.target)
+            && !effects.contains_key(&key)
+            && effects.len() >= MAX_EFFECTS_PER_TARGET
+            && let Some(victim) = effects
+                .iter()
+                .min_by_key(|(_, l)| span(l).map_or(i64::MIN, |s| s.1))
+                .map(|(k, _)| *k)
+            && let Some(list) = effects.remove(&victim)
+        {
+            self.forget(&list);
+        }
+        let extends = inner
+            .get(&event.target)
+            .and_then(|e| e.get(&key))
+            .and_then(|l| l.back())
+            .is_some_and(|last| now_ms <= last.end + MERGE_TOLERANCE_MS);
+        while !extends && self.intervals.load(std::sync::atomic::Ordering::Relaxed) >= MAX_INTERVALS
+        {
+            if !self.evict_stalest_target(&mut inner, event.target) {
+                // Only this target is left: give up its oldest observation.
+                let oldest = inner.get_mut(&event.target).and_then(|effects| {
+                    effects
+                        .values_mut()
+                        .filter(|l| !l.is_empty())
+                        .min_by_key(|l| l.front().map(|i| i.start))
+                });
+                let Some(i) = oldest.and_then(|l| l.pop_front()) else {
+                    break;
+                };
+                self.note_lost(i.start, i.end);
+                self.intervals
+                    .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
         let list = inner
             .entry(event.target)
             .or_default()
-            .entry((event.code, event.caster))
+            .entry(key)
             .or_default();
         match list.back_mut() {
             Some(last) if now_ms <= last.end + MERGE_TOLERANCE_MS => last.end = last.end.max(end),
-            _ => list.push_back(Interval { start: now_ms, end }),
+            _ => {
+                list.push_back(Interval { start: now_ms, end });
+                self.intervals
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
         }
         while list.len() > INTERVALS_PER_EFFECT {
-            list.pop_front();
-        }
-        if inner.len() > 4096 {
-            Self::prune(&mut inner, now_ms);
+            let i = list.pop_front().unwrap();
+            self.intervals
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            self.note_lost(i.start, i.end);
         }
     }
 
@@ -225,7 +335,21 @@ impl BuffTracker {
         serde_json::json!(rows)
     }
     pub fn prune_old(&self, now_ms: i64) {
-        Self::prune(&mut self.inner.lock(), now_ms);
+        let mut inner = self.inner.lock();
+        Self::prune(&mut inner, now_ms);
+        self.intervals.store(
+            inner
+                .values()
+                .flat_map(|e| e.values())
+                .map(|l| l.len())
+                .sum(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    /// Whether observations within `[from, to)` were dropped by a limit.
+    pub fn partial_between(&self, from: i64, to: i64) -> bool {
+        self.lost.lock().iter().any(|&(s, e)| s < to && e > from)
     }
 
     /// Effects on `target` during `[from, to)`, highest uptime first. An
@@ -367,6 +491,77 @@ mod tests {
         assert!(t.uptimes(1, 100_000, 200_000).is_empty());
     }
 
+    #[test]
+    fn fresh_effects_and_intervals_have_strict_limits_and_report_truncation() {
+        let t = BuffTracker::default();
+        for target in 0..MAX_TARGETS as u32 + 10 {
+            for code in 110_000_000..110_000_000 + MAX_EFFECTS_PER_TARGET as u32 + 2 {
+                t.record(
+                    BuffEvent {
+                        target,
+                        code,
+                        caster: 42,
+                        duration_ms: 1000,
+                    },
+                    0,
+                );
+            }
+        }
+        assert!(t.partial_between(0, 1000));
+        assert!(t.inner.lock().len() <= MAX_TARGETS);
+        assert!(
+            t.inner
+                .lock()
+                .values()
+                .all(|e| e.len() <= MAX_EFFECTS_PER_TARGET)
+        );
+        let counted = t.intervals.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(counted <= MAX_INTERVALS);
+        let actual: usize = t
+            .inner
+            .lock()
+            .values()
+            .flat_map(|e| e.values())
+            .map(|l| l.len())
+            .sum();
+        assert_eq!(counted, actual);
+        // The newest target always survives the limits.
+        assert!(t.inner.lock().contains_key(&(MAX_TARGETS as u32 + 9)));
+        t.prune_old(KEEP_MS + 2000);
+        assert!(t.inner.lock().is_empty());
+        assert_eq!(t.intervals.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn a_crowded_town_does_not_hide_the_next_boss_or_mark_it_incomplete() {
+        let t = BuffTracker::default();
+        // Town: far more buffed players than the target limit.
+        for target in 0..MAX_TARGETS as u32 * 2 {
+            t.record(
+                BuffEvent {
+                    target,
+                    code: 120_000_000,
+                    caster: target + 1,
+                    duration_ms: 10_000,
+                },
+                1_000 + target as i64,
+            );
+        }
+        assert!(t.partial_between(0, 20_000));
+        // Ten minutes later in a dungeon: a fresh boss debuff and a party buff.
+        let boss = 900_000;
+        t.record(
+            BuffEvent {
+                target: boss,
+                code: 130_000_000,
+                caster: 7,
+                duration_ms: 30_000,
+            },
+            600_000,
+        );
+        assert_eq!(t.uptimes(boss, 600_000, 660_000)[0].percent, 50.0);
+        assert!(!t.partial_between(600_000, 660_000));
+    }
     #[test]
     fn names_try_the_skill_code() {
         assert_eq!(name_keys(120_340_015)[0], 12_034_001);

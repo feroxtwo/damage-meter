@@ -1,5 +1,7 @@
 # Technische Prüfung und Modernisierung
 
+> Historische Prüfung/Funktionsbeschreibung. Den aktuellen Teststand und spätere Änderungen dokumentiert [Releaseprüfung 0.3.1](RELEASE_REVIEW_0.3.1.md).
+
 Ausgangsstand: `e241797` auf `main`. Geprüft wurden Paketaufnahme, Dispatcher, Engine, SQLite-Historie, HTTP-API, natives Overlay, Browser-Overlay, Dashboard und Build-Konfiguration.
 
 ## Behobene Befunde

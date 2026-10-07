@@ -17,8 +17,9 @@ base="$stage/aion2-meter-$version-linux-x86_64"
 mkdir -p "$base/packaging" "$base/scripts"
 install -m755 "$binary" "$base/aion2-meter"
 cp packaging/*.desktop packaging/*.svg "$base/packaging/"
-cp scripts/install-binary.sh scripts/install-kwin-rule.sh scripts/install-shortcuts.sh "$base/scripts/"
+cp scripts/install-binary.sh scripts/install-kwin-rule.sh scripts/install-shortcuts.sh scripts/desktop-exec.sh "$base/scripts/"
 cp README.md LICENSE "$base/"
+cp -a docs "$base/docs"
 tar -C "$stage" -czf "dist/aion2-meter-$version-linux-x86_64.tar.gz" "${base##*/}"
 root="$stage/deb"
 install -Dm755 "$binary" "$root/usr/bin/aion2-meter"
@@ -28,13 +29,16 @@ install -Dm644 packaging/aion2-meter.svg "$root/usr/share/icons/hicolor/scalable
 install -Dm644 LICENSE "$root/usr/share/doc/aion2-meter/copyright"
 install -Dm755 scripts/install-kwin-rule.sh "$root/usr/lib/aion2-meter/install-kwin-rule.sh"
 install -Dm755 scripts/install-shortcuts.sh "$root/usr/lib/aion2-meter/install-shortcuts.sh"
+install -Dm644 scripts/desktop-exec.sh "$root/usr/lib/aion2-meter/desktop-exec.sh"
+cp README.md "$root/usr/share/doc/aion2-meter/"
+cp -a docs "$root/usr/share/doc/aion2-meter/docs"
 mkdir -p "$root/DEBIAN"
 cat > "$root/DEBIAN/control" <<EOF
 Package: aion2-meter
 Version: $version
 Architecture: amd64
 Maintainer: damage-meter contributors <noreply@github.com>
-Depends: libc6 (>= $glibc), libgcc-s1, libxkbcommon0, libegl1, libgl1, libcap2-bin, xdg-utils
+Depends: libc6 (>= $glibc), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libegl1, libgl1, libcap2-bin, xdg-utils
 Section: games
 Priority: optional
 Homepage: https://github.com/feroxtwo/damage-meter
@@ -63,7 +67,7 @@ Summary: Local AION 2 damage meter for Linux
 License: GPL-3.0-or-later
 URL: https://github.com/feroxtwo/damage-meter
 BuildArch: x86_64
-Requires: libxkbcommon, libglvnd-egl, libglvnd-glx, xdg-utils
+Requires: libxkbcommon, libxkbcommon-x11, libglvnd-egl, libglvnd-glx, xdg-utils
 %description
 Native overlay, local combat history and browser dashboard.
 %install
@@ -74,6 +78,8 @@ cp -a %{_sourcedir}/usr %{buildroot}/
 /usr/share/applications/aion2-meter*.desktop
 /usr/share/icons/hicolor/scalable/apps/aion2-meter.svg
 %license /usr/share/doc/aion2-meter/copyright
+%doc /usr/share/doc/aion2-meter/README.md
+%doc /usr/share/doc/aion2-meter/docs
 /usr/lib/aion2-meter/
 EOF
     rpmbuild -bb --define "_topdir $rpmdir" --define '_build_id_links none' --define '__os_install_post %{nil}' "$rpmdir/SPECS/aion2-meter.spec"
@@ -81,6 +87,7 @@ EOF
 else
     echo "RPM ausgelassen: rpmbuild fehlt (Fedora: rpm-build, Ubuntu: rpm)." >&2
 fi
-(cd dist && sha256sum ./*.tar.gz ./*.deb ./*.rpm 2>/dev/null > SHA256SUMS) || {
-    (cd dist && sha256sum ./*.tar.gz ./*.deb > SHA256SUMS)
-}
+# Manifest includes only this release, even if dist contains older artifacts.
+artifacts=("aion2-meter-$version-linux-x86_64.tar.gz" "aion2-meter_${version}_amd64.deb")
+[[ ! -f "dist/aion2-meter-$version-1.x86_64.rpm" ]] || artifacts+=("aion2-meter-$version-1.x86_64.rpm")
+(cd dist && sha256sum "${artifacts[@]}" > SHA256SUMS)

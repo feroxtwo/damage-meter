@@ -32,3 +32,26 @@ html[data-theme] .compact .bar {padding-top:7px;padding-bottom:7px}
 
 .player-pair .timeline {min-height:0}
 html:is([data-theme=aether],[data-theme=ember]) :is(input[type=search],input[type=date],input[type=text],input:not([type])) {background:var(--bg);border-color:var(--line)}
+
+[hidden] {display:none!important}
+.skill-browser .skill-advanced {display:none}
+.skill-browser.show-advanced .skill-advanced {display:table-cell}
+.skill-browser table {min-width:740px;font-size:12px}
+.skill-browser th,.skill-browser td {white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.skill-browser th:first-child,.skill-browser td:first-child {text-align:left;white-space:normal;min-width:170px;max-width:260px;overflow-wrap:anywhere;position:sticky;left:0;background:var(--panel);z-index:1}
+.skill-tools {margin:12px 0;font-size:12px}
+.skill-search {flex:1;min-width:130px}
+.skill-count {margin-left:auto}
+.bar .lbl>span:first-child {min-width:0;overflow-wrap:anywhere}
+html.compact .bar,html.compact .bar .lbl {min-height:32px}
+html.compact .bar .lbl {padding:4px 10px}
+#captureHelp {padding:12px 14px;border:1px solid var(--gold);border-radius:8px;color:var(--text);background:var(--panel2);margin:12px 0;line-height:1.6;font-size:12px}
+.timeline {min-height:0;max-height:720px}
+.chart-legend span {overflow-wrap:anywhere;max-width:100%}
+.player-report summary {display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.fight-tools input:not([type=checkbox]) {flex:1;min-width:120px}
+@media(max-width:600px) {.skill-tools>* {max-width:100%}.skill-search{width:100%}.skill-count{margin-left:0}.fight-tools input:not([type=checkbox]){width:100%} }
+.sort-head{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}
+.sort-head:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+th[aria-sort="ascending"] .sort-head::after{content:" ▲";font-size:.75em}
+th[aria-sort="descending"] .sort-head::after{content:" ▼";font-size:.75em}

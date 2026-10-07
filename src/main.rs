@@ -212,6 +212,9 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if !cli.no_overlay && (cli.x11 || std::env::var_os("WAYLAND_DISPLAY").is_none()) {
+        overlay::check_x11_dependencies()?;
+    }
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
@@ -249,39 +252,52 @@ fn main() -> anyhow::Result<()> {
         );
     }
     let (tx, rx) = mpsc::sync_channel(8192);
-    {
+    let capture_thread = {
         let engine = engine.clone();
         std::thread::Builder::new()
             .name("capture".into())
             .spawn(move || {
-                if let Err(e) = capture::run(tx) {
+                if let Err(e) = capture::run(tx, || engine.is_stopping()) {
                     tracing::error!("Capture stopped: {e}");
                     engine.set_capture_error(Some(e.to_string()));
                 }
-            })?;
-    }
-    {
+            })?
+    };
+    let parser_thread = {
         let dispatcher = dispatcher::Dispatcher::new(engine.clone(), !cli.any_process);
         if cli.any_process {
             engine.set_game_running(true);
         }
         std::thread::Builder::new()
             .name("parser".into())
-            .spawn(move || dispatcher.run(rx))?;
-    }
-    {
+            .spawn(move || dispatcher.run(rx))?
+    };
+    let meter_thread = {
         let engine = engine.clone();
         std::thread::Builder::new()
             .name("meter".into())
-            .spawn(move || engine.run_ticks())?;
-    }
+            .spawn(move || engine.run_ticks())?
+    };
 
     // Web dashboard
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()?;
-    let web = runtime.spawn(web::serve(engine.clone(), listener));
+    let mut web = runtime.spawn(web::serve(engine.clone(), listener));
+    let signal_engine = engine.clone();
+    let signals = runtime.spawn(async move {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => { result?; }
+            _ = terminate.recv() => {}
+        }
+        if !signal_engine.shutdown() {
+            anyhow::bail!("Kampf konnte beim Beenden nicht gespeichert werden");
+        }
+        Ok::<_, anyhow::Error>(())
+    });
 
     let shown = if addr.ip().is_unspecified() {
         SocketAddr::new([127, 0, 0, 1].into(), addr.port())
@@ -289,12 +305,44 @@ fn main() -> anyhow::Result<()> {
         addr
     };
     let url = format!("http://{shown}/");
-    if cli.no_overlay {
-        runtime.block_on(web)??;
-        return Ok(());
+    let result = if cli.no_overlay {
+        runtime.block_on(async {
+            tokio::select! {
+                result = &mut web => result.map_err(anyhow::Error::from).and_then(|r| r),
+                _ = async {
+                    while !engine.is_stopping() {
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                } => {
+                    // A slow HTTP client must not prevent termination forever.
+                    match tokio::time::timeout(std::time::Duration::from_secs(3), &mut web).await {
+                        Ok(result) => result.map_err(anyhow::Error::from).and_then(|r| r),
+                        Err(_) => { web.abort(); Ok(()) }
+                    }
+                }
+            }
+        })
+    } else {
+        overlay::Overlay::new(engine.clone(), url)
+            .run()
+            .map_err(|e| anyhow::anyhow!("Overlay: {e}"))
+    };
+    let saved = engine.shutdown();
+    for (name, thread) in [
+        ("capture", capture_thread),
+        ("parser", parser_thread),
+        ("meter", meter_thread),
+    ] {
+        if thread.join().is_err() {
+            tracing::error!("Thread {name} stopped unexpectedly");
+        }
     }
-    overlay::Overlay::new(engine, url)
-        .run()
-        .map_err(|e| anyhow::anyhow!("Overlay: {e}"))?;
+    if signals.is_finished() {
+        runtime.block_on(signals)??;
+    } else {
+        signals.abort();
+    }
+    result?;
+    anyhow::ensure!(saved, "Kampf konnte beim Beenden nicht gespeichert werden");
     Ok(())
 }

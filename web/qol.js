@@ -21,10 +21,10 @@ function partyCurve(f) {
   if(points.length<2)return '<p class="analysis-note">Zu wenige gespeicherte Beobachtungen für einen Gruppenverlauf.</p>';
   const W=900,H=230,L=60,R=15,T=20,B=30;
   const series=f.players.map((p,i)=>({player:p,color:chartColors[i%chartColors.length],values:points.map((q,j)=>{
-    const prev=points[j-1];return Math.max(0,Number(q.damage[p.actor_id]||0)-Number(prev?.damage[p.actor_id]||0))*1000/Math.max(500,q.ms-(prev?.ms||0));
+    const prev=points[j-1];if(j===0&&f.analytics.partial)return 0;return Math.max(0,Number(q.damage[p.actor_id]||0)-Number(prev?.damage[p.actor_id]||0))*1000/Math.max(500,q.ms-(prev?.ms||0));
   })}));
   const end=points.reduce((n,p)=>Math.max(n,p.ms),1000),max=series.reduce((n,s)=>s.values.reduce((m,v)=>Math.max(m,v),n),1);
-  const step=Math.max(1,Math.ceil(points.length/600)),indices=points.map((_,i)=>i).filter(i=>i%step===0||i===points.length-1);
+  const step=Math.max(1,Math.ceil(points.length/600)),indices=points.map((_,i)=>i).filter(i=>(!f.analytics.partial||i>0)&&(i%step===0||i===points.length-1));
   const x=ms=>L+ms/end*(W-L-R),y=v=>T+(1-v/max)*(H-T-B);
   const lines=series.map(s=>`<path d="${indices.map((i,j)=>`${j?'L':'M'}${x(points[i].ms).toFixed(2)},${y(s.values[i]).toFixed(2)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2"><title>${esc(s.player.name)}</title></path>`).join('');
   return `<p class="analysis-note">Beobachtete Intervall-DPS, ${f.analytics.resolution_ms||500} ms${step>1?' · Darstellung ausgedünnt (max. 601 Punkte je Spieler)':''}${f.analytics.partial?' · Daten unvollständig':''}. Kein Verlauf einzelner Schadenspakete. Vollständigkeit vor Aufnahmebeginn unbekannt.</p><div class="chart-legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.player.name)}</span>`).join('')}</div><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="DPS-Verlauf aller Spieler"><path d="M${L},${T}V${H-B}H${W-R}" fill="none" stroke="#7898b655"/>${lines}<text x="0" y="20">${num(max)}/s</text><text x="${L}" y="${H-5}">0:00</text><text x="${W-65}" y="${H-5}">${dur(end)}</text></svg>`;

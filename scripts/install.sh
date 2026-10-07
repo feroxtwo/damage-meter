@@ -25,30 +25,30 @@ if ! command -v cargo >/dev/null; then
   exit 1
 fi
 
+# The bundled SQLite and ring are C code: cargo needs a C compiler and linker.
+if ! command -v cc >/dev/null && ! command -v gcc >/dev/null; then
+  echo "C-Compiler (cc/gcc) fehlt. Er wird zum Bauen gebraucht (eingebaute SQLite)."
+  if [ -e /run/ostree-booted ]; then
+    echo "Auf Bazzite, Kinoite, Silverblue entweder das fertige Paket bzw. Linux-Archiv nutzen"
+    echo "oder in einer Toolbox bauen und auf dem Host installieren:"
+    echo "  toolbox create && toolbox run sudo dnf install -y gcc && toolbox run cargo build --release --locked"
+    echo "  METER_BINARY=target/release/aion2-meter ./scripts/install-binary.sh   # außerhalb der Toolbox"
+  else
+    echo "Installiere ihn mit:  sudo dnf install gcc"
+  fi
+  exit 1
+fi
+
 echo "==> Baue (Release) …"
 cargo build --release --locked
 
 echo "==> Installiere nach $BIN"
-install -Dm755 target/release/aion2-meter "$BIN"
-install -Dm644 packaging/aion2-meter.desktop           "$PREFIX/share/applications/aion2-meter.desktop"
-install -Dm644 packaging/aion2-meter-dashboard.desktop "$PREFIX/share/applications/aion2-meter-dashboard.desktop"
-install -Dm644 packaging/aion2-meter.svg               "$PREFIX/share/icons/hicolor/scalable/apps/aion2-meter.svg"
-sed -i "s|^Exec=aion2-meter|Exec=$BIN|" "$PREFIX/share/applications/aion2-meter.desktop"
-
-echo "==> Erlaube Paketmitschnitt (einmalig sudo, nötig nach jedem Update)"
-sudo setcap cap_net_raw=ep "$BIN"
-
-if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] && command -v kwriteconfig6 >/dev/null; then
-  echo "==> KWin-Regel: Overlay bleibt über dem Spiel"
-  ./scripts/install-kwin-rule.sh
-fi
-
-update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true
+METER_BINARY="${CARGO_TARGET_DIR:-target}/release/aion2-meter" ./scripts/install-binary.sh
 
 if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] && [ -t 0 ]; then
   read -r -p "Tastenkürzel einrichten (Strg+Umschalt+F9/F10/F11)? [J/n] " answer
   if [[ ! "$answer" =~ ^[nN] ]]; then
-    ./scripts/install-shortcuts.sh
+    BIN="$BIN" ./scripts/install-shortcuts.sh
   fi
 fi
 

@@ -1,5 +1,7 @@
 # Kampfanalyse und Bedienung in 0.3.0
 
+> Historische Prüfung/Funktionsbeschreibung. Den aktuellen Teststand und spätere Änderungen dokumentiert [Releaseprüfung 0.3.1](RELEASE_REVIEW_0.3.1.md).
+
 ## Parser und Messwertprüfung
 
 A2Tools 2.0.52 wird auf `d3cf6f92533721939f4b4454d163c6d1dd820666` festgelegt. Gegenüber unserer vorherigen Version korrigiert Upstream unter anderem Bodenflächen-/Beschwörungszuordnung, Ressourcenwiederherstellung gegenüber Heilung, Party-Erkennung und Treffermerkmale. Die neuen deutschen/englischen Skillnamen sind eingebunden. Vorhandene gespeicherte Kämpfe bleiben lesbar.

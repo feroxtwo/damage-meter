@@ -11,6 +11,8 @@
 set -euo pipefail
 
 BIN="${BIN:-$HOME/.local/bin/aion2-meter}"
+source "$(dirname "$0")/desktop-exec.sh"
+EXEC_BIN=$(desktop_exec_quote "$BIN")
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 LOCK="${LOCK:-Ctrl+Shift+F9}"
 VISIBLE="${VISIBLE:-Ctrl+Shift+F10}"
@@ -49,7 +51,7 @@ register() {
 [Desktop Entry]
 Type=Application
 Name=$name
-Exec=$BIN ctl $action
+Exec=$EXEC_BIN ctl $action
 Icon=aion2-meter
 NoDisplay=true
 StartupNotify=false

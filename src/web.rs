@@ -29,6 +29,17 @@ fn guard(headers: &HeaderMap) -> Result<(), StatusCode> {
     }
 }
 
+/// Database queries and parser snapshots block; run them off the two async
+/// workers so a long history query never delays `/api/live` or the overlay API.
+async fn blocking<T: Send + 'static>(
+    engine: AppState,
+    f: impl FnOnce(&Engine) -> T + Send + 'static,
+) -> Result<T, StatusCode> {
+    tokio::task::spawn_blocking(move || f(&engine))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
 fn db_error(e: anyhow::Error) -> StatusCode {
     tracing::error!("Database: {e:#}");
     StatusCode::INTERNAL_SERVER_ERROR
@@ -76,22 +87,22 @@ async fn runs(
 ) -> Result<Json<Value>, StatusCode> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
     let offset = q.offset.unwrap_or(0).max(0);
-    let dungeon = q.dungeon.as_deref().filter(|d| !d.is_empty());
-    let character = q.character.as_deref().unwrap_or("");
-    engine
-        .db
-        .list_runs(limit, offset, dungeon, character)
-        .map(Json)
-        .map_err(db_error)
+    let dungeon = q.dungeon.filter(|d| !d.is_empty());
+    let character = q.character.unwrap_or_default();
+    blocking(engine, move |e| {
+        e.db.list_runs(limit, offset, dungeon.as_deref(), &character)
+    })
+    .await?
+    .map(Json)
+    .map_err(db_error)
 }
 
 async fn run_detail(
     State(engine): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, StatusCode> {
-    engine
-        .db
-        .run_detail(id)
+    blocking(engine, move |e| e.db.run_detail(id))
+        .await?
         .map_err(db_error)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -103,7 +114,9 @@ async fn delete_run(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    engine.db.delete_run(id).map_err(db_error)?;
+    if !engine.db.delete_run(id).map_err(db_error)? {
+        return Err(StatusCode::CONFLICT);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -119,10 +132,16 @@ async fn run_note(
     Json(body): Json<NoteBody>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    engine
+    if body.note.chars().count() > 4000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let saved = engine
         .db
         .set_run_note(id, body.note.trim())
         .map_err(db_error)?;
+    if !saved {
+        return Err(StatusCode::NOT_FOUND);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -130,9 +149,8 @@ async fn fight_detail(
     State(engine): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
-    engine
-        .db
-        .fight_detail(&id)
+    blocking(engine, move |e| e.db.fight_detail(&id))
+        .await?
         .map_err(db_error)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -150,9 +168,9 @@ async fn partners(
     State(engine): State<AppState>,
     Query(q): Query<StatsQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let rows = engine
-        .db
-        .top_partners(q.limit.unwrap_or(5).clamp(1, 100), &q.character)
+    let limit = q.limit.unwrap_or(5).clamp(1, 100);
+    let rows = blocking(engine, move |e| e.db.top_partners(limit, &q.character))
+        .await?
         .map_err(db_error)?;
     Ok(Json(Value::Array(rows)))
 }
@@ -161,9 +179,8 @@ async fn boss_history(
     State(engine): State<AppState>,
     Query(q): Query<StatsQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    engine
-        .db
-        .boss_history(&q.character)
+    blocking(engine, move |e| e.db.boss_history(&q.character))
+        .await?
         .map(Json)
         .map_err(db_error)
 }
@@ -172,13 +189,15 @@ async fn summary(
     State(engine): State<AppState>,
     Query(q): Query<StatsQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    engine.db.summary(&q.character).map(Json).map_err(db_error)
+    blocking(engine, move |e| e.db.summary(&q.character))
+        .await?
+        .map(Json)
+        .map_err(db_error)
 }
 
 async fn characters(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
-    engine
-        .db
-        .characters()
+    blocking(engine, |e| e.db.characters())
+        .await?
         .map(|c| Json(Value::Array(c)))
         .map_err(db_error)
 }
@@ -190,10 +209,15 @@ async fn get_overlay(State(engine): State<AppState>) -> Json<OverlaySettings> {
 async fn set_overlay(
     State(engine): State<AppState>,
     headers: HeaderMap,
-    Json(body): Json<OverlaySettings>,
+    Json(body): Json<Value>,
 ) -> Result<Json<OverlaySettings>, StatusCode> {
     guard(&headers)?;
-    engine.update_overlay(body).map(Json).map_err(db_error)
+    // A partial update: the dashboard sends only what the user changed, so a
+    // stale copy cannot move the overlay back or undo a lock from a shortcut.
+    if !body.is_object() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    engine.patch_overlay(&body).map(Json).map_err(db_error)
 }
 
 async fn toggle_lock(
@@ -296,14 +320,20 @@ async fn search_fights(
     State(e): State<AppState>,
     Query(q): Query<FightQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    e.db.search_fights(
-        &q.query,
-        &q.character,
-        q.from.unwrap_or(0),
-        q.to.unwrap_or(i64::MAX),
-        q.favorites,
-        q.offset.max(0),
-    )
+    if q.query.chars().count() > 500 || q.from.zip(q.to).is_some_and(|(a, b)| a > b) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    blocking(e, move |e| {
+        e.db.search_fights(
+            &q.query,
+            &q.character,
+            q.from.unwrap_or(0),
+            q.to.unwrap_or(i64::MAX),
+            q.favorites,
+            q.offset.max(0),
+        )
+    })
+    .await?
     .map(Json)
     .map_err(db_error)
 }
@@ -333,8 +363,8 @@ async fn annotate(
         Err(StatusCode::NOT_FOUND)
     }
 }
-async fn player(State(e): State<AppState>, Path(id): Path<i32>) -> Json<Value> {
-    Json(e.player_details(id))
+async fn player(State(e): State<AppState>, Path(id): Path<i32>) -> Result<Json<Value>, StatusCode> {
+    blocking(e, move |e| e.player_details(id)).await.map(Json)
 }
 #[derive(Deserialize)]
 struct ProfileBody {
@@ -474,7 +504,14 @@ pub async fn serve(engine: AppState, listener: std::net::TcpListener) -> anyhow:
     let addr = listener.local_addr()?;
     let listener = tokio::net::TcpListener::from_std(listener)?;
     tracing::info!("Dashboard: http://{addr}/");
-    axum::serve(listener, router(engine, addr)).await?;
+    let shutdown = engine.clone();
+    axum::serve(listener, router(engine, addr))
+        .with_graceful_shutdown(async move {
+            while !shutdown.is_stopping() {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        })
+        .await?;
     Ok(())
 }
 
@@ -603,6 +640,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn searches_notes_and_active_run_deletion_validate_input() {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "de",
+            std::env::temp_dir(),
+        );
+        let id = engine.db.start_run(600093, 1000, Some("Me"), 1).unwrap();
+        let app = router(engine.clone(), "127.0.0.1:8787".parse().unwrap());
+        for (method, path, body, status) in [
+            (
+                "GET",
+                "/api/fights?from=2000&to=1000".to_string(),
+                "".to_string(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "GET",
+                format!("/api/fights?query={}", "a".repeat(501)),
+                "".into(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "POST",
+                "/api/runs/999/note".into(),
+                json!({"note":"missing"}).to_string(),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                "POST",
+                format!("/api/runs/{id}/note"),
+                json!({"note":"ü".repeat(4001)}).to_string(),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "DELETE",
+                format!("/api/runs/{id}"),
+                "".into(),
+                StatusCode::CONFLICT,
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(request(method, &path, "localhost:8787", true, &body))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+        }
+        engine
+            .db
+            .upsert_members(
+                id,
+                &[crate::db::Member {
+                    name: "Other".into(),
+                    job: "검성".into(),
+                    server_id: 1,
+                    level: 45,
+                    gear_score: 0,
+                    combat_power: 0,
+                    dbid: 0,
+                    is_self: false,
+                }],
+            )
+            .unwrap();
+        engine.db.end_run(id, 2000).unwrap();
+        assert_eq!(
+            app.oneshot(request(
+                "DELETE",
+                &format!("/api/runs/{id}"),
+                "localhost:8787",
+                true,
+                ""
+            ))
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[tokio::test]
     async fn overlay_settings_are_clamped_and_survive_the_next_read() {
         let app = app();
         let body = json!({"visible": false, "locked": true, "opacity": 2.0, "scale": 9.0, "max_rows": 100, "show_dps": false, "hide_names": true}).to_string();
@@ -629,6 +746,49 @@ mod tests {
         assert_eq!(data["max_rows"], 24);
         assert_eq!(data["hide_names"], true);
         assert_eq!(data["visible"], false);
+    }
+    #[tokio::test]
+    async fn partial_overlay_updates_keep_position_and_lock_from_other_sources() {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "de",
+            std::env::temp_dir(),
+        );
+        let app = router(engine.clone(), "127.0.0.1:8787".parse().unwrap());
+        // The overlay was dragged and locked by a shortcut after the dashboard loaded.
+        engine
+            .modify_overlay(|s| {
+                s.position = Some([700.0, 300.0]);
+                s.locked = true;
+            })
+            .unwrap();
+        let post = |body: Value| {
+            app.clone().oneshot(request(
+                "POST",
+                "/api/overlay",
+                "localhost:8787",
+                true,
+                &body.to_string(),
+            ))
+        };
+        let response = post(json!({"opacity": 0.4, "theme": "ember"}))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let s = engine.overlay.read().clone();
+        assert_eq!(s.position, Some([700.0, 300.0]));
+        assert!(s.locked);
+        assert_eq!(s.theme, "ember");
+        assert!((s.opacity - 0.4).abs() < 1e-6);
+        // A wrong type in one field leaves that field and all others unchanged.
+        post(json!({"scale": "big", "max_rows": 3})).await.unwrap();
+        let s = engine.overlay.read().clone();
+        assert_eq!(s.scale, 1.0);
+        assert_eq!(s.max_rows, 3);
+        assert_eq!(
+            post(json!([1, 2])).await.unwrap().status(),
+            StatusCode::BAD_REQUEST
+        );
     }
     #[tokio::test]
     async fn unicode_text_limits_accept_multibyte_characters_and_reject_overlong_inputs() {
