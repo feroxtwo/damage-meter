@@ -137,7 +137,7 @@ Technisch begrenzt: Zusatzkurven, Buffintervalle, TCP/Candidates und Aufnahme-Ro
 - Tar/DEB/RPM: Erstellung, Version/Architektur/GLIBC-Abhängigkeit, Inhalt, Docs, Capability-Manifeste und SHA256SUMS geprüft. Keine reale Paketmanagerinstallation in Fedora/Ubuntu/Bazzite behauptet.
 - JavaScript ist Vanilla-JS ohne TypeScriptprojekt; Syntaxcheck und Chromium statt eines erfundenen Typecheck-Schritts. Keine unnötigen Runtime-Abhängigkeiten: nur vorhandenes Tokio mit signal-Feature und transitiver signal-hook-registry ergänzt.
 
-Neue Rustregressionen decken gemeinsame Kurz-/Runfenster,64-Bit-Fightsumme/ungültige Quote, Memberdelimiter/aktive Runs, Tiertrennung/Versuche, shared curves/burst, strikte Effektgrenzen, Shutdown/Savefehler, defekte Settings, unabhängige Live/Detail/History/Replay-Mathematik und API-Limits ab. Neue Browserchecks decken Skillbedienung, KPI/Fokus, bounded/lazy/DPI, Privacydiagnose,24 lange Spielernamen/100 Skills/Zahlengrenze und Partialkurven ab. Neue Helfer: test-native.py, test-installer.py, test-real-web.cjs, benchmark-history.py, test-packages.py und test-native-dependencies.py. CI führt Installer-/Nativechecks zusätzlich aus. Der erste Native-CI-Lauf fand die fehlende dynamische X11-Bibliothek; der korrigierte Stand wird erneut auf einem frischen Runner geprüft.
+Neue Rustregressionen decken gemeinsame Kurz-/Runfenster,64-Bit-Fightsumme/ungültige Quote, Memberdelimiter/aktive Runs, Tiertrennung/Versuche, shared curves/burst, strikte Effektgrenzen, Shutdown/Savefehler, defekte Settings, unabhängige Live/Detail/History/Replay-Mathematik und API-Limits ab. Neue Browserchecks decken Skillbedienung, KPI/Fokus, bounded/lazy/DPI, Privacydiagnose,24 lange Spielernamen/100 Skills/Zahlengrenze und Partialkurven ab. Neue Helfer: test-native.py, test-installer.py, test-real-web.cjs, benchmark-history.py, test-packages.py und test-native-dependencies.py. CI führt Installer-/Nativechecks zusätzlich aus. Der erste Native-CI-Lauf fand die fehlende dynamische X11-Bibliothek. Der korrigierte Code- und Teststand bei `25c438700d303d33d507da4e9deabdfd5a6ab3af` besteht inzwischen auf dem frischen GitHub-Runner vollständig: [CI 37611751972](https://github.com/feroxtwo/damage-meter/actions/runs/37611751972), Jobs `build`, `web` und `msrv` jeweils erfolgreich. Auch Headless-, Native-Abhängigkeits-, Installer-, Native-Geometrie- und Paketprüfungen sind dort ausdrücklich erfolgreich.
 
 ## Zweite UX-Runde und Bilder
 
@@ -170,3 +170,79 @@ In Runde2 zusätzlich korrigiert: tatsächlicher angewendeter Zoom statt gewüns
 Core: Cargo.toml/Cargo.lock; src/analytics.rs, buffs.rs, capture.rs, db.rs, dispatcher.rs, engine.rs, main.rs, overlay.rs, web.rs. Oberfläche: web/index.html, enhancements.js/css und qol.js. Installation/Tests: scripts/install.sh, install-binary.sh, install-shortcuts.sh, desktop-exec.sh, package-linux.sh, test-headless.py, test-web.cjs sowie die sechs genannten neuen Test-/Benchmarkhelfer. CI: .github/workflows/ci.yml. Dokumentation: README, die drei historischen Dokumente, dieser Bericht, INGAME_ACCEPTANCE, Benchmark-JSON und review-images.
 
 PR enthält die getesteten Änderungen; Freigabe/Merge bleibt beim Maintainer. [PR #6](https://github.com/feroxtwo/damage-meter/pull/6) enthält den veröffentlichten Stand. Keine Veröffentlichung eines endgültigen Releases durch diese Prüfung.
+
+
+## Abschließende Fortsetzung und Release-Abnahme
+
+Die Fortsetzung prüft den erhaltenen Arbeitsstand und die vorhandenen Nachweise, ohne die bestandene Softwareanalyse oder Testläufe zu wiederholen. Der Arbeitsbaum bei `25c4387` war sauber, alle sechs bisherigen Commits waren lokal und auf dem PR-Branch vorhanden. GitHub bestätigt den offenen, nicht gemergten und konfliktfrei gegen `main` gerichteten PR #6. Ausgangsbranch und PR-Basis stehen weiterhin bei `f0227b6`.
+
+Seit dem letzten erfolgreichen CI-Lauf wurde für diesen Abschluss ausschließlich dieser Bericht ergänzt. Der getestete Anwendungs-, Installer-, Paket- und Testcode bleibt identisch. Deshalb ist lokal kein erneuter Regressionstest oder Release-Build erforderlich. Die automatisch durch den Dokumentationscommit gestartete GitHub-CI ist vom oben belegten erfolgreichen Code-Testlauf zu unterscheiden.
+
+| Freigabekriterium | Ergebnis / Nachweis | Entscheidung |
+|---|---|---|
+| Bisherige Änderungen erhalten | Sauberer Git-Status, sechs Commits seit `f0227b6`, identischer lokaler und veröffentlichter Code-Head `25c4387` | Bestanden |
+| Notwendige Regressionen nach letztem Codestand | Letzte CI einschließlich aller drei Jobs und nachträglicher X11-/Python-/Geometriekorrekturen erfolgreich | Bestanden, keine lokale Wiederholung |
+| Release-Build und Softwaretests | 74 eigene Rusttests, 123 separat geprüfte Parsertests, 31 Chromiumchecks, 4 Referenztests; Release-Binary, Installer und Pakete geprüft | Bestanden im dokumentierten Umfang |
+| Abschlussbericht / Funktionsmatrix / Dateiinventar | Dieser Bericht mit Befunden, Methoden, Grenzen, Bildern und vollständigem Inventar unten | Vollständig |
+| Reale Ingame-Abnahmeliste | Separate `INGAME_ACCEPTANCE.md` mit Messprotokoll, 26 Szenarien und Offline-Referenzvergleich | Vollständig vorbereitet, Durchführung offen |
+| P0/P1 bei funktionsfähiger Speicherung | Keine offenen reproduzierten P0/P1 im geprüften Softwarebetrieb; festgestellte P1-Befunde oben korrigiert und geprüft | Softwarekriterien bestanden |
+| Ausfall der Speicherung | Reguläre Resets stoppen bei Savefehler. Externer Zonen-/Partyreset kann trotz Savefehler löschen; keine verlustfreie Wiederherstellung garantiert | Dokumentiertes Restrisiko, keine Freigabe für garantierte Verlustfreiheit |
+| Reale Messgenauigkeit / Langzeitlast | Keine echten Kampfdaten und kein mehrstündiger Spielbetrieb vorhanden | Offen, keine Ingame-Freigabe |
+| Zielsystem / Desktop / Paketinstallation | KDE/Wayland, Multimonitor, Spiel-Fokus, reale RPM/DEB/rpm-ostree-Installation und Capturecapability nach Upgrade fehlen | Offen, Abnahme auf Zielsystem nötig |
+| Veröffentlichung / Merge | PR #6 veröffentlicht gegen `main`; kein Merge und kein endgültiger Release durch den Prüfer | Maintainer entscheidet |
+
+**Finales Releaseurteil: BEDINGT FREIGABEFÄHIG als Linux-Releasekandidat 0.3.1.** Die Softwareprüfung ist abgeschlossen. Eine endgültige Ingame- oder Zielsystemfreigabe folgt erst aus der separaten realen Abnahme. Der Speicherfehlerpfad des externen Resets, i32-Grenzen im Parser, fehlende Overheal-/Dispel-Erfassung, Alt-Historie, freiwilliger LAN-Bind ohne Auth und fehlende mehrstündige Lastprüfung bleiben ausdrücklich die oben beschriebenen Restrisiken. Sie werden nicht durch erfolgreiche synthetische Tests als erledigt ausgegeben.
+
+### Vollständiges Dateiinventar gegenüber `f0227b6`
+
+47 geänderte oder neu hinzugefügte Dateien, einschließlich dieses Abschlussberichts. Binäre Bilddateien sind Vorschauen und keine Messdatennachweise.
+
+```text
+.github/workflows/ci.yml
+Cargo.lock
+Cargo.toml
+README.md
+docs/COMBAT_ANALYSIS.md
+docs/INGAME_ACCEPTANCE.md
+docs/QOL_0.3.0.md
+docs/RELEASE_REVIEW_0.3.1.md
+docs/TECHNICAL_REVIEW.md
+docs/benchmark-release.json
+docs/review-images/actual-live-empty.png
+docs/review-images/actual-native-2x.png
+docs/review-images/actual-native.png
+docs/review-images/actual-stats-empty.png
+docs/review-images/after-comparison.png
+docs/review-images/after-dashboard.png
+docs/review-images/after-runs.png
+docs/review-images/after-settings.png
+docs/review-images/after-skills.png
+docs/review-images/before-comparison.png
+docs/review-images/before-dashboard.png
+scripts/benchmark-history.py
+scripts/desktop-exec.sh
+scripts/install-binary.sh
+scripts/install-shortcuts.sh
+scripts/install.sh
+scripts/package-linux.sh
+scripts/test-headless.py
+scripts/test-installer.py
+scripts/test-native-dependencies.py
+scripts/test-native.py
+scripts/test-packages.py
+scripts/test-real-web.cjs
+scripts/test-web.cjs
+src/analytics.rs
+src/buffs.rs
+src/capture.rs
+src/db.rs
+src/dispatcher.rs
+src/engine.rs
+src/main.rs
+src/overlay.rs
+src/web.rs
+web/enhancements.css
+web/enhancements.js
+web/index.html
+web/qol.js
+```
