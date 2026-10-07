@@ -170,18 +170,18 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <div class="hp" id="liveHp" style="display:none"><div></div></div>
     </div>
     <div class="grid live-metrics" aria-label="Live-Kennzahlen">
-      <div class="card kpi"><div class="l">Gruppen-DPS</div><div class="v" id="groupDps">0</div></div>
-      <div class="card kpi"><div class="l">Meine DPS</div><div class="v" id="selfDps">0</div><div class="muted" id="selfBurst">5s Burst: 0/s</div></div>
-      <div class="card kpi"><div class="l">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div>
+      <div class="card kpi"><div class="l" id="groupDpsLabel">Gruppen-DPS</div><div class="v" id="groupDps">0</div></div>
+      <div class="card kpi"><div class="l" id="selfDpsLabel">Meine DPS</div><div class="v" id="selfDps">0</div><div class="muted" id="selfBurst">5s Burst: 0/s</div></div>
+      <div class="card kpi"><div class="l" id="totalDamageLabel">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div>
       <div class="card kpi"><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div>
     </div>
-    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><label><input type="checkbox" id="anonymousExport"> Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="liveRows"></div><div id="livePlayer"></div></div>
+    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><button class="btn" id="copyDiagnostics">Diagnose kopieren</button><label><input type="checkbox" id="anonymousExport" checked> Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div id="livePlayer"></div></div>
     <div class="card"><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
   </section>
 
   <section id="runs">
     <div class="page-title"><div><div class="eyebrow">Deine Sessions</div><h2>Run-Verlauf</h2><p>Jede Expedition. Jeder Boss. Dein Fortschritt.</p></div><span class="tag">AION 2 · LINUX</span></div>
-    <div class="card" id="fightLibrary"><h2>Kampfbibliothek</h2><div class="row"><input id="fightSearch" type="search" placeholder="Boss, Notiz oder Tag" aria-label="Kämpfe suchen"><label>Von <input id="fightFrom" type="date"></label><label>Bis <input id="fightTo" type="date"></label><label><input id="fightFavorites" type="checkbox"> Nur Favoriten</label><button class="btn" id="searchFights">Suchen</button></div><p class="muted">Auch Trainingskämpfe und Kämpfe außerhalb eines Runs.</p><div id="fightResults"></div><button class="btn" id="moreFights" hidden>Weitere Kämpfe</button></div>
+    <div class="card" id="fightLibrary"><h2>Kampfbibliothek</h2><div class="row"><input id="fightSearch" type="search" placeholder="Boss, Notiz oder Tag" aria-label="Kämpfe suchen"><label>Von <input id="fightFrom" type="date"></label><label>Bis <input id="fightTo" type="date"></label><label><input id="fightFavorites" type="checkbox"> Nur Favoriten</label><button class="btn" id="searchFights">Suchen</button><button class="btn" id="clearFightFilters">Filter zurücksetzen</button></div><p class="muted">Auch Trainingskämpfe und Kämpfe außerhalb eines Runs.</p><div id="fightResults"></div><button class="btn" id="moreFights" hidden>Weitere Kämpfe</button></div>
     <div id="runList">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -189,7 +189,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
           <select id="dungeonFilter" aria-label="Dungeon filtern"><option value="">Alle Dungeons</option></select>
         </div>
         <div class="table-scroll"><table><thead><tr><th>Datum</th><th>Dungeon</th><th>Dauer</th><th>Bosse</th><th>Gruppe</th><th>Meine DPS</th></tr></thead>
-        <tbody id="runRows"></tbody></table></div>
+        <tbody id="runRows"></tbody></table></div><p class="analysis-note">Meine DPS: arithmetischer Mittelwert der eigenen gespeicherten Kampf-DPS.</p>
         <div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="moreRuns">Mehr laden</button></div>
       </div>
     </div>
@@ -295,12 +295,12 @@ const deathMark = (r) => {
 };
 function bars(rows, opts = {}) {
   if (!rows.length) return `<div class="empty">${opts.empty || 'Noch kein Schaden.'}</div>`;
-  const top = Math.max(...rows.map(r => r.damage), 1);
+  const top = rows.reduce((n,r)=>Math.max(n,r.damage||0),1);
   const sum = rows.reduce((a, r) => a + (r.damage || 0), 0) || 1;
   return rows.map((r, i) => `<div class="bar ${r.is_self ? 'me' : ''}">
     <div class="fill" style="width:${(r.damage / top * 100).toFixed(1)}%;background:${color(r.class_key)};color:${color(r.class_key)}"></div>
     <div class="lbl"><span>${opts.noRank ? '' : (i + 1) + '. '}${deathMark(r)}<b>${esc(r.name)}</b> <span class="muted">${esc(r.class_name || '')}${r.damage_received ? ` · ${num(r.damage_received)} erlitten` : ''}</span></span>
-    <span class="num">${opts.right ? opts.right(r) : `${num(r.damage)} · ${num(r.dps)}/s · ${(r.share ?? (r.damage / sum * 100)).toFixed(1).replace('.', ',')}%`}</span></div></div>`).join('');
+    <span class="num" title="${esc(Number(r.damage||0).toLocaleString('de-DE'))} gesamt · ${esc(Number(r.dps||0).toLocaleString('de-DE',{maximumFractionDigits:2}))}/s">${opts.right ? opts.right(r) : `${num(r.damage)} · ${num(r.dps)}/s · ${(r.share ?? (r.damage / sum * 100)).toFixed(1).replace('.', ',')}%`}</span></div></div>`).join('');
 }
 function setStatus(c) {
   let col = 'var(--muted)', txt = 'AION2 nicht gestartet';
@@ -326,20 +326,17 @@ async function pollLive() {
     setStatus(l.capture);
     if (tab === 'live') {
       $('#liveTarget').textContent = l.target_name || 'Kein Ziel';
-      const dps = l.battle_time_ms ? l.total_damage * 1000 / l.battle_time_ms : 0;
-      $('#groupDps').textContent = num(dps);
-      $('#selfDps').textContent = num(l.rows.find(r => r.is_self)?.dps || 0);
-      $('#totalDamage').textContent = num(l.total_damage);
+      if(window.renderLiveMetrics)renderLiveMetrics(l);
       $('#battleDuration').textContent = dur(l.battle_time_ms);
       $('#liveSub').textContent = [l.dungeon,
         l.ping_ms != null ? l.ping_ms + ' ms' : null, l.hp_estimated ? 'HP geschätzt' : null, l.capture.stream_gaps ? 'Datenlücken: ' + l.capture.stream_gaps : null, l.character ? 'Charakter: ' + l.character : null].filter(Boolean).join(' · ');
       $('#liveHp').style.display = l.target_hp == null ? 'none' : 'block';
       if (l.target_hp != null) $('#liveHp div').style.width = (l.target_hp * 100).toFixed(1) + '%';
-      $('#liveRows').innerHTML = bars(window.metricRows ? metricRows(l.rows) : l.rows, { empty: '<svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><b>Bereit für den nächsten Kampf</b><p>Starte AION 2 und greife ein Ziel an. Deine Gruppe erscheint hier, sobald Kampfdaten ankommen.</p>' });
+      if(window.updateLiveRows)updateLiveRows(l);
       if (window.bindLiveRows) bindLiveRows(l);
       if (document.activeElement !== $('#targetMode')) $('#targetMode').value = l.target_mode || 'bossTargets';
     }
-  } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar'; }
+  } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar';$('#captureHelp').hidden=false;$('#captureHelp').textContent='Verbindung zum Meter unterbrochen. Die Zahlen zeigen den letzten empfangenen Stand. Prüfe, ob aion2-meter noch läuft.'; }
   finally { livePolling = false; if (!document.hidden) pollTimer = setTimeout(pollLive, 1000); }
 }
 $('#resetBtn').onclick = () => api('/api/reset', { method: 'POST' });
@@ -403,7 +400,7 @@ async function loadRuns(reset) {
   else $('#runRows').insertAdjacentHTML('beforeend', html);
   runOffset += data.runs.length;
   $('#moreRuns').style.display = runOffset < data.total ? '' : 'none';
-  document.querySelectorAll('#runRows tr.click').forEach(tr => tr.onclick = () => openRun(tr.dataset.id));
+  document.querySelectorAll('#runRows tr.click').forEach(tr => {tr.tabIndex=0;tr.setAttribute('role','button');tr.setAttribute('aria-label','Run öffnen: '+tr.cells[1].textContent);tr.onclick=()=>task(openRun(tr.dataset.id));tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tr.click();}};});
 }
 $('#dungeonFilter').onchange = () => loadRuns(true);
 $('#moreRuns').onclick = () => loadRuns(false);
@@ -418,10 +415,10 @@ async function openRun(id) {
   <div class="card"><div class="row" style="justify-content:space-between">
     <div><div style="font-size:20px;font-weight:700">${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
     <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} Bosskämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
-    <div class="row"><input type="text" id="noteIn" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
-    <button class="btn danger" id="delBtn">Löschen</button></div></div>
+    <div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
+    <button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Löschen</button></div></div>
     <div style="margin-top:10px">${r.members.map(chip).join('')}</div></div>
-  <div class="card"><h2>Gesamt über alle Bosse</h2>${bars(r.totals)}</div>
+  <div class="card"><h2>Gesamt über erfasste Kämpfe</h2><p class="analysis-note">${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}</p>${bars(r.totals)}</div>
   ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Unbekannter Gegner')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
     <span class="muted"> · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden · ${date(f.started_at)}</span>
     <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
@@ -457,7 +454,7 @@ async function loadStats() {
   const maxD = Math.max(1, ...s.per_dungeon.map(d => d.runs));
   $('#perDungeon').innerHTML = s.per_dungeon.map(d => `<div class="bar"><div class="fill" style="width:${d.runs / maxD * 100}%;background:var(--accent);color:var(--accent)"></div>
     <div class="lbl"><span>${esc(d.dungeon_name)}${badge(d.difficulty)}</span><span class="num">${d.runs}× ${d.fastest_ms ? '· schnellster ' + dur(d.fastest_ms) : ''}</span></div></div>`).join('') || '<div class="empty">–</div>';
-  $('#myBest').innerHTML = bars(s.my_best.map(b => ({ name: b.boss_name, class_key: b.class_key, class_name: b.kills + '× gelegt', damage: b.best_dps })),
+  $('#myBest').innerHTML = bars(s.my_best.map(b => ({ name: b.boss_name+(b.difficulty?' · '+b.difficulty:''), class_key: b.class_key, class_name: [b.name,b.class_name,(b.attempts||0)+'× erfasst'].filter(Boolean).join(' · '), damage: b.best_dps })),
     { empty: 'Noch keine Bosskämpfe.', noRank: true, right: (r) => num(r.damage) + '/s' });
   const days = []; const map = Object.fromEntries(s.per_day.map(d => [d.day, d.runs]));
   for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); const k = d.toLocaleDateString('sv-SE'); days.push([k, map[k] || 0]); }
@@ -474,7 +471,7 @@ async function loadBossHistory() {
   if (request !== bossRequest) return;
   bossHistory = history;
   const sel = $('#bossSel'), cur = sel.value;
-  sel.innerHTML = bossHistory.map((b, i) => `<option value="${i}">${esc(b.boss)} (${b.kills.length}×)</option>`).join('');
+  sel.innerHTML = bossHistory.map((b, i) => `<option value="${i}">${esc(b.boss)}${b.difficulty?' · '+esc(b.difficulty):''} (${b.attempts.length} Versuche)</option>`).join('');
   if (cur && cur < bossHistory.length) sel.value = cur;
   drawBoss();
 }
@@ -482,27 +479,29 @@ function drawBoss() {
   const box = $('#bossChart');
   const b = bossHistory[Number($('#bossSel').value) || 0];
   if (!b) { box.innerHTML = '<div class="empty">Noch keine Bosskämpfe mit dir.</div>'; return; }
-  const k = b.kills, W = Math.max(box.clientWidth, 240), H = 220, L = 56, R = 16, T = 14, B = 28;
-  const max = Math.max(...k.map(x => x.dps)) * 1.1 || 1;
+  const k = b.attempts, W = Math.max(box.clientWidth, 240), H = 220, L = 56, R = 16, T = 14, B = 28;
+  const max = k.reduce((n,p)=>Math.max(n,p.dps),1)*1.1;
   const x = (i) => k.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (k.length - 1);
   const y = (v) => T + (1 - v / max) * (H - T - B);
   const ticks = [0, .25, .5, .75, 1].map(f => f * max);
-  const path = k.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.dps).toFixed(1)}`).join('');
+  const step=Math.max(1,Math.ceil(k.length/600));
+  const visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
+  const path = visible.map(({p,i},j) => `${j ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.dps).toFixed(1)}`).join('');
   box.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="DPS-Verlauf ${esc(b.boss)}">
     ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/>
       <text x="${L - 8}" y="${y(t) + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${num(t)}</text>`).join('')}
     <text x="${L}" y="${H - 8}" fill="var(--muted)" font-size="11">${date(k[0].started_at)}</text>
     <text x="${W - R}" y="${H - 8}" fill="var(--muted)" font-size="11" text-anchor="end">${date(k[k.length - 1].started_at)}</text>
     <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
-    ${k.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.dps)}" r="4.5" fill="${p.died ? 'var(--red)' : 'var(--accent)'}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
+    ${visible.map(({p,i}) => `<circle cx="${x(i)}" cy="${y(p.dps)}" r="4.5" fill="${p.died ? 'var(--red)' : 'var(--accent)'}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
     <line id="bossCross" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>
     <rect x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent" id="bossHit"/>
   </svg><div id="bossTip" class="card" style="position:absolute;display:none;padding:8px 10px;margin:0;pointer-events:none;font-size:12px;white-space:nowrap"></div>
-  <div class="muted" style="font-size:12px">Rote Punkte: Kämpfe, in denen du gestorben bist.</div>`;
+  <div class="muted" style="font-size:12px">Erfasste Versuche, kein Kill-Nachweis. Rote Punkte: Kämpfe mit erfasstem eigenem Tod.${step>1?' Darstellung ausgedünnt.':''}</div>`;
   const hit = $('#bossHit'), tip = $('#bossTip'), cross = $('#bossCross');
   hit.onmousemove = (e) => {
     const r = hit.getBoundingClientRect(), mx = e.clientX - r.left + L;
-    let i = 0; k.forEach((_, j) => { if (Math.abs(x(j) - mx) < Math.abs(x(i) - mx)) i = j; });
+    const i=k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((mx-L)/(W-L-R)*(k.length-1))));
     const p = k[i];
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
     tip.innerHTML = `<b>${num(p.dps)}/s</b>${p.difficulty ? ' · ' + esc(p.difficulty) : ''}<br>${date(p.started_at)} · ${dur(p.duration_ms)} · ${(p.share ?? 0).toFixed(0)}% Anteil${p.died ? '<br><span style="color:var(--red)">† gestorben</span>' : ''}`;

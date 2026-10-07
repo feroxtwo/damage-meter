@@ -18,7 +18,7 @@ const live = {
 };
 const characters = [{name:'FeroxTOO', class_name:'Kleriker', runs:12}, {name:'Alt', class_name:'Gladiator', runs:1}];
 const run = {id:1, started_at:Date.now()-3600000, ended_at:Date.now()-3000000, dungeon_name:'Ferocious Horn Den', difficulty:'Schwer', fights:2, members:[{name:'FeroxTOO',is_self:1,class_key:'cleric'}], my_dps:50000, note:'Test-Run'};
-const summary = {runs:12,fights:24,play_ms:7200000,partners:8,my_deaths:2,characters,per_dungeon:[{dungeon_name:run.dungeon_name,difficulty:'Schwer',runs:12,fastest_ms:600000}],my_best:[{boss_name:'Kargos',best_dps:50000,kills:12,class_key:'cleric'}],per_day:[]};
+const summary = {runs:12,fights:24,play_ms:7200000,partners:8,my_deaths:2,characters,per_dungeon:[{dungeon_name:run.dungeon_name,difficulty:'Schwer',runs:12,fastest_ms:600000}],my_best:[{boss_name:'Kargos',best_dps:50000,attempts:12,class_key:'cleric'}],per_day:[]};
 const skill={code:11,name:'Hieb',damage:4500000,hits:10,crit_rate:50,back_rate:25,perfect_rate:10,parry_rate:0,double_rate:20,frontal_rate:30,multi_hit_count:3,max:500000,hit_timestamps:[100,500,1000]};
 const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',started_at:run.started_at,duration_ms:90000,total_damage:9450000,
  players:live.rows.map(r=>({...r,actor_id:r.id,job:r.class_key,skills:[{...skill,damage:r.damage}],heal_skills:r.is_self?[{...skill,name:'Heilung',damage:r.heal}]:[],buffs:[{code:42,name:'Buff',uptime:50}]})),
@@ -47,7 +47,7 @@ const server = http.createServer((req,res) => {
   await context.route('**/api/**', async route => {
     const req = route.request(), u = new URL(req.url());
     let data = {};
-    if(u.pathname==='/api/version')data={version:'0.3.0',parser_version:'2.0.52'};
+    if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
     else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
     else if (u.pathname === '/api/live') data = live;
     else if(u.pathname==='/api/fights')data={fights:[fight,comparison,comparison2],more:false};
@@ -73,7 +73,7 @@ const server = http.createServer((req,res) => {
     else if (u.pathname === '/api/runs/1') data = {...run, totals:[], fights:[]};
     else if (u.pathname === '/api/stats/summary') data = summary;
     else if (u.pathname === '/api/stats/partners') data = [{name:'Moon', class_key:'gladiator',class_name:'Gladiator',runs:10}];
-    else if (u.pathname === '/api/stats/boss-history') data = [{boss:'Kargos',kills:[{dps:40000,started_at:run.started_at,duration_ms:90000,share:40},{dps:50000,started_at:run.ended_at,duration_ms:90000,share:48}]}];
+    else if (u.pathname === '/api/stats/boss-history') data = [{boss:'Kargos',attempts:[{dps:40000,started_at:run.started_at,duration_ms:90000,share:40},{dps:50000,started_at:run.ended_at,duration_ms:90000,share:48}]}];
     else if (u.pathname === '/api/overlay') {
       if(req.method() === 'POST') {
         activeWrites++; maxActiveWrites = Math.max(maxActiveWrites,activeWrites);
@@ -102,6 +102,7 @@ const server = http.createServer((req,res) => {
     });
     await page.getByRole('button',{name:'Runs',exact:true}).click();
     await page.locator('#runRows tr.click').waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'runs-desktop.png'),fullPage:true});
     await check('pagination has no duplicate requests',async()=>{
       await page.locator('#moreRuns').evaluate(b=>{b.click();b.click();});
       await page.waitForFunction(()=>document.querySelectorAll('#runRows tr.click').length===2);
@@ -125,6 +126,7 @@ const server = http.createServer((req,res) => {
     });
     await page.getByRole('button',{name:'Overlay',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='1.00×');
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'overlay-settings.png'),fullPage:true});
     await check('settings writes stay ordered during rapid edits',async()=>{
       await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.5';i.dispatchEvent(new Event('input'));});
       await delay(210);
@@ -331,8 +333,87 @@ const server = http.createServer((req,res) => {
     });
     await check('missing hit-quality values render dashes rather than fake zero rates',async()=>{
       const html=await page.evaluate(()=>skillTable([{name:'Skill',damage:100,hits:1,crit_rate:null,block_rate:null}]));
-      assert.ok(html.includes('—'));assert.ok(!html.includes('0,0%'));assert.match(html,/keine Skill-Aktivierungen/);
+      assert.ok(html.includes('—'));assert.equal(await page.evaluate(html=>{const doc=new DOMParser().parseFromString(html,'text/html');return doc.querySelector('tbody tr').children[6].textContent;},html),'—');assert.match(html,/keine Skill-Aktivierungen/);
     });
+    await check('skill search sorting optional columns and exact values',async()=>{
+      await page.evaluate(()=>{
+        document.querySelector('#fightContent').innerHTML=skillTable([{name:'Zed',damage:100,hits:2,average:50,min:25,max:75,crit_rate:50},{name:'Alpha',damage:200,hits:4,average:50,min:40,max:60,crit_rate:null}]);
+        bindSkillTables(document.querySelector('#fightContent'));document.querySelector('#fightDialog').showModal();
+      });
+      const box=page.locator('.skill-browser');
+      assert.equal(await box.locator('.skill-advanced').first().isVisible(),false);
+      await box.locator('.skill-extra').check();assert.equal(await box.locator('.skill-advanced').first().isVisible(),true);
+      await box.locator('.skill-sort').selectOption('name');assert.match(await box.locator('tbody tr').first().textContent(),/^Alpha/);
+      await box.locator('.skill-search').fill('zed');assert.equal(await box.locator('tbody tr:visible').count(),1);
+      assert.equal(await box.locator('tbody tr:visible td').nth(1).getAttribute('title'),'100');
+      await box.locator('.skill-search').fill('no matches');await box.locator('.skill-empty').waitFor();
+      await page.locator('#closeDialog').click();
+    });
+    await check('live focus survives refresh and metric cards follow healing',async()=>{
+      await page.getByRole('button',{name:'Live',exact:true}).click();await page.locator('#liveRows .bar').first().focus();
+      const original=live.rows[0].damage;live.rows[0].damage+=1;
+      await page.waitForFunction(()=>latestLive.rows[0].damage===4500001);await delay(100);
+      assert.equal(await page.evaluate(()=>document.activeElement.dataset.playerId),'1');
+      await page.selectOption('#liveMetric','heal');
+      assert.match(await page.locator('#groupDpsLabel').textContent(),/HPS/);
+      assert.equal(await page.locator('#totalDamageLabel').textContent(),'Erfasste Heilung');
+      assert.equal(await page.locator('#totalDamage').textContent(),'2,00M');
+      await page.selectOption('#liveMetric','damage');live.rows[0].damage=original;
+    });
+    await check('large charts and lazy details stay bounded across themes and DPI',async()=>{
+      const count=await page.evaluate(()=>{
+        const points=Array.from({length:100000},(_,i)=>({ms:i*500,v:i}));
+        const html=svgCurve(points,p=>p.v,'large test');const d=new DOMParser().parseFromString(html,'text/html');
+        return (d.querySelector('path[stroke-width="2"]').getAttribute('d').match(/[ML]/g)||[]).length;
+      });assert.ok(count<=601);
+      await page.evaluate(()=>openFight('f1'));assert.equal(await page.locator('.player-analysis .skill-browser').count(),0);
+      await page.locator('.player-report summary').first().click();await page.locator('.player-analysis .skill-browser').first().waitFor();
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'skill-details.png'),fullPage:true});
+      await page.locator('#closeDialog').click();
+      for(const theme of ['midnight','aether','ember']) {
+        await page.evaluate(theme=>applyAppearance({theme,compact:true}),theme);
+        await page.setViewportSize({width:320,height:844});
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true);
+        if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'theme-'+theme+'-mobile.png'),fullPage:true});
+      }
+      const dpi=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:2});
+      // Reuse the same synthetic API interception on a second scaled page.
+      await dpi.route('**/api/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(route.request().url().endsWith('/api/live')?live:route.request().url().endsWith('/api/overlay')?settings:[])}));
+      const high=await dpi.newPage();await high.goto(base);await high.locator('#liveRows .bar').first().waitFor();
+      assert.equal(await high.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true);await dpi.close();
+      await page.setViewportSize({width:1440,height:1000});
+    });
+    await check('trimmed history does not invent a first-interval damage spike',async()=>{
+      const html=await page.evaluate(()=>{
+        const f={duration_ms:10500,players:[{actor_id:1,name:'Me'}],analytics:{partial:true,points:[{ms:10000,damage:{1:1000000}},{ms:10500,damage:{1:1000100}}]}};
+        return partyCurve(f)+damageCurve(f);
+      });assert.match(html,/200\/s/);assert.ok(!html.includes('100,0K'));
+    });
+    await check('many players long names many skills and numerical limits remain usable',async()=>{
+      const oldRows=live.rows;
+      live.rows=Array.from({length:24},(_,i)=>({...oldRows[0],id:i+1,is_self:i===0,name:'Sehr langer Spielername '+i+' '+('W'.repeat(60)),damage:3000000000-i}));
+      live.numeric_limited=true;
+      await page.waitForFunction(()=>document.querySelectorAll('#liveRows .bar').length===24);
+      await page.locator('#numericWarning').waitFor();
+      await page.setViewportSize({width:320,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true);
+      await page.evaluate(()=>{
+        document.querySelector('#fightContent').innerHTML=skillTable(Array.from({length:100},(_,i)=>({name:'Langer Skill '+i+' '+('S'.repeat(120)),damage:2000000000,hits:1})));
+        bindSkillTables(document.querySelector('#fightContent'));document.querySelector('#fightDialog').showModal();
+      });
+      assert.equal(await page.locator('.skill-browser tbody tr').count(),100);
+      assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
+      await page.locator('#closeDialog').click();live.rows=oldRows;live.numeric_limited=false;
+      await page.setViewportSize({width:1440,height:1000});
+    });
+    await check('diagnostics exclude character names raw errors and network identifiers',async()=>{
+      Object.assign(live.capture,{error:'secret file /home/PrivateName/capture',device:'secret-device',packets:42,last_packet_ms:Date.now()});
+      await page.waitForFunction(()=>latestLive.capture.packets===42);await page.locator('#copyDiagnostics').click();
+      await page.waitForFunction(()=>window.copiedRanking?.startsWith('{'));const text=await page.evaluate(()=>window.copiedRanking);const data=JSON.parse(text);
+      assert.equal(data.packets,42);assert.equal(data.capture_error,true);assert.ok(!text.includes('PrivateName')&&!text.includes('secret-device')&&!text.includes('FeroxTOO'));
+      delete live.capture.error;
+    });
+    await page.waitForFunction(()=>document.querySelectorAll('#liveRows .bar').length===3);
     await check('empty combat state gives guidance and zero personal DPS',async()=>{
       live.rows=[]; live.total_damage=0; live.battle_time_ms=0;
       await page.waitForFunction(()=>document.querySelector('#liveRows').textContent.includes('Bereit für den nächsten Kampf'));
