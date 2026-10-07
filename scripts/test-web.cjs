@@ -135,6 +135,15 @@ const server = http.createServer((req,res) => {
       await delay(900);
       assert.equal(settings.scale,2); assert.equal(maxActiveWrites,1); assert.equal(writes.length,2);
     });
+    await check('setting edits send only changed fields so a dragged overlay keeps its position',async()=>{
+      settings.position=[700,300];settings.locked=true;
+      const before=writes.length;
+      await page.locator('[data-k="opacity"]').evaluate(i=>{i.value='0.5';i.dispatchEvent(new Event('input'));});
+      await page.waitForFunction(()=>document.querySelector('#settingsStatus').textContent==='Einstellungen gespeichert.');
+      assert.deepEqual(writes.slice(before),[{opacity:0.5}]);
+      assert.deepEqual(settings.position,[700,300]);assert.equal(settings.locked,true);
+      settings.locked=false;delete settings.position;
+    });
     await check('profile actions flush pending settings and cannot be overwritten by them',async()=>{
       await page.fill('#profileName','Test');
       await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.25';i.dispatchEvent(new Event('input'));document.querySelector('#saveProfile').click();});
@@ -347,6 +356,13 @@ const server = http.createServer((req,res) => {
       await box.locator('.skill-search').fill('zed');assert.equal(await box.locator('tbody tr:visible').count(),1);
       assert.equal(await box.locator('tbody tr:visible td').nth(1).getAttribute('title'),'100');
       await box.locator('.skill-search').fill('no matches');await box.locator('.skill-empty').waitFor();
+      await box.locator('.skill-search').fill('');
+      const first=()=>box.locator('tbody tr').first().locator('td').first().textContent();
+      await box.locator('.sort-head[data-sort="crit_rate"]').click();assert.equal(await first(),'Zed');
+      assert.equal(await box.locator('th:has([data-sort="crit_rate"])').getAttribute('aria-sort'),'descending');
+      await box.locator('.sort-head[data-sort="max"]').click();assert.equal(await first(),'Zed');
+      await box.locator('.sort-head[data-sort="max"]').click();assert.equal(await first(),'Alpha');
+      assert.equal(await box.locator('th:has([data-sort="max"])').getAttribute('aria-sort'),'ascending');
       await page.locator('#closeDialog').click();
     });
     await check('live focus survives refresh and metric cards follow healing',async()=>{
@@ -418,6 +434,13 @@ const server = http.createServer((req,res) => {
       live.rows=[]; live.total_damage=0; live.battle_time_ms=0;
       await page.waitForFunction(()=>document.querySelector('#liveRows').textContent.includes('Bereit für den nächsten Kampf'));
       assert.equal(await page.locator('#selfDps').textContent(),'0');
+    });
+    await check('missing capture permission names the exact setcap command',async()=>{
+      const capture=live.capture;
+      live.capture={...capture,permission:false,binary:"/home/me/My Apps/aion2-meter"};
+      await page.waitForFunction(()=>!document.querySelector('#captureHelp').hidden);
+      assert.match(await page.locator('#captureHelp').textContent(),/sudo setcap cap_net_raw=ep '\/home\/me\/My Apps\/aion2-meter'/);
+      live.capture=capture;
     });
     assert.deepEqual(errors,[]);
     console.log(`${checks} browser checks passed.`);

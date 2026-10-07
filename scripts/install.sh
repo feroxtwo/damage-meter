@@ -25,6 +25,20 @@ if ! command -v cargo >/dev/null; then
   exit 1
 fi
 
+# The bundled SQLite and ring are C code: cargo needs a C compiler and linker.
+if ! command -v cc >/dev/null && ! command -v gcc >/dev/null; then
+  echo "C-Compiler (cc/gcc) fehlt. Er wird zum Bauen gebraucht (eingebaute SQLite)."
+  if [ -e /run/ostree-booted ]; then
+    echo "Auf Bazzite, Kinoite, Silverblue entweder das fertige Paket bzw. Linux-Archiv nutzen"
+    echo "oder in einer Toolbox bauen und auf dem Host installieren:"
+    echo "  toolbox create && toolbox run sudo dnf install -y gcc && toolbox run cargo build --release --locked"
+    echo "  METER_BINARY=target/release/aion2-meter ./scripts/install-binary.sh   # außerhalb der Toolbox"
+  else
+    echo "Installiere ihn mit:  sudo dnf install gcc"
+  fi
+  exit 1
+fi
+
 echo "==> Baue (Release) …"
 cargo build --release --locked
 

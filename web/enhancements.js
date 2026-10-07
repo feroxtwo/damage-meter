@@ -43,7 +43,7 @@ function updateLiveRows(l) {
 function captureHelp(c) {
   const age=c.last_packet_ms==null?null:Math.max(0,Date.now()-c.last_packet_ms);
   let text='';
-  if(!c.permission)text='Paketmitschnitt nicht freigegeben. Nach Installation oder Update einmal sudo setcap cap_net_raw=ep /pfad/zur/aion2-meter ausführen. Den tatsächlichen Binary-Pfad verwenden. Danach das Meter neu starten.';
+  if(!c.permission)text='Paketmitschnitt nicht freigegeben. Nach Installation oder Update einmal ausführen: sudo setcap cap_net_raw=ep '+(c.binary?"'"+c.binary.replaceAll("'","'\\''")+"'":'/pfad/zur/aion2-meter')+' und danach das Meter neu starten.';
   else if(c.error)text='Der Paketmitschnitt ist gestoppt. Prüfe Capture-Berechtigung und Terminalmeldung, starte das Meter anschließend neu.';
   else if(!c.game_running)text='Starte AION 2 auf diesem Rechner. Das Meter erkennt den Prozess AION2.exe unter Proton. Eine abweichende Prozessbezeichnung kann mit --any-process getestet werden.';
   else if(!c.locked_port)text='Das Spiel läuft. Logge deinen Charakter ein und greife ein Ziel an. Die Verbindungserkennung braucht mehrere passende Pakete. Bei VPN-Problemen Verbindung wechseln und erneut testen.';
@@ -142,20 +142,30 @@ function skillTable(skills,heal=false) {
   columns.push(['min','Min'],['max','Max']);
   const extra=heal?[]:[['back_rate','Rücken'],['frontal_rate','Frontal'],['perfect_rate','Perfekt'],['double_rate','Double'],['parry_rate','Pariert'],['multi_hit_count','Multihit'],['block_rate','Block'],['perfect_block_rate','Perfektblock'],['endurance_rate','Ausdauer'],['regeneration_rate','Regeneration'],['miss_count','Verfehlt'],['resist_count','Effekt resistiert']];
   const cell=(s,key)=>key==='name'?`${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}`:key==='share'||key.endsWith('_rate')?pct(s[key]):s[key]==null||(['min','max'].includes(key)&&s[key]<=0)?'—':num(s[key]);
-  return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Skill suchen"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''}>${label}</th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
+  return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Skill suchen"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''} aria-sort="${k==='damage'?'descending':'none'}"><button type="button" class="sort-head" data-sort="${k}" title="Nach ${esc(label)} sortieren">${label}</button></th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
 }
 function bindSkillTables(root) {
   root.querySelectorAll('.skill-browser').forEach(box=>{
     const skills=JSON.parse(box.dataset.skills);delete box.dataset.skills;
     const records=[...box.querySelectorAll('tbody tr')].map((el,i)=>({el,s:skills[i]}));
+    // Column headers sort too; a second click on the same column reverses it.
+    const sort={key:'damage',dir:-1};
+    const value=(s,key)=>s[key]==null||!Number.isFinite(Number(s[key]))?-Infinity:Number(s[key]);
     const update=()=>{
-      const search=box.querySelector('.skill-search').value.trim().toLocaleLowerCase('de-DE'),key=box.querySelector('.skill-sort').value;
-      const sorted=records.slice().sort((a,b)=>key==='name'?a.s.name.localeCompare(b.s.name,'de'):Number(b.s[key]||0)-Number(a.s[key]||0));
+      const search=box.querySelector('.skill-search').value.trim().toLocaleLowerCase('de-DE'),{key,dir}=sort;
+      const sorted=records.slice().sort((a,b)=>key==='name'?dir*a.s.name.localeCompare(b.s.name,'de'):dir*(value(a.s,key)-value(b.s,key))||a.s.name.localeCompare(b.s.name,'de'));
+      box.querySelectorAll('th').forEach(th=>th.setAttribute('aria-sort',th.querySelector('.sort-head')?.dataset.sort===key?(dir>0?'ascending':'descending'):'none'));
       const body=box.querySelector('tbody');let count=0;
       for(const {el,s} of sorted){el.hidden=!s.name.toLocaleLowerCase('de-DE').includes(search);if(!el.hidden)count++;body.append(el);}
       box.querySelector('.skill-count').textContent=count+' / '+skills.length+' Skills';box.querySelector('.skill-empty').hidden=count!==0;
     };
-    box.querySelector('.skill-search').oninput=update;box.querySelector('.skill-sort').onchange=update;
+    const select=box.querySelector('.skill-sort');
+    box.querySelector('.skill-search').oninput=update;
+    select.onchange=()=>{sort.key=select.value;sort.dir=select.value==='name'?1:-1;update();};
+    box.querySelectorAll('.sort-head').forEach(b=>b.onclick=()=>{
+      const key=b.dataset.sort;sort.dir=sort.key===key?-sort.dir:key==='name'?1:-1;sort.key=key;
+      if([...select.options].some(o=>o.value===key))select.value=key;update();
+    });
     const extra=box.querySelector('.skill-extra');if(extra)extra.onchange=()=>box.classList.toggle('show-advanced',extra.checked);
   });
 }
@@ -255,5 +265,5 @@ async function overlayAction(action, message) {
 const profileKey=()=>$('#profileName').value.trim()||latestLive?.character||'Standard';
 $('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:true})}),'Profil gespeichert.'));
 $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
-$('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay').then(s=>api('/api/overlay',{method:'POST',body:JSON.stringify({...s,position:[40,40],visible:true,locked:false})})),'Overlay auf Startposition zurückgeholt.'));
+$('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());
