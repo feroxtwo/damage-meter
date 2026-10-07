@@ -128,6 +128,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   nav button { flex-direction: column; gap: 4px; padding: 8px 3px; font-size: 12px; }
 }
 </style>
+<link rel="stylesheet" href="/enhancements.css">
 </head>
 <body>
 <a class="skip" href="#main">Zum Inhalt</a>
@@ -168,15 +169,17 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     </div>
     <div class="grid live-metrics" aria-label="Live-Kennzahlen">
       <div class="card kpi"><div class="l">Gruppen-DPS</div><div class="v" id="groupDps">0</div></div>
-      <div class="card kpi"><div class="l">Meine DPS</div><div class="v" id="selfDps">0</div></div>
+      <div class="card kpi"><div class="l">Meine DPS</div><div class="v" id="selfDps">0</div><div class="muted" id="selfBurst">5s Burst: 0/s</div></div>
       <div class="card kpi"><div class="l">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div>
       <div class="card kpi"><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div>
     </div>
-    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div id="liveRows"></div></div>
+    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><label><input type="checkbox" id="anonymousExport"> Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="liveRows"></div><div id="livePlayer"></div></div>
+    <div class="card"><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
   </section>
 
   <section id="runs">
     <div class="page-title"><div><div class="eyebrow">Deine Sessions</div><h2>Run-Verlauf</h2><p>Jede Expedition. Jeder Boss. Dein Fortschritt.</p></div><span class="tag">AION 2 · LINUX</span></div>
+    <div class="card" id="fightLibrary"><h2>Kampfbibliothek</h2><div class="row"><input id="fightSearch" type="search" placeholder="Boss, Notiz oder Tag" aria-label="Kämpfe suchen"><label>Von <input id="fightFrom" type="date"></label><label>Bis <input id="fightTo" type="date"></label><label><input id="fightFavorites" type="checkbox"> Nur Favoriten</label><button class="btn" id="searchFights">Suchen</button></div><p class="muted">Auch Trainingskämpfe und Kämpfe außerhalb eines Runs.</p><div id="fightResults"></div><button class="btn" id="moreFights" hidden>Weitere Kämpfe</button></div>
     <div id="runList">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -214,11 +217,14 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">Hintergrund-Deckkraft <input type="range" min="0" max="1" step="0.05" data-k="opacity"><output class="setting-value" data-for="opacity"></output></label>
       <label class="set">Größe <input type="range" min="0.6" max="2.5" step="0.05" data-k="scale"><output class="setting-value" data-for="scale"></output></label>
       <label class="set">Max. Zeilen <input type="range" min="1" max="24" step="1" data-k="max_rows"><output class="setting-value" data-for="max_rows"></output></label>
+      <label class="set">Eigene Zeile immer anzeigen <input type="checkbox" data-k="pin_self"></label>
+      <label class="set">Kennzahl <select data-k="metric"><option value="damage">Schaden</option><option value="heal">Heilung</option><option value="damage_received">Erlittener Schaden</option></select></label>
       <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
       <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
       <label class="set">Pakete mitschneiden (bleibt nach Neustart an) <input type="checkbox" id="recAuto"></label>
       <p class="muted">Der Mitschnitt hilft, Ausweichen und nDPS zu entschlüsseln. Die Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
     </div>
+    <div class="card"><h2>Profile</h2><p class="muted">Einstellungen und Position werden automatisch lokal gespeichert. Profile lassen sich zum Beispiel für Charaktere oder OBS anlegen.</p><div class="row"><input id="profileName" maxlength="100" placeholder="Profilname / Charakter" aria-label="Profilname"><button class="btn" id="saveProfile">Profil speichern</button><button class="btn" id="loadProfile">Profil laden</button><button class="btn" id="recoverOverlay">Overlay zurückholen</button></div></div>
     <div class="card">
       <h2>Tastenkürzel unter KDE</h2>
       <p class="muted">Wayland erlaubt Apps keine eigenen globalen Hotkeys. <code>./scripts/install-shortcuts.sh</code> aus dem Repo registriert sie direkt bei KDE:</p>
@@ -230,6 +236,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     </div>
   </section>
 </main>
+<dialog id="fightDialog"><div class="row dialog-head"><h2 id="dialogTitle">Kampfanalyse</h2><button class="btn" id="closeDialog">Schließen</button></div><div id="fightContent"></div></dialog>
 <div id="toast" role="status" hidden></div>
 <script>
 const $ = (s, el = document) => el.querySelector(s);
@@ -263,7 +270,7 @@ function show(t) {
   tab = t; location.hash = t;
   document.querySelectorAll('nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === t));
-  if (t === 'runs') task(loadRuns(true));
+  if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
   if (t === 'stats') { task(loadStats()); task(loadBossHistory()); }
   if (t === 'settings') task(loadSettings());
 }
@@ -304,6 +311,7 @@ async function pollLive() {
   livePolling = true;
   try {
     const l = await api('/api/live');
+    if (window.renderEnhancedLive) window.renderEnhancedLive(l);
     setStatus(l.capture);
     if (tab === 'live') {
       $('#liveTarget').textContent = l.target_name || 'Kein Ziel';
@@ -313,10 +321,11 @@ async function pollLive() {
       $('#totalDamage').textContent = num(l.total_damage);
       $('#battleDuration').textContent = dur(l.battle_time_ms);
       $('#liveSub').textContent = [l.dungeon,
-        l.ping_ms != null ? l.ping_ms + ' ms' : null, l.character ? 'Charakter: ' + l.character : null].filter(Boolean).join(' · ');
+        l.ping_ms != null ? l.ping_ms + ' ms' : null, l.hp_estimated ? 'HP geschätzt' : null, l.capture.stream_gaps ? 'Datenlücken: ' + l.capture.stream_gaps : null, l.character ? 'Charakter: ' + l.character : null].filter(Boolean).join(' · ');
       $('#liveHp').style.display = l.target_hp == null ? 'none' : 'block';
       if (l.target_hp != null) $('#liveHp div').style.width = (l.target_hp * 100).toFixed(1) + '%';
-      $('#liveRows').innerHTML = bars(l.rows, { empty: '<svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><b>Bereit für den nächsten Kampf</b><p>Starte AION 2 und greife ein Ziel an. Deine Gruppe erscheint hier, sobald Kampfdaten ankommen.</p>' });
+      $('#liveRows').innerHTML = bars(window.metricRows ? metricRows(l.rows) : l.rows, { empty: '<svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><b>Bereit für den nächsten Kampf</b><p>Starte AION 2 und greife ein Ziel an. Deine Gruppe erscheint hier, sobald Kampfdaten ankommen.</p>' });
+      if (window.bindLiveRows) bindLiveRows(l);
       if (document.activeElement !== $('#targetMode')) $('#targetMode').value = l.target_mode || 'bossTargets';
     }
   } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar'; }
@@ -355,7 +364,7 @@ async function loadCharacters() {
 $('#charSel').onchange = (e) => {
   character = e.target.value;
   try { localStorage.setItem('a2m-character', character); } catch (err) {}
-  if (tab === 'runs') { $('#dungeonFilter').value = ''; loadRuns(true); }
+  if (tab === 'runs') { $('#dungeonFilter').value = ''; loadRuns(true); if(window.loadFights) task(loadFights(true)); }
   if (tab === 'stats') { loadStats(); loadBossHistory(); }
 };
 loadCharacters(); setInterval(loadCharacters, 60000);
@@ -418,18 +427,7 @@ function uptimes(list, debuff) {
     <span>${esc(e.name)}${debuff && e.caster ? ` <span class="muted">· ${esc(e.caster)}</span>` : ''}</span><span class="num">${e.uptime.toFixed(0)}%</span>
     <div class="track"><div style="width:${Math.min(100, e.uptime).toFixed(1)}%"></div></div></div>`).join('')}</div>`;
 }
-async function openSkills(fid) {
-  const f = await api('/api/fights/' + encodeURIComponent(fid));
-  const box = document.getElementById('sk-' + fid);
-  box.innerHTML = (f.boss_debuffs && f.boss_debuffs.length ? `<h4>Debuffs auf ${esc(f.boss_name || 'dem Gegner')} (Uptime)</h4>${uptimes(f.boss_debuffs, true)}` : '')
-    + f.players.map(p => `<details><summary>${deathMark(p)}${chip(p)} <span class="num muted">${num(p.damage)} · ${num(p.dps)}/s${p.damage_received ? ` · ${num(p.damage_received)} erlitten in ${p.hits_received} Treffern` : ''}</span></summary>
-    ${p.buffs && p.buffs.length ? `<h4>Buffs (Uptime)</h4>${uptimes(p.buffs, false)}` : ''}
-    <div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer</th><th>Krit</th><th>Rücken</th><th>Perfekt</th><th>Pariert</th><th>Max</th></tr></thead><tbody>
-    ${(p.skills || []).map(s => `<tr><td>${esc(s.name)}${s.is_dot ? ' <span class="badge">DoT</span>' : ''}</td><td class="num">${num(s.damage)}</td>
-      <td class="num">${s.hits}</td><td class="num">${s.crit_rate.toFixed(0)}%</td><td class="num">${s.back_rate.toFixed(0)}%</td>
-      <td class="num">${s.perfect_rate.toFixed(0)}%</td><td class="num">${(s.parry_rate ?? 0).toFixed(0)}%</td><td class="num">${num(s.max)}</td></tr>`).join('')}
-    </tbody></table></div></details>`).join('');
-}
+async function openSkills(fid) { if(window.openFight) await openFight(fid); }
 
 // Stats
 async function loadStats() {
@@ -516,7 +514,7 @@ async function loadSettings() {
   const loaded = await api('/api/overlay');
   if (settingsSaving || settingsDirty) return;
   settings = loaded;
-  document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v; });
+  document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v ?? i.value; });
   settingsValues();
 }
 async function saveSettings() {
@@ -532,7 +530,7 @@ async function saveSettings() {
 }
 document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
   if (!settings) return;
-  settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : Number(i.value);
+  settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? i.value : Number(i.value);
   settingsValues(); settingsDirty = true;
   clearTimeout(settingsTimer); settingsTimer = setTimeout(saveSettings, 180);
 });
@@ -541,5 +539,6 @@ window.addEventListener('hashchange', () => { const t = location.hash.slice(1); 
 window.addEventListener('resize', () => { if (tab === 'stats') drawBoss(); });
 show(tab);
 </script>
+<script src="/enhancements.js"></script>
 </body>
 </html>

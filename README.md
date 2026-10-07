@@ -87,12 +87,34 @@ Bei jedem gespeicherten Bosskampf (Runs → Kampf → Skills) steht, wie lange j
 und welche Debuffs wie lange auf dem Boss lagen, jeweils in Prozent der Kampfzeit. Das Buff-Paket ist aus den
 offenen Metern NOIA2 und AIon2-Dps-Meter übernommen.
 
-Ausweichen und nDPS entschlüsselt bisher kein offener Meter. Damit sich das ändern kann, schneidet
+Ausweichen und nDPS sind hier noch nicht implementiert. Für weitere Parserarbeit schneidet
 der Haken „Pakete mitschneiden“ (Overlay-Menü per Rechtsklick oder Dashboard-Tab „Overlay“, alternativ
 `~/.local/bin/aion2-meter ctl record`) die Spielverbindung mit. Der Haken bleibt nach einem Neustart gesetzt,
 bis du ihn entfernst; über 2 GB werden die ältesten Mitschnitte gelöscht. Die Dateien (`*.a2mcap`, rohe TCP-Daten der Spielverbindung
 mit Zeitstempel) landen in `~/.local/share/aion2-meter/captures/`. Sie enthalten alles, was der Server
 deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zeigen willst.
+
+### Kampfanalyse und Komfort (0.2.0)
+
+- **Overlay:** Einstellungen und Position bleiben nach Neustarts erhalten. Benannte Profile, eigene Zeile trotz Top-N-Limit, Auswahl Schaden/Heilung/erlittener Schaden und „Overlay zurückholen“ im Dashboard. Klick auf einen Spieler im entsperrten nativen Overlay öffnet dessen Details im Browser.
+- **Live:** Schadens- und Heilungsranglisten, Spielerdetails und eigene 5s-Burst-DPS. Heilung wird seit dem letzten Parser-Reset erfasst, einschließlich Selbstheilung. HPS teilt diese erfasste Heilung durch die angezeigte Kampfdauer. Es ist keine effektive Heilung und kein Overheal-Abzug.
+- **Kampfbibliothek:** Unter Runs nach Boss, Notiz, Tags, Datum und Charakter suchen. Kämpfe als Favoriten markieren. Auch Trainingskämpfe und Kämpfe ohne Run-Zuordnung erscheinen hier.
+- **Vergleich:** Zwei Kämpfe desselben Bosses und derselben Schwierigkeit vergleichen. Eigene DPS, Dauer, Skill-Schaden, Kritrate und Buff-Uptime werden bei gleichem Charakter und gleicher Klasse gegenübergestellt.
+- **Zeitlinien:** Trefferzeitpunkte, Buff-Intervalle, Ping und beobachtete DPS-Kurven. Schaden wird alle 500 ms beobachtet, nicht künstlich auf einzelne Treffer verteilt. Alte Kämpfe ohne gespeicherte Zeitdaten bleiben lesbar.
+- **Teilen:** Rangliste kopieren, CSV/JSON herunterladen. Kampffile-Exporte anonymisieren Namen standardmäßig und enthalten keine Notizen, Netzwerkadressen oder internen Charakter-IDs.
+- **Training:** 1/3/5 Minuten, Start beim ersten Treffer nach dem Reset, Abschlussbericht und persönliche Bestwerte je Charakter, Ziel und Testdauer. Die tatsächlich beobachtete Dauer wird angezeigt. Zielwechsel, Reset oder Verbindungsende unterbrechen das Training.
+
+**Offline-Replay**, ohne Spiel, Overlay oder Capture-Berechtigung:
+
+```bash
+aion2-meter replay ~/.local/share/aion2-meter/captures/aion2-123.a2mcap --output analyse.json
+```
+
+Neue Aufnahmen verwenden `A2MCAP2`: Paketzeit, Richtung, IPs, Ports, Interface, TCP-Sequenz/ACK und Payload bleiben erhalten. Alte `A2MCAP1`-Aufnahmen werden ebenfalls gelesen, können aber TCP-Reordering nicht reproduzieren. Abgeschnittene oder ungültige Dateien werden abgewiesen. Replay verwendet eine isolierte In-Memory-Datenbank und verändert die gespeicherten Live-Kämpfe nicht.
+
+Die TCP-Sortierung puffert bis 2 MiB beziehungsweise 2048 Segmente. Bei einer beobachteten Lücke über zwei Sekunden oder einem überschrittenen Limit beginnt sie mit verfügbaren Daten neu und meldet die Lücke. Nicht aufgenommene Bytes lassen sich nicht rekonstruieren.
+
+[Technische Details und Testumfang](docs/COMBAT_ANALYSIS.md).
 
 ### Optionen
 

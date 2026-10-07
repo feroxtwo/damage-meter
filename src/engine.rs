@@ -5,10 +5,13 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
+use crate::analytics::Series;
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
+use serde_json::{Value, json};
+use std::collections::HashMap;
 
 use a2tools_dps_meter_lib::combat::data_storage::DataStorage;
 use a2tools_dps_meter_lib::combat::dps_calculator::DpsCalculator;
@@ -30,10 +33,7 @@ const MAX_EFFECTS_PER_ENTITY: usize = 16;
 const RECORD_SETTING: &str = "record_packets";
 
 pub fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
+    a2tools_dps_meter_lib::clock::now_ms()
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -43,6 +43,10 @@ pub struct LiveRow {
     pub class_key: &'static str,
     pub class_name: &'static str,
     pub color: [u8; 3],
+    pub heal: f64,
+    pub hps: f64,
+    pub damage_received: f64,
+    pub burst_dps: f64,
     pub damage: f64,
     pub dps: f64,
     pub share: f64,
@@ -64,6 +68,7 @@ pub struct CaptureStatus {
     /// Recording was asked for; it starts with the game connection.
     pub recording_requested: bool,
     pub recording_error: Option<String>,
+    pub stream_gaps: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -74,6 +79,8 @@ pub struct Live {
     pub target_mode: String,
     /// 0..=1, or `None` when the target's HP is unknown.
     pub target_hp: Option<f64>,
+    pub hp_estimated: bool,
+    pub training: Value,
     pub battle_time_ms: i64,
     pub total_damage: f64,
     pub ping_ms: Option<i32>,
@@ -87,6 +94,7 @@ pub struct Live {
 }
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct OverlaySettings {
     /// Click-through: the overlay ignores the mouse so it never steals a click
     /// from the game.
@@ -100,6 +108,9 @@ pub struct OverlaySettings {
     pub show_dps: bool,
     /// Show "Name" as "Na**e" for everyone but you (for streaming).
     pub hide_names: bool,
+    pub pin_self: bool,
+    pub metric: String,
+    pub position: Option<[f32; 2]>,
 }
 
 impl Default for OverlaySettings {
@@ -112,6 +123,9 @@ impl Default for OverlaySettings {
             max_rows: 8,
             show_dps: true,
             hide_names: false,
+            pin_self: true,
+            metric: "damage".into(),
+            position: None,
         }
     }
 }
@@ -140,6 +154,8 @@ pub struct Engine {
     pub buffs: BuffTracker,
     record_wanted: AtomicBool,
     capture_dir: PathBuf,
+    series: Mutex<HashMap<(i32, i64), Series>>,
+    training: Mutex<Value>,
 }
 
 fn load_lookups(language: &str) -> (SkillLookup, NpcLookup) {
@@ -186,6 +202,19 @@ impl Engine {
             tracing::warn!("Could not close old runs: {e}");
         }
 
+        let overlay = db
+            .meta("overlay")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let target_mode = db
+            .meta("target_mode")
+            .ok()
+            .flatten()
+            .filter(|m| valid_mode(m))
+            .unwrap_or_else(|| "bossTargets".into());
+        calc.lock().set_target_selection_mode(&target_mode);
         let engine = Arc::new(Self {
             storage,
             skills,
@@ -199,7 +228,7 @@ impl Engine {
                 game_running: false,
                 ..Default::default()
             }),
-            overlay: RwLock::new(OverlaySettings::default()),
+            overlay: RwLock::new(overlay),
             run: Mutex::new(RunState {
                 run_id: None,
                 dungeon_id: 0,
@@ -207,10 +236,12 @@ impl Engine {
                 members_written: HashSet::new(),
             }),
             reset_requested: AtomicBool::new(false),
-            target_mode: RwLock::new("bossTargets".into()),
+            target_mode: RwLock::new(target_mode),
             buffs: BuffTracker::default(),
             record_wanted: AtomicBool::new(false),
             capture_dir,
+            series: Mutex::new(HashMap::new()),
+            training: Mutex::new(json!({"state":"idle"})),
         });
 
         if engine.db.meta(RECORD_SETTING).ok().flatten().as_deref() == Some("1") {
@@ -236,6 +267,27 @@ impl Engine {
         self.status.write().permission = ok;
     }
 
+    pub fn capture_gap(&self) {
+        self.status.write().stream_gaps += 1;
+        for s in self.series.lock().values_mut() {
+            s.partial = true;
+        }
+    }
+    pub fn replay_tick(&self) {
+        let dps = self.calc.lock().get_dps();
+        self.observe();
+        let live = self.build_live(&dps);
+        *self.live.write() = live;
+    }
+    pub fn replay_report(&self) -> Value {
+        self.save_fights(true);
+        let c = self.calc.lock().get_details_context();
+        let targets:Vec<_>=c.targets.iter().map(|t| {
+            let d=self.calc.lock().get_target_details(t.target_id,None);
+            json!({"target":t,"details":d,"analytics":self.series.lock().get(&(t.target_id,d.start_time)).map(|s|s.json())})
+        }).collect();
+        json!({"live":self.live(),"context":c,"targets":targets,"parser_rev":"1f3a1777f43088da8e7c8915c841a0f50afe72e3"})
+    }
     pub fn set_capture_error(&self, error: Option<String>) {
         self.status.write().error = error;
     }
@@ -358,6 +410,153 @@ impl Engine {
     pub fn set_target_mode(&self, mode: &str) {
         *self.target_mode.write() = mode.to_string();
         self.calc.lock().set_target_selection_mode(mode);
+        if let Err(e) = self.db.set_meta("target_mode", mode) {
+            tracing::error!("Saving target mode: {e}");
+        }
+    }
+
+    pub fn update_overlay(&self, mut body: OverlaySettings) -> anyhow::Result<OverlaySettings> {
+        body.opacity = body.opacity.clamp(0.0, 1.0);
+        body.scale = body.scale.clamp(0.6, 2.5);
+        body.max_rows = body.max_rows.clamp(1, 24);
+        if !["damage", "heal", "damage_received"].contains(&body.metric.as_str()) {
+            body.metric = "damage".into();
+        }
+        if body
+            .position
+            .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
+        {
+            body.position = None;
+        }
+        // Lock before persistence so toggles and dashboard writes cannot interleave.
+        let mut settings = self.overlay.write();
+        self.db
+            .set_meta("overlay", &serde_json::to_string(&body)?)?;
+        *settings = body.clone();
+        Ok(body)
+    }
+    pub fn modify_overlay(
+        &self,
+        f: impl FnOnce(&mut OverlaySettings),
+    ) -> anyhow::Result<OverlaySettings> {
+        let mut settings = self.overlay.write();
+        let mut next = settings.clone();
+        f(&mut next);
+        self.db
+            .set_meta("overlay", &serde_json::to_string(&next)?)?;
+        *settings = next.clone();
+        Ok(next)
+    }
+    pub fn profile(&self, key: &str, save: bool) -> anyhow::Result<OverlaySettings> {
+        let key = format!("overlay_profile:{key}");
+        if save {
+            let s = self.overlay.read().clone();
+            self.db.set_meta(&key, &serde_json::to_string(&s)?)?;
+            Ok(s)
+        } else {
+            let s = self
+                .db
+                .meta(&key)?
+                .ok_or_else(|| anyhow::anyhow!("Profil nicht vorhanden"))?;
+            self.update_overlay(serde_json::from_str(&s)?)
+        }
+    }
+    pub fn player_details(&self, id: i32) -> Value {
+        let calc = self.calc.lock();
+        let target = self.live.read().target_id;
+        let details = calc.get_target_details(target, Some(&[id]));
+        let context = calc.get_details_context();
+        let actor = context.actors.iter().find(|a| a.actor_id == id);
+        json!({"id":id,"target_id":target,"duration_ms":details.battle_time,
+          "skills":crate::db::skill_rows(&details.skills,id),"heal_skills":crate::db::skill_rows(&details.heal_skills,id),"actor":actor})
+    }
+    pub fn start_training(&self, seconds: i64) {
+        self.set_target_mode("trainTargets");
+        self.request_reset();
+        *self.training.lock() = json!({"state":"armed","seconds":seconds,"started_at":null});
+    }
+    pub fn cancel_training(&self) {
+        *self.training.lock() = json!({"state":"idle"});
+    }
+    fn observe(&self) {
+        let context = self.calc.lock().get_details_context();
+        let now = now_ms();
+        let mut series = self.series.lock();
+        for target in context.targets {
+            if now - target.last_damage_time > 10_000 {
+                continue;
+            }
+            let start = target.last_damage_time - target.battle_time;
+            let entry = series.entry((target.target_id, start)).or_default();
+            entry.observe(
+                now - start,
+                target
+                    .actor_damage
+                    .into_iter()
+                    .map(|(id, d)| (id, i64::from(d)))
+                    .collect(),
+            );
+        }
+        if series.len() > 256 {
+            let mut keys: Vec<_> = series.keys().copied().collect();
+            keys.sort_by_key(|k| k.1);
+            for k in keys.into_iter().take(series.len() - 256) {
+                series.remove(&k);
+            }
+        }
+    }
+    fn tick_training(&self, live: &Live) {
+        let mut t = self.training.lock();
+        let state = t["state"].as_str().unwrap_or("idle").to_string();
+        if state == "armed" && live.total_damage > 0.0 {
+            t["state"] = json!("running");
+            t["started_at"] = json!(now_ms() - live.battle_time_ms);
+            t["target_id"] = json!(live.target_id);
+        }
+        if t["state"] == "running" {
+            let elapsed = now_ms() - t["started_at"].as_i64().unwrap_or(now_ms());
+            t["elapsed_ms"] = json!(elapsed);
+            if live.target_id != t["target_id"].as_i64().unwrap_or(0) as i32
+                || live.target_mode != "trainTargets"
+                || !live.capture.game_running
+                || live.capture.error.is_some()
+            {
+                t["state"] = json!("interrupted");
+                return;
+            }
+            if elapsed >= t["seconds"].as_i64().unwrap_or(60) * 1000 {
+                let seconds = t["seconds"].as_i64().unwrap_or(60);
+                let rows:Vec<_>=live.rows.iter().map(|r|json!({"name":r.name,"is_self":r.is_self,"damage":r.damage,"dps":r.damage/(elapsed as f64/1000.0)})).collect();
+                let key = format!(
+                    "training_best:{}:{}:{}",
+                    live.character.as_deref().unwrap_or(""),
+                    live.target_name,
+                    seconds
+                );
+                let my = rows
+                    .iter()
+                    .find(|r| r["is_self"] == true)
+                    .and_then(|r| r["dps"].as_f64())
+                    .unwrap_or(0.0);
+                let best = self
+                    .db
+                    .meta(&key)
+                    .ok()
+                    .flatten()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .unwrap_or(0.0);
+                t["state"] = json!("finished");
+                t["rows"] = json!(rows);
+                t["personal_best"] = json!(my > best);
+                t["best_dps"] = json!(my.max(best));
+                t["target"] = json!(live.target_name);
+                t["character"] = json!(live.character);
+                if my > best {
+                    let _ = self.db.set_meta(&key, &my.to_string());
+                }
+                let _ = self.db.set_meta("last_training", &t.to_string());
+            }
+        }
     }
 
     fn self_names(&self) -> Vec<String> {
@@ -434,6 +633,16 @@ impl Engine {
             )
         };
         self.name_fights(&mut records);
+        for record in &mut records {
+            for skill in &record.details.heal_skills {
+                if record.actors.iter().all(|a| a.actor_id != skill.actor_id)
+                    && let Ok(actor) = serde_json::from_value(json!({"actorId":skill.actor_id,
+                        "nickname":self.storage.get_nickname(skill.actor_id).unwrap_or_else(||format!("#{}",skill.actor_id)),"job":skill.job}))
+                {
+                    record.actors.push(actor);
+                }
+            }
+        }
         let dungeon = self.storage.current_dungeon_id();
         let dead = self.storage.get_dead_entities();
         match self
@@ -445,6 +654,48 @@ impl Engine {
             Err(e) => {
                 tracing::error!("Saving fights failed: {e:#}");
                 return;
+            }
+        }
+        for record in &records {
+            if let Some(series) = self
+                .series
+                .lock()
+                .get(&(record.target_id, record.start_time_ms))
+            {
+                let mut data = series.json();
+                if let Some(points) = data["points"].as_array_mut() {
+                    let mut end = None;
+                    for point in points.iter() {
+                        if point["ms"].as_i64().unwrap_or(0) > record.duration_ms {
+                            end = Some(point.clone());
+                            break;
+                        }
+                    }
+                    points.retain(|p| p["ms"].as_i64().unwrap_or(0) <= record.duration_ms);
+                    if let Some(mut point) = end {
+                        point["ms"] = json!(record.duration_ms);
+                        points.push(point);
+                    }
+                }
+                if let Some(last) = data["points"].as_array_mut().and_then(|p| p.last_mut()) {
+                    let mut totals: HashMap<i32, i64> = HashMap::new();
+                    for skill in &record.details.skills {
+                        *totals.entry(skill.actor_id).or_default() += i64::from(skill.dmg);
+                    }
+                    last["damage"] = json!(totals);
+                }
+                data["effects"] = self.buffs.timeline(
+                    record.start_time_ms,
+                    record.start_time_ms + record.duration_ms,
+                );
+                data["outcome"] = json!(if self.storage.is_entity_dead(record.target_id) {
+                    "kill"
+                } else {
+                    "unknown"
+                });
+                if let Err(e) = self.db.save_analytics(&record.id, &data) {
+                    tracing::error!("Saving analytics: {e}");
+                }
             }
         }
         let effects = self.fight_effects(&records);
@@ -563,6 +814,12 @@ impl Engine {
             .clone()
             .or_else(|| self.storage.local_character_name());
         let dead = self.storage.get_dead_entities();
+        let details = self.calc.lock().get_target_details(dps.target_id, None);
+        let context = self.calc.lock().get_details_context();
+        let mut heals: HashMap<i32, i64> = HashMap::new();
+        for h in &details.heal_skills {
+            *heals.entry(h.actor_id).or_default() += i64::from(h.dmg);
+        }
         let mut rows: Vec<LiveRow> = dps
             .map
             .iter()
@@ -578,6 +835,21 @@ impl Engine {
                     class_key: info.key,
                     class_name: info.name,
                     color: info.color,
+                    heal: heals.get(&id).copied().unwrap_or(0) as f64,
+                    hps: heals.get(&id).copied().unwrap_or(0) as f64 * 1000.0
+                        / dps.battle_time.max(1000) as f64,
+                    damage_received: context
+                        .actors
+                        .iter()
+                        .find(|a| a.actor_id == id)
+                        .map(|a| a.damage_received)
+                        .unwrap_or(0) as f64,
+                    burst_dps: self
+                        .series
+                        .lock()
+                        .get(&(dps.target_id, details.start_time))
+                        .map(|s| s.burst(id, now_ms() - details.start_time))
+                        .unwrap_or(0.0),
                     damage: p.amount,
                     dps: p.dps,
                     share: p.damage_contribution,
@@ -588,6 +860,36 @@ impl Engine {
                 }
             })
             .collect();
+        for (&id, &amount) in &heals {
+            if rows.iter().any(|r| r.id == id) {
+                continue;
+            }
+            let actor = context.actors.iter().find(|a| a.actor_id == id);
+            let skill = details.heal_skills.iter().find(|s| s.actor_id == id);
+            let job = actor
+                .map(|a| a.job.as_str())
+                .or_else(|| skill.map(|s| s.job.as_str()))
+                .unwrap_or("");
+            let name = actor
+                .map(|a| a.nickname.clone())
+                .or_else(|| self.storage.get_nickname(id))
+                .unwrap_or_else(|| format!("#{id}"));
+            let info = names::class_info(job);
+            let heal = amount as f64;
+            rows.push(LiveRow {
+                id,
+                name: name.clone(),
+                class_key: info.key,
+                class_name: info.name,
+                color: info.color,
+                heal,
+                hps: heal * 1000.0 / dps.battle_time.max(1000) as f64,
+                damage_received: actor.map(|a| a.damage_received).unwrap_or(0) as f64,
+                is_self: self.storage.local_player_id() == Some(id as i64)
+                    || me.as_deref() == Some(name.as_str()),
+                ..Default::default()
+            });
+        }
         rows.sort_by(|a, b| b.damage.total_cmp(&a.damage));
         let total: f64 = rows.iter().fold(0.0, |acc, r| acc + r.damage);
         if total > 0.0 && rows.iter().all(|r| r.share <= 0.0) {
@@ -618,6 +920,8 @@ impl Engine {
             target_id: dps.target_id,
             target_mode: dps.target_mode.clone(),
             target_hp,
+            hp_estimated: dps.target_current_hp < 0,
+            training: self.training.lock().clone(),
             battle_time_ms: dps.battle_time,
             total_damage: total,
             ping_ms: self.ping.current_ping_ms(),
@@ -639,6 +943,9 @@ impl Engine {
             tick += 1;
 
             if self.reset_requested.swap(false, Ordering::SeqCst) {
+                if self.training.lock()["state"] == "running" {
+                    self.training.lock()["state"] = json!("interrupted");
+                }
                 self.save_fights(true);
                 let mut calc = self.calc.lock();
                 calc.restart_target_selection(true);
@@ -646,7 +953,9 @@ impl Engine {
             }
 
             let dps = self.calc.lock().get_dps();
+            self.observe();
             let live = self.build_live(&dps);
+            self.tick_training(&live);
             *self.live.write() = live;
 
             if tick.is_multiple_of(4) {
@@ -659,5 +968,179 @@ impl Engine {
                 self.buffs.prune_old(now_ms());
             }
         }
+    }
+}
+
+pub fn valid_mode(mode: &str) -> bool {
+    [
+        "bossTargets",
+        "mostDamage",
+        "lastHitByMe",
+        "allTargets",
+        "trainTargets",
+    ]
+    .contains(&mode)
+}
+/// Rank first, then replace the last visible row with the local player if needed.
+pub fn overlay_rows(live: &Live, settings: &OverlaySettings) -> Vec<(usize, LiveRow)> {
+    let mut ranked: Vec<_> = live.rows.to_vec();
+    ranked.sort_by(|a, b| {
+        metric_value(b, &settings.metric).total_cmp(&metric_value(a, &settings.metric))
+    });
+    let mut rows: Vec<_> = ranked
+        .iter()
+        .cloned()
+        .enumerate()
+        .take(settings.max_rows)
+        .collect();
+    if settings.pin_self
+        && !rows.iter().any(|(_, r)| r.is_self)
+        && let Some((rank, me)) = ranked.into_iter().enumerate().find(|(_, r)| r.is_self)
+    {
+        if rows.len() >= settings.max_rows {
+            rows.pop();
+        }
+        rows.push((rank, me));
+    }
+    rows
+}
+pub fn metric_value(row: &LiveRow, metric: &str) -> f64 {
+    match metric {
+        "heal" => row.heal,
+        "damage_received" => row.damage_received,
+        _ => row.damage,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn profiles_and_position_survive_engine_restart() {
+        let path = std::env::temp_dir().join(format!("a2m-settings-{}.db", std::process::id()));
+        {
+            let e = Engine::new(Db::open(&path).unwrap(), "de", std::env::temp_dir());
+            e.modify_overlay(|s| {
+                s.position = Some([123.0, 456.0]);
+                s.max_rows = 2;
+                s.hide_names = true;
+            })
+            .unwrap();
+            e.profile("Main", true).unwrap();
+            e.modify_overlay(|s| s.hide_names = false).unwrap();
+        }
+        {
+            let e = Engine::new(Db::open(&path).unwrap(), "de", std::env::temp_dir());
+            assert_eq!(e.overlay.read().position, Some([123.0, 456.0]));
+            assert!(!e.overlay.read().hide_names);
+            e.profile("Main", false).unwrap();
+            assert!(e.overlay.read().hide_names);
+            assert!(e.profile("missing", false).is_err());
+        }
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn pinned_player_keeps_actual_rank_and_healing_sorts_independently() {
+        let live = Live {
+            rows: vec![
+                LiveRow {
+                    name: "A".into(),
+                    damage: 100.0,
+                    heal: 1.0,
+                    ..Default::default()
+                },
+                LiveRow {
+                    name: "B".into(),
+                    damage: 50.0,
+                    heal: 500.0,
+                    ..Default::default()
+                },
+                LiveRow {
+                    name: "Me".into(),
+                    damage: 10.0,
+                    is_self: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let mut s = OverlaySettings {
+            max_rows: 2,
+            ..Default::default()
+        };
+        let rows = overlay_rows(&live, &s);
+        assert_eq!(rows[1].0, 2);
+        assert!(rows[1].1.is_self);
+        s.metric = "heal".into();
+        assert_eq!(overlay_rows(&live, &s)[0].1.name, "B");
+    }
+    #[test]
+    fn training_waits_for_damage_finishes_once_and_remembers_best() {
+        let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
+        a2tools_dps_meter_lib::clock::set_override(Some(1000));
+        e.start_training(60);
+        e.tick_training(&Live::default());
+        assert_eq!(e.training.lock()["state"], "armed");
+        let mut live = Live {
+            target_id: 9,
+            target_name: "Dummy".into(),
+            target_mode: "trainTargets".into(),
+            capture: CaptureStatus {
+                game_running: true,
+                ..Default::default()
+            },
+            character: Some("Me".into()),
+            total_damage: 100.0,
+            rows: vec![LiveRow {
+                name: "Me".into(),
+                damage: 100.0,
+                is_self: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        e.tick_training(&live);
+        assert_eq!(e.training.lock()["state"], "running");
+        a2tools_dps_meter_lib::clock::set_override(Some(61_000));
+        live.rows[0].damage = 6000.0;
+        e.tick_training(&live);
+        assert_eq!(e.training.lock()["state"], "finished");
+        assert_eq!(e.training.lock()["best_dps"], 100.0);
+        live.rows[0].damage = 12000.0;
+        e.tick_training(&live);
+        assert_eq!(e.training.lock()["best_dps"], 100.0);
+        assert!(e.db.meta("last_training").unwrap().is_some());
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+    #[test]
+    fn live_healing_and_burst_follow_real_aggregates_and_decay_when_idle() {
+        use a2tools_dps_meter_lib::entity::damage_packet::ParsedDamagePacket;
+        let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
+        e.set_target_mode("mostDamage");
+        e.storage.set_local_player_id(Some(2259));
+        for (ts, damage) in [(1000, 100), (2000, 900)] {
+            a2tools_dps_meter_lib::clock::set_override(Some(ts));
+            let mut p = ParsedDamagePacket::new();
+            p.set_actor_id(2259);
+            p.set_target_id(50_000);
+            p.set_skill_code(11010000);
+            p.set_damage(damage);
+            e.storage.append_damage(p);
+            e.storage.append_nickname_authoritative(2259, "Me");
+            e.storage.append_heal(2259, 17010000, 50, false);
+            e.replay_tick();
+        }
+        let live = e.live();
+        let me = live.rows.iter().find(|r| r.is_self).unwrap();
+        assert_eq!(me.damage, 1000.0);
+        assert_eq!(me.heal, 100.0);
+        assert_eq!(me.burst_dps, 200.0);
+        a2tools_dps_meter_lib::clock::set_override(Some(8000));
+        e.replay_tick();
+        assert_eq!(
+            e.live().rows.iter().find(|r| r.is_self).unwrap().burst_dps,
+            0.0
+        );
+        a2tools_dps_meter_lib::clock::set_override(None);
     }
 }

@@ -76,6 +76,13 @@ CREATE TABLE IF NOT EXISTS fights (
 );
 CREATE INDEX IF NOT EXISTS fights_started ON fights(started_at);
 CREATE INDEX IF NOT EXISTS fights_run ON fights(run_id);
+CREATE TABLE IF NOT EXISTS fight_annotations (
+ fight_id TEXT PRIMARY KEY REFERENCES fights(id) ON DELETE CASCADE,
+ favorite INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS fight_analytics (
+ fight_id TEXT PRIMARY KEY REFERENCES fights(id) ON DELETE CASCADE, data TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS fight_players (
     fight_id        TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
@@ -196,6 +203,24 @@ fn decorate_job(rows: &mut [Value]) {
     }
 }
 
+pub fn skill_rows(
+    skills: &[a2tools_dps_meter_lib::entity::details_context::DetailSkillEntry],
+    actor: i32,
+) -> Value {
+    let mut rows: Vec<Value> = skills.iter().filter(|s|s.actor_id==actor).map(|s| {
+        let hits=s.time.max(1) as f64;
+        json!({"code":s.code,"name":if s.name.is_empty(){format!("#{}",s.code)}else{s.name.clone()},
+          "damage":s.dmg,"hits":s.time,"crit_rate":s.crit as f64*100.0/hits,
+          "back_rate":s.back as f64*100.0/hits,"frontal_rate":s.frontal as f64*100.0/hits,
+          "perfect_rate":s.perfect as f64*100.0/hits,"parry_rate":s.parry as f64*100.0/hits,
+          "double_rate":s.double as f64*100.0/hits,"multi_hit_count":s.multi_hit_count,
+          "multi_hit_damage":s.multi_hit_damage,"max":s.max_dmg,"min":s.min_dmg,
+          "is_dot":s.is_dot,"hit_timestamps":s.hit_timestamps})
+    }).collect();
+    rows.sort_by_key(|r| std::cmp::Reverse(r["damage"].as_i64().unwrap_or(0)));
+    Value::Array(rows)
+}
+
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent() {
@@ -209,7 +234,6 @@ impl Db {
         })
     }
 
-    #[cfg(test)]
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
@@ -427,23 +451,14 @@ impl Db {
             let total: i64 = damage.values().sum::<i64>().max(1);
             let secs = (record.duration_ms as f64 / 1000.0).max(1.0);
 
-            // Hit timestamps and ping history make the record many times larger
-            // and nothing here shows them.
-            let mut slim = record.clone();
-            for s in slim
-                .details
-                .skills
-                .iter_mut()
-                .chain(slim.details.heal_skills.iter_mut())
-            {
-                s.hit_timestamps.clear();
-            }
-            slim.details.ping_history.clear();
-
             tx.execute(
-                "INSERT OR REPLACE INTO fights(id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at,
+                "INSERT INTO fights(id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at,
                                                duration_ms, total_damage, max_hp, is_train, record_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT(id) DO UPDATE SET run_id=excluded.run_id, boss_name=excluded.boss_name,
+                  mob_code=excluded.mob_code, target_id=excluded.target_id, dungeon_id=excluded.dungeon_id,
+                  max_hp=excluded.max_hp,is_train=excluded.is_train,
+                  duration_ms=excluded.duration_ms, total_damage=excluded.total_damage, record_json=excluded.record_json",
                 params![
                     record.id,
                     run_id,
@@ -456,16 +471,26 @@ impl Db {
                     record.total_damage,
                     record.details.max_hp,
                     record.is_train,
-                    serde_json::to_string(&slim)?
+                    serde_json::to_string(record)?
                 ],
             )?;
             tx.execute(
                 "DELETE FROM fight_players WHERE fight_id = ?1",
                 params![record.id],
             )?;
-            for actor in &record.actors {
+            let mut actors = record.actors.clone();
+            for skill in &record.details.heal_skills {
+                if !actors.iter().any(|a| a.actor_id == skill.actor_id) {
+                    actors.push(serde_json::from_value(json!({"actorId":skill.actor_id,"nickname":format!("#{}",skill.actor_id),"job":skill.job}))?);
+                }
+            }
+            for actor in &actors {
                 let dmg = damage.get(&actor.actor_id).copied().unwrap_or(0);
-                let healed = heal.get(&actor.actor_id).copied().unwrap_or(0) + actor.party_heal;
+                // The upstream heal skill totals already include ally healing.
+                let healed = heal
+                    .get(&actor.actor_id)
+                    .copied()
+                    .unwrap_or(actor.party_heal);
                 if dmg == 0 && healed == 0 && actor.damage_received == 0 {
                     continue;
                 }
@@ -705,32 +730,109 @@ impl Db {
         if let Some(record) = record {
             for p in &mut players {
                 let actor = p["actor_id"].as_i64().unwrap_or(0) as i32;
-                let mut skills: Vec<Value> = record
+                p["skills"] = skill_rows(&record.details.skills, actor);
+                p["heal_skills"] = skill_rows(&record.details.heal_skills, actor);
+                let heals: Vec<_> = record
+                    .details
+                    .heal_skills
+                    .iter()
+                    .filter(|s| s.actor_id == actor)
+                    .collect();
+                if !heals.is_empty() {
+                    p["heal"] = json!(heals.iter().map(|s| i64::from(s.dmg)).sum::<i64>());
+                }
+                p["hps"] = json!(
+                    p["heal"].as_f64().unwrap_or(0.0) * 1000.0
+                        / record.duration_ms.max(1000) as f64
+                );
+            }
+            fight["ping_history"] = json!(record.details.ping_history);
+            fight["healing_scope"] =
+                json!("Erfasste Heilung seit dem letzten Parser-Reset, keine effektive Heilung");
+            fight["timeline_available"] = json!(
+                record
                     .details
                     .skills
                     .iter()
-                    .filter(|s| s.actor_id == actor)
-                    .map(|s| {
-                        let hits = s.time.max(1);
-                        json!({
-                            "name": if s.name.is_empty() { format!("#{}", s.code) } else { s.name.clone() },
-                            "damage": s.dmg,
-                            "hits": s.time,
-                            "crit_rate": s.crit as f64 * 100.0 / hits as f64,
-                            "back_rate": s.back as f64 * 100.0 / hits as f64,
-                            "perfect_rate": s.perfect as f64 * 100.0 / hits as f64,
-                            "parry_rate": s.parry as f64 * 100.0 / hits as f64,
-                            "max": s.max_dmg,
-                            "is_dot": s.is_dot,
-                        })
-                    })
-                    .collect();
-                skills.sort_by_key(|s| -s["damage"].as_i64().unwrap_or(0));
-                p["skills"] = Value::Array(skills);
-            }
+                    .any(|s| !s.hit_timestamps.is_empty())
+            );
+        }
+        fight["difficulty"] = json!(names::dungeon_difficulty(
+            fight["dungeon_id"].as_i64().unwrap_or(0) as i32
+        ));
+        fight["outcome"] = json!("unknown");
+        let analytics: Option<String> = conn
+            .query_row(
+                "SELECT data FROM fight_analytics WHERE fight_id=?1",
+                params![fight_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        fight["analytics"] = analytics
+            .and_then(|a| serde_json::from_str::<Value>(&a).ok())
+            .unwrap_or(Value::Null);
+        let annotation: Option<(bool, String, String)> = conn
+            .query_row(
+                "SELECT favorite,note,tags FROM fight_annotations WHERE fight_id=?1",
+                params![fight_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        if let Some((favorite, note, tags)) = annotation {
+            fight["favorite"] = json!(favorite);
+            fight["note"] = json!(note);
+            fight["tags"] = json!(tags);
         }
         fight["players"] = Value::Array(players);
         Ok(Some(fight))
+    }
+
+    pub fn save_analytics(&self, id: &str, data: &Value) -> Result<()> {
+        self.conn.lock().execute("INSERT INTO fight_analytics(fight_id,data) VALUES(?1,?2) ON CONFLICT(fight_id) DO UPDATE SET data=excluded.data",params![id,data.to_string()])?;
+        Ok(())
+    }
+    pub fn annotate(&self, id: &str, favorite: bool, note: &str, tags: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM fights WHERE id=?1)",
+            params![id],
+            |r| r.get(0),
+        )?;
+        if exists {
+            conn.execute("INSERT INTO fight_annotations VALUES(?1,?2,?3,?4) ON CONFLICT(fight_id) DO UPDATE SET favorite=excluded.favorite,note=excluded.note,tags=excluded.tags",params![id,favorite,note,tags])?;
+        }
+        Ok(exists)
+    }
+    pub fn search_fights(
+        &self,
+        query: &str,
+        character: &str,
+        from: i64,
+        to: i64,
+        favorites: bool,
+        offset: i64,
+    ) -> Result<Value> {
+        let conn = self.conn.lock();
+        let sql="SELECT f.id,f.boss_name,f.dungeon_id,f.started_at,f.duration_ms,f.total_damage,f.is_train,
+          COALESCE(a.favorite,0) AS favorite,COALESCE(a.note,'') AS note,COALESCE(a.tags,'') AS tags,
+          (SELECT p.dps FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 LIMIT 1) AS my_dps
+          FROM fights f LEFT JOIN fight_annotations a ON a.fight_id=f.id
+          WHERE (instr(lower(f.boss_name||' '||COALESCE(a.note,'')||' '||COALESCE(a.tags,'')),lower(?1))>0)
+           AND (?2='' OR EXISTS(SELECT 1 FROM fight_players p WHERE p.fight_id=f.id AND p.is_self=1 AND p.name=?2))
+           AND f.started_at>=?3 AND f.started_at<=?4 AND (?5=0 OR a.favorite=1)
+          ORDER BY f.started_at DESC LIMIT 101 OFFSET ?6";
+        let mut rows = rows_to_json(
+            &mut conn.prepare(sql)?,
+            params![query, character, from, to, favorites, offset],
+        )?;
+        let more = rows.len() > 100;
+        rows.truncate(100);
+        for r in &mut rows {
+            r["difficulty"] = json!(names::dungeon_difficulty(
+                r["dungeon_id"].as_i64().unwrap_or(0) as i32
+            ));
+        }
+        Ok(json!({"fights":rows,"more":more}))
     }
 
     /// The players you most often ran expeditions with.
@@ -1167,5 +1269,82 @@ mod tests {
         assert!(db.run_detail(run).unwrap().is_some());
         db.delete_run(run).unwrap();
         assert!(db.run_detail(run).unwrap().is_none());
+    }
+    #[test]
+    fn resaving_preserves_annotations_analytics_and_heal_is_not_counted_twice() {
+        let db = Db::in_memory().unwrap();
+        let mut f = record("qol", 1000, 1500);
+        f.actors[0].party_heal = 300;
+        let mut healing = f.details.skills[0].clone();
+        healing.dmg = 300;
+        f.details.heal_skills = vec![healing];
+        db.save_fights(
+            std::slice::from_ref(&f),
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(db.annotate("qol", true, "new gear", "rotation").unwrap());
+        db.save_analytics("qol", &json!({"points":[],"partial":true}))
+            .unwrap();
+        db.save_fights(
+            std::slice::from_ref(&f),
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        let detail = db.fight_detail("qol").unwrap().unwrap();
+        assert_eq!(detail["players"][0]["heal"], 300);
+        assert_eq!(detail["players"][0]["hps"], 30.0);
+        assert_eq!(
+            detail["players"][0]["skills"][0]["hit_timestamps"],
+            json!([1, 2])
+        );
+        assert_eq!(detail["favorite"], true);
+        assert_eq!(detail["analytics"]["partial"], true);
+        assert_eq!(
+            db.search_fights("rotation", "Me", 0, 2000, true, 0)
+                .unwrap()["fights"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            db.search_fights("rotation", "Other", 0, 2000, true, 0)
+                .unwrap()["fights"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            db.search_fights("", "Me", 2000, 3000, false, 0).unwrap()["fights"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!db.annotate("missing", true, "", "").unwrap());
+    }
+    #[test]
+    fn healing_only_actor_is_retained_and_old_records_are_readable() {
+        let db = Db::in_memory().unwrap();
+        let mut f = record("healer", 1000, 500);
+        let mut healing = f.details.skills[0].clone();
+        healing.actor_id = 3;
+        healing.dmg = 100;
+        f.details.heal_skills = vec![healing];
+        db.save_fights(&[f], 0, &[], None, &HashSet::new()).unwrap();
+        let d = db.fight_detail("healer").unwrap().unwrap();
+        assert!(
+            d["players"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["actor_id"] == 3 && p["heal"] == 100)
+        );
     }
 }

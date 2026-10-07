@@ -43,7 +43,7 @@ Ein inkrementeller LTO-Linkversuch mit Rust 1.99 schlug in egui fehl. Nach dem g
 ## Verbleibende Grenzen und nächste Schritte
 
 - Ein echter Kampf unter AION 2/Proton und die Fensterpositionierung beziehungsweise Klickdurchleitung unter KDE Wayland wurden hier nicht getestet. Browserprüfungen verwenden API-Testdaten.
-- Der gepinnte Upstream-Assembler verarbeitet Payloads in Empfangsreihenfolge. TCP-Sequenznummern werden im Dispatcher nicht für Neuübertragungen oder umsortierte Segmente verwendet. Für diese Fälle sollte ein eigener sequenzbewusster Reassembler mit reproduzierbaren Mitschnitt-Tests ergänzt werden.
-- Overlay-Einstellungen gelten weiterhin für die laufende Sitzung. Persistenz über Neustarts ist ein eigener sinnvoller Ausbau.
+- Seit 0.2.0 ordnet ein vorgeschalteter TCP-Reassembler Payloads, entfernt Duplikate und meldet Lücken. Aufnahme und Replay behalten Sequenznummern. Details und verbleibende Grenzen: [Kampfanalyse und QoL](COMBAT_ANALYSIS.md).
+- Seit 0.2.0 werden Overlay-Einstellungen und Position in SQLite gespeichert. Benannte Profile und eine Rückholfunktion stehen im Dashboard bereit.
 - `--listen 0.0.0.0` stellt weiterhin eine API ohne Anmeldung ins Netzwerk. Der Host-Schutz ersetzt keine Anmeldung. Der Standard bleibt `127.0.0.1`. Bei Netzwerkzugriff ist die IP-Adresse des Rechners zu verwenden, keine frei auflösbare Domain.
 - IPv6-Extension-Header und IP-Fragment-Reassembly bleiben nicht unterstützt. Solche Pakete werden nicht als vollständige Kampfpakete interpretiert.

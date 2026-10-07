@@ -1,5 +1,6 @@
 //! AION 2 damage meter for Linux.
 
+mod analytics;
 mod buffs;
 mod capture;
 mod db;
@@ -7,6 +8,8 @@ mod dispatcher;
 mod engine;
 mod names;
 mod overlay;
+mod replay;
+mod tcp;
 mod web;
 
 use std::net::{IpAddr, SocketAddr};
@@ -56,6 +59,12 @@ enum Lang {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Decode an offline capture. No game, packet privileges or dashboard required.
+    Replay {
+        file: PathBuf,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     /// Control a running meter (bind these to KDE shortcuts).
     Ctl {
         #[arg(value_enum)]
@@ -151,6 +160,20 @@ fn main() -> anyhow::Result<()> {
     }
     let addr = SocketAddr::new(cli.listen, cli.port);
 
+    if let Some(Command::Replay {
+        ref file,
+        ref output,
+    }) = cli.command
+    {
+        let report = replay::run(file)?;
+        let text = serde_json::to_string_pretty(&report)?;
+        if let Some(path) = output {
+            std::fs::write(path, text)?;
+        } else {
+            println!("{text}");
+        }
+        return Ok(());
+    }
     if let Some(Command::Ctl { action }) = cli.command {
         let local = SocketAddr::new(
             if cli.listen.is_unspecified() {

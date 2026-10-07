@@ -13,7 +13,7 @@ use eframe::egui::{
     ViewportCommand,
 };
 
-use crate::engine::{Engine, Live};
+use crate::engine::{Engine, Live, metric_value, overlay_rows};
 use crate::names::{duration, short_number};
 
 pub const APP_ID: &str = "aion2-meter";
@@ -28,6 +28,7 @@ pub struct Overlay {
     web_url: String,
     passthrough: Option<bool>,
     last_size: Vec2,
+    last_position: Option<[f32; 2]>,
 }
 
 fn masked(name: &str) -> String {
@@ -44,7 +45,9 @@ fn with_alpha(c: [u8; 3], a: u8) -> Color32 {
 
 impl Overlay {
     pub fn new(engine: Arc<Engine>, web_url: String) -> Self {
+        let last_position = engine.overlay.read().position;
         Self {
+            last_position,
             engine,
             web_url,
             passthrough: None,
@@ -57,6 +60,7 @@ impl Overlay {
             viewport: egui::ViewportBuilder::default()
                 .with_title("AION2 Meter")
                 .with_app_id(APP_ID)
+                .with_position(self.engine.overlay.read().position.unwrap_or([40.0, 40.0]))
                 .with_inner_size([WIDTH, HEADER + FOOTER + ROW * 2.0])
                 .with_min_inner_size([200.0, 60.0])
                 .with_decorations(false)
@@ -84,11 +88,23 @@ impl Overlay {
             Color32::from_rgba_unmultiplied(16, 28, 44, bg.saturating_add(40)),
         );
 
-        let title = if live.target_name.is_empty() {
+        let mut title = if live.target_name.is_empty() {
             "Kein Ziel".to_string()
         } else {
             live.target_name.clone()
         };
+        let metric = self.engine.overlay.read().metric.clone();
+        if metric != "damage" {
+            title = format!(
+                "{} · {}",
+                if metric == "heal" {
+                    "Heilung"
+                } else {
+                    "Erlitten"
+                },
+                title
+            );
+        }
         let time = duration(live.battle_time_ms);
         let dps_total = if live.battle_time_ms > 0 {
             live.total_damage * 1000.0 / live.battle_time_ms as f64
@@ -130,7 +146,11 @@ impl Overlay {
             p.text(
                 bar.center(),
                 Align2::CENTER_CENTER,
-                format!("{:.1}%", hp * 100.0),
+                format!(
+                    "{}{:.1}%",
+                    if live.hp_estimated { "~" } else { "" },
+                    hp * 100.0
+                ),
                 FontId::proportional(9.0),
                 Color32::WHITE,
             );
@@ -152,7 +172,7 @@ impl Overlay {
             ui.close();
         }
         if ui.button("Sperren (Klicks gehen ans Spiel)").clicked() {
-            self.engine.overlay.write().locked = true;
+            let _ = self.engine.modify_overlay(|s| s.locked = true);
             ui.close();
         }
         let mut recording = self.engine.recording_wanted();
@@ -194,18 +214,40 @@ impl Overlay {
         ui: &mut egui::Ui,
         live: &Live,
         width: f32,
-        max_rows: usize,
+        _max_rows: usize,
         show_dps: bool,
         hide_names: bool,
     ) {
-        let top = live.rows.first().map(|r| r.damage).unwrap_or(1.0).max(1.0);
-        for (i, row) in live.rows.iter().take(max_rows).enumerate() {
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(width, ROW), Sense::hover());
+        let settings = self.engine.overlay.read().clone();
+        let rows = overlay_rows(live, &settings);
+        let total = live
+            .rows
+            .iter()
+            .map(|r| metric_value(r, &settings.metric))
+            .sum::<f64>()
+            .max(1.0);
+        let top = rows
+            .iter()
+            .map(|(_, r)| metric_value(r, &settings.metric))
+            .fold(1.0, f64::max);
+        for (i, row) in &rows {
+            let value = metric_value(row, &settings.metric);
+            let rate = match settings.metric.as_str() {
+                "heal" => row.hps,
+                "damage_received" => value * 1000.0 / live.battle_time_ms.max(1000) as f64,
+                _ => row.dps,
+            };
+            let (rect, response) = ui.allocate_exact_size(Vec2::new(width, ROW), Sense::click());
+            if response.clicked() && !settings.locked {
+                let _ = std::process::Command::new("xdg-open")
+                    .arg(format!("{}?player={}#live", self.web_url, row.id))
+                    .spawn();
+            }
             let p = ui.painter();
             let inner = rect.shrink2(Vec2::new(4.0, 1.5));
             p.rect_filled(inner, 3, Color32::from_black_alpha(90));
             let mut fill = inner;
-            fill.set_width(inner.width() * (row.damage / top) as f32);
+            fill.set_width(inner.width() * (value / top).clamp(0.0, 1.0) as f32);
             p.rect_filled(fill, 3, with_alpha(row.color, 115));
             if row.is_self {
                 p.rect_stroke(
@@ -223,12 +265,12 @@ impl Overlay {
             let right = if show_dps {
                 format!(
                     "{}  {}/s  {:>3.0}%",
-                    short_number(row.damage),
-                    short_number(row.dps),
-                    row.share
+                    short_number(value),
+                    short_number(rate),
+                    value * 100.0 / total
                 )
             } else {
-                format!("{}  {:>3.0}%", short_number(row.damage), row.share)
+                format!("{}  {:>3.0}%", short_number(value), value * 100.0 / total)
             };
             let font = FontId::proportional(12.5);
             let mut name_rect = inner;
@@ -328,13 +370,13 @@ impl Overlay {
             Icon::Lock,
             "Sperren: Klicks gehen ans Spiel (Strg+Umschalt+F9 entsperrt)",
         ) {
-            self.engine.overlay.write().locked = true;
+            let _ = self.engine.modify_overlay(|s| s.locked = true);
         }
         if button(
             Icon::Hide,
             "Ausblenden (Strg+Umschalt+F10 blendet wieder ein)",
         ) {
-            self.engine.overlay.write().visible = false;
+            let _ = self.engine.modify_overlay(|s| s.visible = false);
         }
         if button(Icon::Reset, "Meter zurücksetzen (Strg+Umschalt+F11)") {
             self.engine.request_reset();
@@ -451,7 +493,21 @@ impl eframe::App for Overlay {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(250));
-        let live = self.engine.live();
+        let desired = self.engine.overlay.read().position;
+        if desired != self.last_position {
+            if let Some(p) = desired {
+                ctx.send_viewport_cmd(ViewportCommand::OuterPosition(p.into()));
+            }
+            self.last_position = desired;
+        } else if let Some(rect) = ctx.input(|i| i.viewport().outer_rect) {
+            let position = [rect.min.x, rect.min.y];
+            if !ctx.input(|i| i.pointer.any_down()) && self.last_position != Some(position) {
+                let _ = self.engine.modify_overlay(|s| s.position = Some(position));
+                self.last_position = Some(position);
+            }
+        }
+        let mut live = self.engine.live();
+        live.overlay = self.engine.overlay.read().clone();
         let settings = live.overlay.clone();
         ctx.set_zoom_factor(settings.scale.clamp(0.6, 2.5));
 

@@ -41,17 +41,23 @@ async function tick() {
     el('box').hidden = !s.visible;
     el('box').style.background = `rgba(11,16,24,${clamp(s.opacity, 0, 1)})`;
     el('box').style.transform = `scale(${clamp(s.scale, .6, 2.5)})`;
-    el('t').textContent = l.target_name || 'Kein Ziel';
+    el('t').textContent = (s.metric==='heal'?'Heilung · ':s.metric==='damage_received'?'Erlitten · ':'')+(l.target_name || 'Kein Ziel');
+    el('hpTrack').title=l.hp_estimated?'HP geschätzt':'Gemeldete HP';
     el('time').textContent = dur(l.battle_time_ms);
     el('hpTrack').hidden = l.target_hp == null;
     el('hp').style.width = (clamp(l.target_hp ?? 0, 0, 1) * 100) + '%';
-    const top = Math.max(1, ...l.rows.map(r => r.damage));
-    el('rows').innerHTML = l.rows.slice(0, clamp(s.max_rows, 1, 24)).map((r, i) => {
+    const metric = ['damage','heal','damage_received'].includes(s.metric) ? s.metric : 'damage';
+    const ranked = l.rows.map(r=>({...r, value:Number(r[metric])||0})).sort((a,b)=>b.value-a.value).map((r,i)=>({...r,rank:i+1}));
+    const selected=ranked.slice(0,clamp(s.max_rows,1,24));
+    const me=ranked.find(r=>r.is_self);
+    if(s.pin_self!==false && me && !selected.some(r=>r.is_self)) {selected.pop();selected.push(me);}
+    const top = Math.max(1, ...ranked.map(r => r.value)), sum=ranked.reduce((n,r)=>n+r.value,0)||1;
+    el('rows').innerHTML = selected.map((r, i) => {
       const key = /^[a-z]+$/.test(r.class_key) ? r.class_key : 'unknown';
       const name = s.hide_names && !r.is_self ? masked(r.name) : r.name;
       return `<div class="row ${r.is_self ? 'me' : ''}">
-      <div class="f" style="width:${clamp(r.damage / top * 100, 0, 100)}%;background:var(--${key})"></div>
-      <div class="t"><span class="name">${i + 1}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n">${num(r.damage)} ${s.show_dps ? num(r.dps) + '/s ' : ''}${(r.share || 0).toFixed(0)}%</span></div></div>`;
+      <div class="f" style="width:${clamp(r.value / top * 100, 0, 100)}%;background:var(--${key})"></div>
+      <div class="t"><span class="name">${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n">${num(r.value)} ${s.show_dps ? num(metric === 'heal' ? r.hps : metric === 'damage_received' ? r.value*1000/Math.max(l.battle_time_ms,1000) : r.dps) + '/s ' : ''}${(r.value*100/sum).toFixed(0)}%</span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
     const c = l.capture;
     el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
