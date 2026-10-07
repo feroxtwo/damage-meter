@@ -550,8 +550,9 @@ impl Db {
                 "INSERT INTO fights(id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at,
                                                duration_ms, total_damage, max_hp, is_train, record_json)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-                 ON CONFLICT(id) DO UPDATE SET run_id=excluded.run_id, boss_name=excluded.boss_name,
-                  mob_code=excluded.mob_code, target_id=excluded.target_id, dungeon_id=excluded.dungeon_id,
+                 ON CONFLICT(id) DO UPDATE SET run_id=COALESCE(excluded.run_id, fights.run_id), boss_name=excluded.boss_name,
+                  mob_code=excluded.mob_code, target_id=excluded.target_id,
+                  dungeon_id=CASE WHEN excluded.dungeon_id > 0 THEN excluded.dungeon_id ELSE fights.dungeon_id END,
                   max_hp=excluded.max_hp,is_train=excluded.is_train,
                   duration_ms=excluded.duration_ms, total_damage=excluded.total_damage, record_json=excluded.record_json",
                 params![

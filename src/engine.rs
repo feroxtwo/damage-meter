@@ -4,10 +4,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::time::Duration;
 
 use crate::analytics::Series;
+use a2tools_dps_meter_lib::combat::data_storage::is_open_world_map;
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -269,6 +270,13 @@ pub struct Engine {
     new_run_requested: AtomicBool,
     /// Last zone load into an instance map (not the open world), clock ms.
     instance_load_ms: AtomicI64,
+    /// Last load into an instance from somewhere else (the open world or
+    /// another instance), clock ms. Teleports inside an instance name the
+    /// same map again and do not count. Normally the open-world stay
+    /// in between ends the run; this catches one shorter than a heartbeat.
+    instance_entry_ms: AtomicI64,
+    /// The map of the last zone load, 0 before the first.
+    last_map: AtomicI32,
     target_mode: RwLock<String>,
     pub buffs: BuffTracker,
     record_wanted: AtomicBool,
@@ -371,6 +379,8 @@ impl Engine {
             reset_requested: AtomicBool::new(false),
             new_run_requested: AtomicBool::new(false),
             instance_load_ms: AtomicI64::new(i64::MIN),
+            instance_entry_ms: AtomicI64::new(i64::MIN),
+            last_map: AtomicI32::new(0),
             target_mode: RwLock::new(target_mode),
             buffs: BuffTracker::default(),
             record_wanted: AtomicBool::new(false),
@@ -452,6 +462,7 @@ impl Engine {
         }
     }
     pub fn replay_tick(&self) {
+        self.sync_open_world();
         self.process_reset();
         let (dps, context) = self.snapshot();
         self.observe(&context);
@@ -597,8 +608,30 @@ impl Engine {
 
     /// The game loaded `map_id` at `at_ms` (see `instances::map_load`).
     pub fn note_map_load(&self, map_id: i32, at_ms: i64) {
-        if !a2tools_dps_meter_lib::combat::data_storage::is_open_world_map(map_id) {
+        let previous = self.last_map.swap(map_id, Ordering::Relaxed);
+        if !is_open_world_map(map_id) {
             self.instance_load_ms.fetch_max(at_ms, Ordering::Relaxed);
+            if previous != map_id {
+                self.instance_entry_ms.fetch_max(at_ms, Ordering::Relaxed);
+            }
+        }
+        self.sync_open_world();
+    }
+
+    /// Whether the last zone load was into the open world.
+    fn in_open_world(&self) -> bool {
+        is_open_world_map(self.last_map.load(Ordering::Relaxed))
+    }
+
+    /// The party roster names the instance its party was last in, and keeps
+    /// naming it after you leave: back in the open world (map 1110 in Mirco's
+    /// 2026-10-07 recordings), every roster put the expedition's id back. The
+    /// run then never ended, a restart was never seen, and the parser hid
+    /// open-world mobs as trash of a dungeon. The map you loaded wins.
+    fn sync_open_world(&self) {
+        let map = self.last_map.load(Ordering::Relaxed);
+        if is_open_world_map(map) && self.storage.current_dungeon_id() != 0 {
+            self.storage.note_map_load(map);
         }
     }
 
@@ -922,7 +955,13 @@ impl Engine {
                 }
             }
         }
-        let dungeon = self.storage.current_dungeon_id();
+        // Leaving an instance clears its id before the last fights are
+        // saved (the open-world load comes first); they still belong to the
+        // instance the run was in.
+        let dungeon = match self.storage.current_dungeon_id() {
+            0 => self.run.try_lock().map_or(0, |r| r.dungeon_id),
+            id => id,
+        };
         let dead = self.storage.get_dead_entities();
         match self
             .db
@@ -1009,7 +1048,12 @@ impl Engine {
 
     /// Follow instance entries and exits, and record who was in the party.
     fn track_run(&self, now: i64) {
-        let dungeon = self.storage.current_dungeon_id();
+        self.sync_open_world();
+        let dungeon = if self.in_open_world() {
+            0
+        } else {
+            self.storage.current_dungeon_id()
+        };
         let profile = self.storage.local_profile();
         let me = profile
             .name
@@ -1075,6 +1119,12 @@ impl Engine {
                 fights,
             )
             .map(|at| (at, "Neustart erkannt"))
+            .or_else(|| {
+                let entry = self.instance_entry_ms.load(Ordering::Relaxed);
+                // The roster that starts a run can come a moment before the
+                // load that enters the instance; that load is no new entry.
+                (entry > run.started_at + 5_000).then_some((entry, "Neuer Eintritt erkannt"))
+            })
             .or_else(|| {
                 self.new_run_requested
                     .swap(false, Ordering::SeqCst)
@@ -1268,13 +1318,16 @@ impl Engine {
                 ..Default::default()
             });
         }
-        let dungeon_id = if dps.dungeon_id > 0 {
+        let dungeon_id = if self.in_open_world() {
+            0
+        } else if dps.dungeon_id > 0 {
             dps.dungeon_id
         } else {
             self.storage.current_dungeon_id()
         };
         if dungeon_id <= 0 && !self.overlay.read().open_world_others {
-            keep_own_rows(&mut rows, &self.storage.get_party_members());
+            let known = me.is_some() || self.storage.local_player_id().is_some();
+            keep_own_rows(&mut rows, known, &self.storage.get_party_members());
         }
         rows.sort_by(|a, b| b.damage.total_cmp(&a.damage));
         let total: f64 = rows.iter().fold(0.0, |acc, r| acc + r.damage);
@@ -1439,6 +1492,7 @@ impl Engine {
             }
             tick += 1;
 
+            self.sync_open_world();
             self.process_reset();
 
             let (dps, context) = self.snapshot();
@@ -1470,13 +1524,15 @@ impl Engine {
 }
 
 /// Open world: only you and your party. Strangers hitting the same mob stay
-/// out. Without knowing who you are or who your party is, everyone stays,
-/// rather than an empty meter.
+/// out, also while you are not fighting yourself (recordings showed a lone
+/// stranger's row). Without knowing who you are or who your party is,
+/// everyone stays, rather than an empty meter.
 fn keep_own_rows(
     rows: &mut Vec<LiveRow>,
+    me_known: bool,
     party: &HashMap<String, a2tools_dps_meter_lib::combat::data_storage::PartyMember>,
 ) {
-    if !rows.iter().any(|r| r.is_self) && party.is_empty() {
+    if !me_known && !rows.iter().any(|r| r.is_self) && party.is_empty() {
         return;
     }
     let party: HashSet<&str> = party.keys().map(|n| n.trim()).collect();
@@ -2018,5 +2074,26 @@ mod tests {
         e.modify_overlay(|s| s.open_world_others = true).unwrap();
         assert_eq!(names(&e), ["Friend", "Me", "Stranger"]);
         a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
+    fn leaving_for_the_open_world_ends_the_run_despite_a_stale_roster() {
+        // Mirco's recordings: the roster keeps naming the expedition after
+        // the open-world load (map 1110), so the run never ended before.
+        let e = Engine::new(Db::in_memory().unwrap(), "de", std::env::temp_dir());
+        e.storage.set_local_player_id(Some(2259));
+        e.storage.set_current_dungeon(600_072);
+        e.note_map_load(600_072, 1_000);
+        e.track_run(1_000);
+        let first = e.run.lock().run_id.unwrap();
+        e.note_map_load(1110, 5_000);
+        e.storage.set_current_dungeon(600_072); // the stale roster
+        e.track_run(6_000);
+        assert_eq!(e.run.lock().run_id, None);
+        assert_eq!(e.storage.current_dungeon_id(), 0);
+        e.note_map_load(600_072, 9_000);
+        e.storage.set_current_dungeon(600_072);
+        e.track_run(10_000);
+        assert_ne!(e.run.lock().run_id.unwrap(), first);
     }
 }

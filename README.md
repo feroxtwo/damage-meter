@@ -93,10 +93,11 @@ Andere Tasten: `LOCK=Strg+Ü VISIBLE=Strg+Ö RESET=Strg+Ä ./scripts/install-sho
 `./scripts/install-shortcuts.sh --remove`. Danach lassen sie sich auch unter *Systemeinstellungen → Tastatur →
 Kurzbefehle* ändern.
 
-**Expedition neu starten:** Startest du eine Expedition neu, beginnt der Meter einen neuen Run, sobald du einen
-schon getöteten Boss erneut angreifst (das Spiel lädt die Instanz dabei neu, die Instanz-ID bleibt gleich). Einen
-Neustart nach einem Wipe ohne Bosskill erkennt er nicht; dafür gibt es im Live-Tab **Neuer Run** oder
-`~/.local/bin/aion2-meter ctl new-run`.
+**Expedition neu starten:** Verlässt du die Instanz (das Spiel lädt dabei eine Open-World-Karte), endet der Run;
+beim nächsten Betreten beginnt ein neuer. So landet jeder Durchgang einer wiederholten Expedition in einem eigenen
+Run, auch wenn die Gruppe gleich bleibt. Startet das Spiel die Instanz ohne Umweg neu, beginnt der neue Run, sobald
+du einen schon getöteten Boss erneut angreifst. Für alles, was der Meter nicht sieht (Neustart nach einem Wipe
+ohne Bosskill), gibt es im Live-Tab **Neuer Run** oder `~/.local/bin/aion2-meter ctl new-run`.
 
 **Open World:** Außerhalb von Instanzen zeigt der Meter nur dich und deine Gruppe; fremde Spieler am selben Mob
 blendet er aus. *Overlay → Open World: andere Spieler anzeigen* holt sie zurück. In Dungeons und Expeditionen
