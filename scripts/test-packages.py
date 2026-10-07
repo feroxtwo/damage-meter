@@ -12,7 +12,12 @@ import re
 version=re.search(r'^version = "([\d.]+)"',Path('Cargo.toml').read_text(),re.M)[1]
 binary=Path(os.environ.get('METER_BINARY','target/release/aion2-meter'))
 def digest(p):
-    with p.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
+    # Ubuntu 22.04 ships Python 3.10 (hashlib.file_digest requires 3.11).
+    checksum=hashlib.sha256()
+    with p.open('rb') as f:
+        for block in iter(lambda:f.read(1024*1024),b''):
+            checksum.update(block)
+    return checksum.hexdigest()
 expected=digest(binary);dist=Path('dist');archive=dist/f'aion2-meter-{version}-linux-x86_64.tar.gz';deb=dist/f'aion2-meter_{version}_amd64.deb';rpm=dist/f'aion2-meter-{version}-1.x86_64.rpm'
 with tarfile.open(archive) as t:
     prefix=f'aion2-meter-{version}-linux-x86_64/'
