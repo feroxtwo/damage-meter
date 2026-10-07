@@ -103,8 +103,10 @@ pub fn decorate(value: &mut Value, language: &str) {
         _ => {}
     }
 }
+/// Built once: about 9,000 variant rows, served to every catalog request.
+pub static ALL: LazyLock<Value> = LazyLock::new(all);
 /// All existing packet IDs are searchable; primary entries retain their class/aliases.
-pub fn all() -> Value {
+fn all() -> Value {
     let mut value = CATALOG.clone();
     value["variants"] = Value::Array(
         EN.keys()

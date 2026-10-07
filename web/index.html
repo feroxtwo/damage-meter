@@ -166,6 +166,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
             <option value="trainTargets">Trainingspuppe</option>
           </select>
           <button class="btn" id="resetBtn">Zurücksetzen</button>
+          <button class="btn" id="newRunBtn" hidden title="Beendet den aktuellen Expeditions-Run und beginnt einen neuen, falls ein Neustart nicht erkannt wurde">Neuer Run</button>
           <button class="btn" id="recBtn" title="Schneidet die Spielverbindung mit, um weitere Pakete (Ausweichen, nDPS) zu entschlüsseln">Pakete mitschneiden</button>
         </div>
       </div>
@@ -226,6 +227,8 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">Kompakte Zeilen <input type="checkbox" data-k="compact"></label>
       <label class="set">Reset nach Leerlauf <select data-k="idle_reset_seconds"><option value="0">Aus</option><option value="15">15 Sekunden</option><option value="30">30 Sekunden</option><option value="60">60 Sekunden</option><option value="120">2 Minuten</option></select></label>
       <label class="set">Wipe automatisch zurücksetzen <input type="checkbox" data-k="wipe_reset"></label>
+      <label class="set">Open World: andere Spieler anzeigen <input type="checkbox" data-k="open_world_others"></label>
+      <p class="analysis-note">Aus: In der Open World zeigt der Meter nur dich und deine Gruppe. In Expeditionen und Dungeons erscheint immer die ganze Gruppe.</p>
       <p class="analysis-note">Vor jedem Reset wird der Versuch gespeichert. Wipe-Erkennung braucht mindestens zwei erfasste Spieler einschließlich dir, alle als tot erfasst, fünf Sekunden ohne Treffer und einen gemeldeten Boss-HP-Reset. Geschätzte HP lösen keinen Wipe aus. Während Training bleibt Auto-Reset aus.</p>
       <label class="set">Sichtbar <input type="checkbox" data-k="visible"></label>
       <label class="set">Gesperrt (Klicks gehen durch ans Spiel) <input type="checkbox" data-k="locked"></label>
@@ -355,11 +358,13 @@ async function pollLive() {
       if(window.updateLiveRows)updateLiveRows(l);
       if (window.bindLiveRows) bindLiveRows(l);
       if (document.activeElement !== $('#targetMode')) $('#targetMode').value = l.target_mode || 'bossTargets';
+      $('#newRunBtn').hidden = l.run_id == null;
     }
   } catch (e) { $('#statusDot').style.background = 'var(--red)'; $('#statusText').textContent = 'Meter nicht erreichbar';$('#captureHelp').hidden=false;$('#captureHelp').textContent='Verbindung zum Meter unterbrochen. Die Zahlen zeigen den letzten empfangenen Stand. Prüfe, ob aion2-meter noch läuft.'; }
   finally { livePolling = false; if (!document.hidden) pollTimer = setTimeout(pollLive, 1000); }
 }
 $('#resetBtn').onclick = () => api('/api/reset', { method: 'POST' });
+$('#newRunBtn').onclick = () => task(api('/api/run/new', { method: 'POST' }));
 $('#recAuto').onchange = async (e) => {
   try { await api('/api/record', { method: 'POST', body: JSON.stringify({ on: e.target.checked }) }); }
   catch (err) { e.target.checked = !e.target.checked; }

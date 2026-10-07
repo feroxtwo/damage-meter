@@ -61,12 +61,22 @@ fn display(engine: &Engine, mut value: Value) -> Value {
 }
 async fn skill_icon(Path(name): Path<String>) -> Response {
     match crate::skills::icon(&name) {
-        Some(bytes) => ([(header::CONTENT_TYPE, "image/webp")], bytes).into_response(),
+        // Bundled into the binary, so they only change with an update. The OBS
+        // overlay redraws its rows every 500 ms; without this every class icon
+        // was fetched again on each redraw and flickered.
+        Some(bytes) => (
+            [
+                (header::CONTENT_TYPE, "image/webp"),
+                (header::CACHE_CONTROL, "public, max-age=86400"),
+            ],
+            bytes,
+        )
+            .into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
-async fn skill_catalog() -> Json<Value> {
-    Json(crate::skills::all())
+async fn skill_catalog() -> Json<&'static Value> {
+    Json(&crate::skills::ALL)
 }
 async fn qol_js() -> impl IntoResponse {
     (
@@ -275,6 +285,15 @@ async fn reset(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn new_run(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    engine.request_new_run();
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn toggle_record(
     State(engine): State<AppState>,
     headers: HeaderMap,
@@ -461,10 +480,9 @@ async fn local_request(State(addr): State<SocketAddr>, request: Request, next: N
     }
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert(
-        header::CACHE_CONTROL,
-        axum::http::HeaderValue::from_static("no-store"),
-    );
+    headers
+        .entry(header::CACHE_CONTROL)
+        .or_insert(axum::http::HeaderValue::from_static("no-store"));
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         axum::http::HeaderValue::from_static("nosniff"),
@@ -530,6 +548,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))
         .route("/api/reset", post(reset))
+        .route("/api/run/new", post(new_run))
         .route("/api/record", post(set_record))
         .route("/api/record/toggle", post(toggle_record))
         .route("/api/target-mode", post(target_mode))
@@ -645,6 +664,10 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CONTENT_TYPE], "image/webp");
+        assert_eq!(
+            response.headers()[header::CACHE_CONTROL],
+            "public, max-age=86400"
+        );
         let bytes = to_bytes(response.into_body(), 100_000).await.unwrap();
         assert!(bytes.starts_with(b"RIFF"));
         assert_eq!(&bytes[8..12], b"WEBP");

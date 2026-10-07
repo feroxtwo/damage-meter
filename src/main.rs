@@ -7,6 +7,7 @@ mod db;
 mod dispatcher;
 mod encounters;
 mod engine;
+mod instances;
 mod names;
 mod overlay;
 mod replay;
@@ -83,6 +84,8 @@ enum Action {
     ToggleVisible,
     /// Reset the live meter.
     Reset,
+    /// End the expedition run and start a new one (after a restart).
+    NewRun,
     /// Start/stop recording the game connection to
     /// ~/.local/share/aion2-meter/captures (to decode more packets).
     Record,
@@ -190,6 +193,7 @@ fn main() -> anyhow::Result<()> {
             Action::ToggleLock => ("POST", "/api/overlay/toggle-lock"),
             Action::ToggleVisible => ("POST", "/api/overlay/toggle-visible"),
             Action::Reset => ("POST", "/api/reset"),
+            Action::NewRun => ("POST", "/api/run/new"),
             Action::Record => ("POST", "/api/record/toggle"),
             Action::Status => ("GET", "/api/live"),
         };

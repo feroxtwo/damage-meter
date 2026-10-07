@@ -492,7 +492,10 @@ impl Db {
     }
 
     /// The run a fight belongs to: the newest run of its dungeon that was
-    /// under way when the fight started.
+    /// under way when the fight started. A run may start up to a minute after
+    /// its first fight (the roster naming the instance comes late), but one
+    /// that had already started wins: after a restart of the same expedition
+    /// the old instance's last fight stays with the old run.
     fn run_for_fight(conn: &Connection, dungeon_id: i32, started_at: i64) -> Result<Option<i64>> {
         if dungeon_id <= 0 {
             return Ok(None);
@@ -501,7 +504,7 @@ impl Db {
             .query_row(
                 "SELECT id FROM runs WHERE dungeon_id = ?1 AND started_at <= ?2 + 60000
                    AND (ended_at IS NULL OR ended_at >= ?2)
-                 ORDER BY started_at DESC LIMIT 1",
+                 ORDER BY started_at <= ?2 DESC, started_at DESC LIMIT 1",
                 params![dungeon_id, started_at],
                 |r| r.get(0),
             )
@@ -547,8 +550,9 @@ impl Db {
                 "INSERT INTO fights(id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at,
                                                duration_ms, total_damage, max_hp, is_train, record_json)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-                 ON CONFLICT(id) DO UPDATE SET run_id=excluded.run_id, boss_name=excluded.boss_name,
-                  mob_code=excluded.mob_code, target_id=excluded.target_id, dungeon_id=excluded.dungeon_id,
+                 ON CONFLICT(id) DO UPDATE SET run_id=COALESCE(excluded.run_id, fights.run_id), boss_name=excluded.boss_name,
+                  mob_code=excluded.mob_code, target_id=excluded.target_id,
+                  dungeon_id=CASE WHEN excluded.dungeon_id > 0 THEN excluded.dungeon_id ELSE fights.dungeon_id END,
                   max_hp=excluded.max_hp,is_train=excluded.is_train,
                   duration_ms=excluded.duration_ms, total_damage=excluded.total_damage, record_json=excluded.record_json",
                 params![

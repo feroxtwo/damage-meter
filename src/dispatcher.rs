@@ -506,6 +506,7 @@ impl Dispatcher {
                                 if let Some(event) = buffs::parse(payload) {
                                     self.engine.buffs.record(event, packet.captured_at_ms);
                                 }
+                                self.engine.note_packet(payload, packet.captured_at_ms);
                             });
                         }
                     }
@@ -557,6 +558,7 @@ impl Dispatcher {
                     if let Some(event) = buffs::parse(payload) {
                         self.engine.buffs.record(event, now);
                     }
+                    self.engine.note_packet(payload, now);
                 });
             }
         }
