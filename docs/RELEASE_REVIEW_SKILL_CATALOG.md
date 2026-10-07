@@ -4,7 +4,9 @@ Fortsetzung auf `main` nach `d93f875` (einschließlich Finalprüfung PR #6 und a
 
 ## Urteil
 
-Technische Umsetzung im PR #9 zur Abnahme vorbereitet. Kein bekannter zusätzlich eingeführter P0/P1-Fehler. Releasefreigabe für diese Erweiterung setzt grüne PR-CI voraus, insbesondere die vollständige Browser-Regression. Echte Ingame-Genauigkeit und Identität der real gesendeten Skill-IDs bleiben ohne reale Kampfdaten unverifiziert.
+**Technisches GO für die DE/EN- und Symbolintegration.** Kein bekannter offener P0/P1-Fehler, der ohne reale Kampfdaten noch behoben werden könnte. Die vollständige PR-CI ist grün: [CI-Lauf 64](https://github.com/feroxtwo/damage-meter/actions/runs/37692901429) zum geprüften Programmstand `1589d518ad6962b0310f9b06fc7e7c6783d7ed9c`, geprüft am 7. Oktober 2026. Der abschließende Bericht ergänzt danach ausschließlich Dokumentation; die aktuellen Branchchecks sind im [offenen PR #9](https://github.com/feroxtwo/damage-meter/pull/9/checks) nachvollziehbar.
+
+**Reale Ingame-Freigabe bleibt offen.** Genauigkeit und Identität der real gesendeten Skill-IDs bleiben ohne reale Kampfdaten unverifiziert. Der PR wird gegen `main` veröffentlicht, nicht selbst gemergt. Kein Release-Tag wird erstellt.
 
 ## Abnahmematrix
 
@@ -17,18 +19,23 @@ Technische Umsetzung im PR #9 zur Abnahme vorbereitet. Kein bekannter zusätzlic
 | API / Rückfall | Katalog-HTTP, WebP-Header/Signatur, 404 unbekannter Assets, unbekannte IDs | Bestanden (Rust) |
 | Sprachwechsel / Messwerte | Gespeicherten Skill DE/EN neu beschriften; Schaden, Hits, DPS und Trefferzeitpunkte identisch | Bestanden (Rust + JS) |
 | Sprache / Persistenz | CLI-Voreinstellung, geschützte Settings-Mutation, Speicherung, ungültige Sprache | Bestanden (Rust) |
-| Skill-/Klassenanzeige | Tabelle, Trefferzeitlinie, Vergleiche, native/OBS-Klassenicons implementiert | Logik und native Regression bestanden; vollständige Browserabnahme wird nach mobiler Layoutkorrektur erneut in CI geprüft |
-| Katalogsuche | Alias-ID, beide Sprachen, Faustkämpferfilter und 80-Zeilen-Seite | Bestanden (JS); zusätzlicher Browsertest ergänzt |
-| Exporte | Gewählte Namen, unveränderte Werte, anonymisierte Spieler, lokale Skill-/Klassenbilder an Canvas übergeben | Bestanden (JS); vollständige PNG-/Browserchecks in CI |
+| Skill-/Klassenanzeige | Tabelle, Trefferzeitlinie, Vergleiche, native/OBS-Klassenicons | Bestanden (JS, Browser und native CI) |
+| Katalogsuche | Alias-ID, beide Sprachen, Faustkämpferfilter und 80-Zeilen-Seite | Bestanden (JS + Browser) |
+| Exporte | Gewählte Namen, unveränderte Werte, anonymisierte Spieler, lokale Skill-/Klassenbilder an Canvas übergeben; PNG-Seiten behalten alle Skills | Bestanden (JS + Browser) |
 | Rust-Regression | 83 Tests | Bestanden |
 | Formatierung / Clippy | `cargo fmt --all --check`, `cargo clippy --locked --all-targets -- -D warnings` | Bestanden |
 | Release-Build | `cargo build --release --locked` | Bestanden mit Rust 1.88.0 (frischer lokaler Build) und Stable (PR-CI) |
-| Vollständige Browser-Regression | Bestehende Suite + zwei neue DE/EN-/Katalogfälle | Lokal durch Chromium-Socketbeschränkung blockiert; CI prüft zusätzlich alle fünf Tabs bei 320/390 px |
+| Vollständige Browser-Regression | 35 Browserfälle + sechs JS-Präsentationsprüfungen; alle fünf Tabs bei 320/390 px, Sprachwechsel, XSS-Schutz und PNG-Auswertung | Bestanden in PR-CI |
+| Headless / Validierung / Native / Installer / Pakete | Bestehende CI-Skripte; Artefakte erfolgreich erzeugt | Bestanden in PR-CI |
+| Mindest-Rustversion | `cargo check --locked` mit Rust 1.88.0 | Bestanden in PR-CI |
+| Git / frühere Änderungen | `f0227b6` ist Vorfahr; Änderungen gegen Main begrenzt auf die unten aufgeführten 23 Dateien; sauberer Arbeitsbaum beim Abschluss | Bestätigt |
 | Echte Kampfdaten | Reale Skill-IDs, Pets/Effekte, offizielle deutsche Faustkämpfernamen, Genauigkeit | Offen: separate Ingame-Abnahme |
 
 Der installierte Stable-Compiler meldete zunächst fehlende Winit-Linkersymbole; die erste Rust-1.88-Gegenprüfung traf auf ungültige Build-Metadaten. Ein vollständig frischer Release-Build mit Rust 1.88.0 in einem separaten Target-Verzeichnis bestand. Auch der Stable-Release-Build und die Headless-, Validierungs-, Native-, Installer- und Pakettests in der PR-CI bestanden. Keine Produktkonfiguration wurde für diesen Gegencheck geändert.
 
-Chromium benötigt hier einen lokalen Unix-Socket, dessen Erzeugung verweigert wird. Die automatische Genehmigungsprüfung hat auch eine Ausführung außerhalb dieser Einschränkung abgelehnt. Das wurde nicht als bestandener Browsertest gewertet. Sechs davon unabhängige JS-Präsentationsprüfungen sind ausführbar und bestanden.
+Chromium benötigt im lokalen Container einen Unix-Socket, dessen Erzeugung verweigert wird. Die automatische Genehmigungsprüfung hat auch eine Ausführung außerhalb dieser Einschränkung abgelehnt. Diese lokale Blockade wurde nicht als bestandener Browsertest gewertet. Die vollständige echte Browserprüfung wurde stattdessen erfolgreich in GitHub Actions ausgeführt.
+
+Die neue Navigation erhielt einen Zeilenumbruch für schmale Displays. Der bestehende OBS-Sicherheitstest prüft nun ausschließlich erlaubte lokale Klassensymbole und weiterhin die sichere Darstellung bösartiger Spielernamen. Der neue Sprachtest stellt nach dem Leerzustand seine Spielerfixture wieder her und wartet auf den vollständig geöffneten Detaildialog; Messwert-, Übersetzungs- und Exportassertionen bleiben erhalten. Nach diesen letzten Korrekturen bestanden alle drei CI-Jobs. Bereits bestandene manuelle Abnahmen wurden nicht neu aufgerollt; die konfigurierte CI läuft bei Branchupdates automatisch.
 
 ## Geänderte Dateien
 
@@ -55,4 +62,5 @@ Chromium benötigt hier einen lokalen Unix-Socket, dessen Erzeugung verweigert w
 - Deutsche Faustkämpfernamen sind 41 Community-Übersetzungen, keine als offiziell ausgegebenen Quellnamen.
 - Elf allgemeine Fähigkeiten haben kein Quell-Icon. Weitere Paket-/Effekt-IDs nutzen passende vorhandene Namen oder den ID-Rückfall; ohne sichere Zuordnung kein Skillbild.
 - Alias-IDs und reale Klassen-/Pet-Zuordnungen müssen mit echten Aufnahmen überprüft werden. Bestehende Unsicherheiten zu Paketvollständigkeit, Buff-Entfernung, Overheal und nativer Plattformabnahme bleiben in der separaten Ingame-Liste.
-- Vollständige Browser-/Native-Regression im aktuellen lokalen Container nicht als bestanden behauptet. Die vorhandene frühere Abnahme ersetzt keine Prüfung der neuen Symbolanzeige. Die Navigation bricht auf schmalen Displays um; gespeicherte Sprachwahl hat sofort Vorrang vor einem noch älteren Live-Snapshot.
+- GitHub-CI bestätigt Browser und native X11-Regression; reales KDE/Wayland, gemischte Monitor-DPI und Spielszenen bleiben separat abzunehmen. Einzelne Parser-Skills behalten die bereits dokumentierten 32-Bit-Summengrenzen und die entsprechenden UI-Warnungen.
+- Artwork bleibt Fremdmaterial von NCSOFT bzw. den jeweiligen Rechteinhabern; Herkunftsangaben und die Softwarelizenz gewähren keine eigenständige Artwork-Lizenz. Siehe `data/skills/NOTICE.md`.
