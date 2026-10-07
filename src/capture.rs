@@ -80,7 +80,9 @@ fn interface_name(index: i32, cache: &mut HashMap<i32, String>) -> String {
             if ptr.is_null() {
                 format!("if{index}")
             } else {
-                unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
+                unsafe { CStr::from_ptr(buf.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned()
             }
         })
         .clone()
@@ -144,8 +146,17 @@ pub fn parse_ip(protocol: u16, packet: &[u8], device: String) -> Option<Captured
             }
             let ihl = (packet[0] & 0x0F) as usize * 4;
             let total = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+            // Fragmented IP datagrams require reassembly. Never interpret a
+            // fragment's bytes as a complete TCP segment.
+            let fragment = u16::from_be_bytes([packet[6], packet[7]]);
+            if fragment & 0x3FFF != 0 {
+                return None;
+            }
             // Offloaded packets can report 0 as their total length.
-            let end = if total >= ihl && total <= packet.len() { total } else { packet.len() };
+            let end = if total == 0 { packet.len() } else { total };
+            if end > packet.len() {
+                return None;
+            }
             if ihl < 20 || end < ihl {
                 return None;
             }
@@ -159,7 +170,10 @@ pub fn parse_ip(protocol: u16, packet: &[u8], device: String) -> Option<Captured
                 return None;
             }
             let plen = u16::from_be_bytes([packet[4], packet[5]]) as usize;
-            let end = (40 + plen).min(packet.len());
+            let end = 40 + plen;
+            if end > packet.len() {
+                return None;
+            }
             let src: [u8; 16] = packet[8..24].try_into().ok()?;
             let dst: [u8; 16] = packet[24..40].try_into().ok()?;
             (
@@ -236,5 +250,40 @@ mod tests {
         p.extend([0, 0, 0, 0]); // Ethernet minimum-frame padding
         let got = parse_ip(ETH_P_IP, &p, "eth0".into()).unwrap();
         assert_eq!(got.data, vec![9, 9]);
+    }
+
+    #[test]
+    fn rejects_fragments_and_truncated_datagrams() {
+        for fragment in [0x2000u16, 1, 0x2001] {
+            let mut packet = ipv4_tcp(&[1, 2, 3]);
+            packet[6..8].copy_from_slice(&fragment.to_be_bytes());
+            assert!(parse_ip(ETH_P_IP, &packet, "eth0".into()).is_none());
+        }
+        let mut packet = ipv4_tcp(&[1, 2, 3]);
+        packet.pop();
+        assert!(parse_ip(ETH_P_IP, &packet, "eth0".into()).is_none());
+        packet[2..4].copy_from_slice(&10u16.to_be_bytes());
+        assert!(parse_ip(ETH_P_IP, &packet, "eth0".into()).is_none());
+    }
+
+    #[test]
+    fn accepts_zero_length_offloaded_ipv4_and_ipv6_tcp() {
+        let mut packet = ipv4_tcp(&[1, 2, 3]);
+        packet[2..4].fill(0);
+        assert_eq!(
+            parse_ip(ETH_P_IP, &packet, "eth0".into()).unwrap().data,
+            [1, 2, 3]
+        );
+        let mut ipv6 = vec![0u8; 40];
+        ipv6[0] = 0x60;
+        ipv6[4..6].copy_from_slice(&23u16.to_be_bytes());
+        ipv6[6] = IPPROTO_TCP;
+        ipv6.extend_from_slice(&packet[20..]);
+        assert_eq!(
+            parse_ip(ETH_P_IPV6, &ipv6, "eth0".into()).unwrap().data,
+            [1, 2, 3]
+        );
+        ipv6.pop();
+        assert!(parse_ip(ETH_P_IPV6, &ipv6, "eth0".into()).is_none());
     }
 }

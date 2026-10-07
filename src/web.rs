@@ -3,8 +3,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -21,7 +22,11 @@ pub const ACTION_HEADER: &str = "x-a2m";
 type AppState = Arc<Engine>;
 
 fn guard(headers: &HeaderMap) -> Result<(), StatusCode> {
-    if headers.contains_key(ACTION_HEADER) { Ok(()) } else { Err(StatusCode::FORBIDDEN) }
+    if headers.contains_key(ACTION_HEADER) {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
 }
 
 fn db_error(e: anyhow::Error) -> StatusCode {
@@ -38,11 +43,7 @@ async fn overlay_page() -> Html<&'static str> {
 }
 
 async fn live(State(engine): State<AppState>) -> Response {
-    (
-        [(header::CACHE_CONTROL, "no-store")],
-        Json(engine.live()),
-    )
-        .into_response()
+    ([(header::CACHE_CONTROL, "no-store")], Json(engine.live())).into_response()
 }
 
 #[derive(Deserialize)]
@@ -53,19 +54,38 @@ struct RunsQuery {
     character: Option<String>,
 }
 
-async fn runs(State(engine): State<AppState>, Query(q): Query<RunsQuery>) -> Result<Json<Value>, StatusCode> {
+async fn runs(
+    State(engine): State<AppState>,
+    Query(q): Query<RunsQuery>,
+) -> Result<Json<Value>, StatusCode> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
     let offset = q.offset.unwrap_or(0).max(0);
     let dungeon = q.dungeon.as_deref().filter(|d| !d.is_empty());
     let character = q.character.as_deref().unwrap_or("");
-    engine.db.list_runs(limit, offset, dungeon, character).map(Json).map_err(db_error)
+    engine
+        .db
+        .list_runs(limit, offset, dungeon, character)
+        .map(Json)
+        .map_err(db_error)
 }
 
-async fn run_detail(State(engine): State<AppState>, Path(id): Path<i64>) -> Result<Json<Value>, StatusCode> {
-    engine.db.run_detail(id).map_err(db_error)?.map(Json).ok_or(StatusCode::NOT_FOUND)
+async fn run_detail(
+    State(engine): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, StatusCode> {
+    engine
+        .db
+        .run_detail(id)
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
-async fn delete_run(State(engine): State<AppState>, headers: HeaderMap, Path(id): Path<i64>) -> Result<StatusCode, StatusCode> {
+async fn delete_run(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
     engine.db.delete_run(id).map_err(db_error)?;
     Ok(StatusCode::NO_CONTENT)
@@ -83,12 +103,23 @@ async fn run_note(
     Json(body): Json<NoteBody>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
-    engine.db.set_run_note(id, body.note.trim()).map_err(db_error)?;
+    engine
+        .db
+        .set_run_note(id, body.note.trim())
+        .map_err(db_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn fight_detail(State(engine): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
-    engine.db.fight_detail(&id).map_err(db_error)?.map(Json).ok_or(StatusCode::NOT_FOUND)
+async fn fight_detail(
+    State(engine): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    engine
+        .db
+        .fight_detail(&id)
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 /// `?character=Name` limits a statistic to one of your characters.
@@ -99,21 +130,41 @@ struct StatsQuery {
     character: String,
 }
 
-async fn partners(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
-    let rows = engine.db.top_partners(q.limit.unwrap_or(5).clamp(1, 100), &q.character).map_err(db_error)?;
+async fn partners(
+    State(engine): State<AppState>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    let rows = engine
+        .db
+        .top_partners(q.limit.unwrap_or(5).clamp(1, 100), &q.character)
+        .map_err(db_error)?;
     Ok(Json(Value::Array(rows)))
 }
 
-async fn boss_history(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
-    engine.db.boss_history(&q.character).map(Json).map_err(db_error)
+async fn boss_history(
+    State(engine): State<AppState>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    engine
+        .db
+        .boss_history(&q.character)
+        .map(Json)
+        .map_err(db_error)
 }
 
-async fn summary(State(engine): State<AppState>, Query(q): Query<StatsQuery>) -> Result<Json<Value>, StatusCode> {
+async fn summary(
+    State(engine): State<AppState>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Value>, StatusCode> {
     engine.db.summary(&q.character).map(Json).map_err(db_error)
 }
 
 async fn characters(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
-    engine.db.characters().map(|c| Json(Value::Array(c))).map_err(db_error)
+    engine
+        .db
+        .characters()
+        .map(|c| Json(Value::Array(c)))
+        .map_err(db_error)
 }
 
 async fn get_overlay(State(engine): State<AppState>) -> Json<OverlaySettings> {
@@ -134,27 +185,39 @@ async fn set_overlay(
     Ok(Json(s.clone()))
 }
 
-async fn toggle_lock(State(engine): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
+async fn toggle_lock(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, StatusCode> {
     guard(&headers)?;
     let mut s = engine.overlay.write();
     s.locked = !s.locked;
     Ok(Json(json!({ "locked": s.locked })))
 }
 
-async fn toggle_visible(State(engine): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
+async fn toggle_visible(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, StatusCode> {
     guard(&headers)?;
     let mut s = engine.overlay.write();
     s.visible = !s.visible;
     Ok(Json(json!({ "visible": s.visible })))
 }
 
-async fn reset(State(engine): State<AppState>, headers: HeaderMap) -> Result<StatusCode, StatusCode> {
+async fn reset(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
     engine.request_reset();
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn toggle_record(State(engine): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, StatusCode> {
+async fn toggle_record(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, StatusCode> {
     guard(&headers)?;
     let on = engine.toggle_recording();
     let dir = engine.capture_dir().display().to_string();
@@ -172,11 +235,60 @@ async fn target_mode(
     Json(body): Json<ModeBody>,
 ) -> Result<StatusCode, StatusCode> {
     guard(&headers)?;
+    if ![
+        "bossTargets",
+        "mostDamage",
+        "lastHitByMe",
+        "allTargets",
+        "trainTargets",
+    ]
+    .contains(&body.mode.as_str())
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     engine.set_target_mode(&body.mode);
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub fn router(engine: AppState) -> Router {
+// Restrict Host to the listening address or an IP literal for an all-interface
+// listener. This also blocks DNS rebinding attacks against the local API.
+async fn local_request(State(addr): State<SocketAddr>, request: Request, next: Next) -> Response {
+    let allowed = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<axum::http::uri::Authority>().ok())
+        .is_some_and(|host| {
+            let port = host.port_u16().unwrap_or(80);
+            let name = host.host().trim_start_matches('[').trim_end_matches(']');
+            let ip = name.parse::<std::net::IpAddr>().ok();
+            port == addr.port()
+                && (name.eq_ignore_ascii_case("localhost")
+                    || ip.is_some_and(|ip| {
+                        ip.is_loopback() || addr.ip().is_unspecified() || ip == addr.ip()
+                    }))
+        });
+    if !allowed {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        axum::http::HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::X_FRAME_OPTIONS,
+        axum::http::HeaderValue::from_static("DENY"),
+    );
+    response
+}
+
+pub fn router(engine: AppState, addr: SocketAddr) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/overlay", get(overlay_page))
@@ -196,19 +308,24 @@ pub fn router(engine: AppState) -> Router {
         .route("/api/record/toggle", post(toggle_record))
         .route("/api/target-mode", post(target_mode))
         .with_state(engine)
+        .layer(middleware::from_fn_with_state(addr, local_request))
 }
 
-pub async fn serve(engine: AppState, addr: SocketAddr) -> anyhow::Result<()> {
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+pub async fn serve(engine: AppState, listener: std::net::TcpListener) -> anyhow::Result<()> {
+    let addr = listener.local_addr()?;
+    let listener = tokio::net::TcpListener::from_std(listener)?;
     tracing::info!("Dashboard: http://{addr}/");
-    axum::serve(listener, router(engine)).await?;
+    axum::serve(listener, router(engine, addr)).await?;
     Ok(())
 }
 
 /// One request to a running meter (for KDE shortcuts and scripts).
 pub fn request(addr: SocketAddr, method: &str, path: &str) -> anyhow::Result<String> {
     use std::io::{Read, Write};
-    let mut stream = std::net::TcpStream::connect(addr)?;
+    let timeout = std::time::Duration::from_secs(5);
+    let mut stream = std::net::TcpStream::connect_timeout(&addr, timeout)?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
     write!(
         stream,
         "{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{ACTION_HEADER}: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -216,9 +333,142 @@ pub fn request(addr: SocketAddr, method: &str, path: &str) -> anyhow::Result<Str
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
     let status = response.lines().next().unwrap_or_default().to_string();
-    let body = response.split("\r\n\r\n").nth(1).unwrap_or_default().to_string();
+    let body = response
+        .split("\r\n\r\n")
+        .nth(1)
+        .unwrap_or_default()
+        .to_string();
     if !status.contains(" 2") {
         anyhow::bail!("{status}");
     }
     Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "de",
+            std::env::temp_dir(),
+        );
+        router(engine, "127.0.0.1:8787".parse().unwrap())
+    }
+
+    fn request(method: &str, path: &str, host: &str, action: bool, body: &str) -> Request<Body> {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, host)
+            .header(header::CONTENT_TYPE, "application/json");
+        if action {
+            builder = builder.header(ACTION_HEADER, "1");
+        }
+        builder.body(Body::from(body.to_string())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn local_reads_are_uncached_and_rebinding_hosts_are_rejected() {
+        for host in ["localhost:8787", "127.0.0.1:8787", "[::1]:8787"] {
+            let response = app()
+                .oneshot(request("GET", "/api/live", host, false, ""))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            assert_eq!(
+                response.headers()[header::X_CONTENT_TYPE_OPTIONS],
+                "nosniff"
+            );
+        }
+        for host in [
+            "evil.example:8787",
+            "127.0.0.1:9999",
+            "192.168.1.20:8787",
+            "localhost.evil.example:8787",
+        ] {
+            assert_eq!(
+                app()
+                    .oneshot(request("GET", "/api/live", host, false, ""))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::FORBIDDEN
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn mutations_require_header_and_known_target_modes() {
+        assert_eq!(
+            app()
+                .oneshot(request("POST", "/api/reset", "localhost:8787", false, ""))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            app()
+                .oneshot(request("POST", "/api/reset", "localhost:8787", true, ""))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+        for (mode, status) in [
+            ("bossTargets", StatusCode::NO_CONTENT),
+            ("garbage", StatusCode::BAD_REQUEST),
+        ] {
+            let body = json!({"mode": mode}).to_string();
+            assert_eq!(
+                app()
+                    .oneshot(request(
+                        "POST",
+                        "/api/target-mode",
+                        "localhost:8787",
+                        true,
+                        &body
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                status
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn overlay_settings_are_clamped_and_survive_the_next_read() {
+        let app = app();
+        let body = json!({"visible": false, "locked": true, "opacity": 2.0, "scale": 9.0, "max_rows": 100, "show_dps": false, "hide_names": true}).to_string();
+        let response = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/overlay",
+                "localhost:8787",
+                true,
+                &body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = app
+            .oneshot(request("GET", "/api/overlay", "localhost:8787", false, ""))
+            .await
+            .unwrap();
+        let data: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
+        assert_eq!(data["opacity"], 1.0);
+        assert_eq!(data["scale"], 2.5);
+        assert_eq!(data["max_rows"], 24);
+        assert_eq!(data["hide_names"], true);
+        assert_eq!(data["visible"], false);
+    }
 }

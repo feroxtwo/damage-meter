@@ -9,16 +9,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, ViewportCommand,
+    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2,
+    ViewportCommand,
 };
 
 use crate::engine::{Engine, Live};
 use crate::names::{duration, short_number};
 
 pub const APP_ID: &str = "aion2-meter";
-const WIDTH: f32 = 330.0;
+const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
-const ROW: f32 = 22.0;
+const ROW: f32 = 26.0;
 const FOOTER: f32 = 18.0;
 
 pub struct Overlay {
@@ -31,7 +32,7 @@ pub struct Overlay {
 fn masked(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     match chars.len() {
-        0..=2 => name.to_string(),
+        0..=2 => "*".repeat(chars.len()),
         n => format!("{}{}{}", chars[0], "*".repeat((n - 2).min(4)), chars[n - 1]),
     }
 }
@@ -42,7 +43,12 @@ fn with_alpha(c: [u8; 3], a: u8) -> Color32 {
 
 impl Overlay {
     pub fn new(engine: Arc<Engine>, web_url: String) -> Self {
-        Self { engine, web_url, passthrough: None, last_size: Vec2::ZERO }
+        Self {
+            engine,
+            web_url,
+            passthrough: None,
+            last_size: Vec2::ZERO,
+        }
     }
 
     pub fn run(self) -> eframe::Result {
@@ -63,30 +69,58 @@ impl Overlay {
     }
 
     fn header(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, HEADER), Sense::click_and_drag());
+        let (rect, resp) =
+            ui.allocate_exact_size(Vec2::new(width, HEADER), Sense::click_and_drag());
         let p = ui.painter();
-        p.rect_filled(rect, CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }, Color32::from_black_alpha(bg.saturating_add(40)));
+        p.rect_filled(
+            rect,
+            CornerRadius {
+                nw: 8,
+                ne: 8,
+                sw: 0,
+                se: 0,
+            },
+            Color32::from_rgba_unmultiplied(16, 28, 44, bg.saturating_add(40)),
+        );
 
-        let title = if live.target_name.is_empty() { "Kein Ziel".to_string() } else { live.target_name.clone() };
-        p.text(
+        let title = if live.target_name.is_empty() {
+            "Kein Ziel".to_string()
+        } else {
+            live.target_name.clone()
+        };
+        let time = duration(live.battle_time_ms);
+        let dps_total = if live.battle_time_ms > 0 {
+            live.total_damage * 1000.0 / live.battle_time_ms as f64
+        } else {
+            0.0
+        };
+        let right = format!("{time}  ·  {}/s", short_number(dps_total));
+        let right_width = p
+            .layout_no_wrap(right.clone(), FontId::monospace(12.0), Color32::WHITE)
+            .size()
+            .x;
+        let mut title_rect = rect;
+        title_rect.set_right((rect.right() - right_width - 20.0).max(rect.left()));
+        p.with_clip_rect(title_rect).text(
             rect.left_top() + Vec2::new(8.0, 4.0),
             Align2::LEFT_TOP,
             title,
             FontId::proportional(13.5),
             Color32::from_rgb(240, 220, 170),
         );
-        let time = duration(live.battle_time_ms);
-        let dps_total = if live.battle_time_ms > 0 { live.total_damage * 1000.0 / live.battle_time_ms as f64 } else { 0.0 };
         p.text(
             rect.right_top() + Vec2::new(-8.0, 4.0),
             Align2::RIGHT_TOP,
-            format!("{time}  ·  {}/s", short_number(dps_total)),
+            right,
             FontId::monospace(12.0),
             Color32::from_gray(210),
         );
 
         // Boss HP
-        let bar = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 24.0), Vec2::new(width - 16.0, 8.0));
+        let bar = Rect::from_min_size(
+            rect.left_top() + Vec2::new(8.0, 24.0),
+            Vec2::new(width - 16.0, 8.0),
+        );
         p.rect_filled(bar, 3, Color32::from_black_alpha(160));
         if let Some(hp) = live.target_hp {
             let mut fill = bar;
@@ -121,7 +155,14 @@ impl Overlay {
             ui.close();
         }
         let recording = self.engine.recording_wanted();
-        if ui.button(if recording { "Mitschnitt stoppen" } else { "Pakete mitschneiden" }).clicked() {
+        if ui
+            .button(if recording {
+                "Mitschnitt stoppen"
+            } else {
+                "Pakete mitschneiden"
+            })
+            .clicked()
+        {
             self.engine.toggle_recording();
             ui.close();
         }
@@ -129,7 +170,7 @@ impl Overlay {
         ui.label("Ziel");
         for (id, label) in [
             ("bossTargets", "Bosse"),
-            ("mostDamage", "Meister Schaden"),
+            ("mostDamage", "Höchster Schaden"),
             ("lastHitByMe", "Zuletzt von mir getroffen"),
             ("allTargets", "Alle Ziele"),
             ("trainTargets", "Trainingspuppe"),
@@ -141,7 +182,9 @@ impl Overlay {
         }
         ui.separator();
         if ui.button("Dashboard öffnen").clicked() {
-            let _ = std::process::Command::new("xdg-open").arg(&self.web_url).spawn();
+            let _ = std::process::Command::new("xdg-open")
+                .arg(&self.web_url)
+                .spawn();
             ui.close();
         }
         if ui.button("Beenden").clicked() {
@@ -149,7 +192,15 @@ impl Overlay {
         }
     }
 
-    fn rows(&self, ui: &mut egui::Ui, live: &Live, width: f32, max_rows: usize, show_dps: bool, hide_names: bool) {
+    fn rows(
+        &self,
+        ui: &mut egui::Ui,
+        live: &Live,
+        width: f32,
+        max_rows: usize,
+        show_dps: bool,
+        hide_names: bool,
+    ) {
         let top = live.rows.first().map(|r| r.damage).unwrap_or(1.0).max(1.0);
         for (i, row) in live.rows.iter().take(max_rows).enumerate() {
             let (rect, _) = ui.allocate_exact_size(Vec2::new(width, ROW), Sense::hover());
@@ -158,49 +209,111 @@ impl Overlay {
             p.rect_filled(inner, 3, Color32::from_black_alpha(90));
             let mut fill = inner;
             fill.set_width(inner.width() * (row.damage / top) as f32);
-            p.rect_filled(fill, 3, with_alpha(row.color, 170));
+            p.rect_filled(fill, 3, with_alpha(row.color, 115));
             if row.is_self {
-                p.rect_stroke(inner, 3, Stroke::new(1.0_f32, Color32::from_rgb(255, 215, 120)), StrokeKind::Inside);
+                p.rect_stroke(
+                    inner,
+                    3,
+                    Stroke::new(1.0_f32, Color32::from_rgb(255, 215, 120)),
+                    StrokeKind::Inside,
+                );
             }
-            let name = if hide_names && !row.is_self { masked(&row.name) } else { row.name.clone() };
+            let name = if hide_names && !row.is_self {
+                masked(&row.name)
+            } else {
+                row.name.clone()
+            };
+            let right = if show_dps {
+                format!(
+                    "{}  {}/s  {:>3.0}%",
+                    short_number(row.damage),
+                    short_number(row.dps),
+                    row.share
+                )
+            } else {
+                format!("{}  {:>3.0}%", short_number(row.damage), row.share)
+            };
             let font = FontId::proportional(12.5);
-            p.text(
+            let mut name_rect = inner;
+            let right_width = p
+                .layout_no_wrap(right.clone(), FontId::monospace(11.5), Color32::WHITE)
+                .size()
+                .x;
+            name_rect.set_right((inner.right() - right_width - 16.0).max(inner.left()));
+            p.with_clip_rect(name_rect).text(
                 inner.left_center() + Vec2::new(6.0, 0.0),
                 Align2::LEFT_CENTER,
                 format!("{}. {}{}", i + 1, if row.dead { "† " } else { "" }, name),
                 font.clone(),
-                if row.dead { Color32::from_gray(170) } else { Color32::WHITE },
+                if row.dead {
+                    Color32::from_gray(170)
+                } else {
+                    Color32::WHITE
+                },
             );
-            let right = if show_dps {
-                format!("{}  {}/s  {:>3.0}%", short_number(row.damage), short_number(row.dps), row.share)
-            } else {
-                format!("{}  {:>3.0}%", short_number(row.damage), row.share)
-            };
-            p.text(inner.right_center() - Vec2::new(6.0, 0.0), Align2::RIGHT_CENTER, right, FontId::monospace(11.5), Color32::WHITE);
+            p.text(
+                inner.right_center() - Vec2::new(6.0, 0.0),
+                Align2::RIGHT_CENTER,
+                right,
+                FontId::monospace(11.5),
+                Color32::WHITE,
+            );
         }
     }
 
     fn footer(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, FOOTER), Sense::click());
         let p = ui.painter();
-        p.rect_filled(rect, CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 }, Color32::from_black_alpha(bg.saturating_add(40)));
+        p.rect_filled(
+            rect,
+            CornerRadius {
+                nw: 0,
+                ne: 0,
+                sw: 8,
+                se: 8,
+            },
+            Color32::from_rgba_unmultiplied(16, 28, 44, bg.saturating_add(40)),
+        );
         let c = &live.capture;
-        let (dot, state) = if !c.permission {
-            (Color32::from_rgb(220, 60, 60), "keine Capture-Berechtigung".to_string())
+        let (dot, state) = if c.error.is_some() {
+            (
+                Color32::from_rgb(255, 125, 137),
+                "Capture-Fehler".to_string(),
+            )
+        } else if !c.permission {
+            (
+                Color32::from_rgb(220, 60, 60),
+                "keine Capture-Berechtigung".to_string(),
+            )
         } else if c.locked_port.is_some() {
             (Color32::from_rgb(80, 200, 100), live.dungeon.clone())
         } else if c.game_running {
-            (Color32::from_rgb(230, 180, 60), "suche Verbindung …".to_string())
+            (
+                Color32::from_rgb(230, 180, 60),
+                "suche Verbindung …".to_string(),
+            )
         } else {
             (Color32::from_gray(140), "AION2 nicht gestartet".to_string())
         };
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
-        p.text(rect.left_center() + Vec2::new(18.0, 0.0), Align2::LEFT_CENTER, state, FontId::proportional(10.5), Color32::from_gray(200));
+        p.text(
+            rect.left_center() + Vec2::new(18.0, 0.0),
+            Align2::LEFT_CENTER,
+            state,
+            FontId::proportional(10.5),
+            Color32::from_gray(200),
+        );
         let mut ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
         if c.recording.is_some() {
             ping = format!("● REC  {ping}");
         }
-        p.text(rect.right_center() - Vec2::new(8.0, 0.0), Align2::RIGHT_CENTER, ping, FontId::monospace(10.5), Color32::from_gray(200));
+        p.text(
+            rect.right_center() - Vec2::new(8.0, 0.0),
+            Align2::RIGHT_CENTER,
+            ping,
+            FontId::monospace(10.5),
+            Color32::from_gray(200),
+        );
         resp.context_menu(|ui| self.menu(ui));
     }
 }
@@ -238,7 +351,8 @@ impl eframe::App for Overlay {
                 }
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
                 let full = Rect::from_min_size(Pos2::ZERO, size);
-                ui.painter().rect_filled(full, 8, Color32::from_black_alpha(bg));
+                ui.painter()
+                    .rect_filled(full, 8, Color32::from_rgba_unmultiplied(11, 16, 24, bg));
                 self.header(ui, &live, WIDTH, bg);
                 if live.rows.is_empty() {
                     let (rect, _) = ui.allocate_exact_size(Vec2::new(WIDTH, ROW), Sense::hover());
@@ -250,7 +364,14 @@ impl eframe::App for Overlay {
                         Color32::from_gray(170),
                     );
                 } else {
-                    self.rows(ui, &live, WIDTH, settings.max_rows, settings.show_dps, settings.hide_names);
+                    self.rows(
+                        ui,
+                        &live,
+                        WIDTH,
+                        settings.max_rows,
+                        settings.show_dps,
+                        settings.hide_names,
+                    );
                 }
                 ui.add_space(4.0);
                 self.footer(ui, &live, WIDTH, bg);
@@ -263,6 +384,8 @@ mod tests {
     #[test]
     fn masks_names() {
         assert_eq!(super::masked("Mirco"), "M***o");
-        assert_eq!(super::masked("Al"), "Al");
+        assert_eq!(super::masked("Al"), "**");
+        assert_eq!(super::masked("A"), "*");
+        assert_eq!(super::masked(""), "");
     }
 }

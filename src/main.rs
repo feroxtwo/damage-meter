@@ -79,13 +79,22 @@ enum Action {
 }
 
 fn status_text(live: &serde_json::Value) -> String {
-    let yes_no = |v: &serde_json::Value| if v.as_bool() == Some(true) { "ja" } else { "nein" };
+    let yes_no = |v: &serde_json::Value| {
+        if v.as_bool() == Some(true) {
+            "ja"
+        } else {
+            "nein"
+        }
+    };
     let o = &live["overlay"];
     let c = &live["capture"];
     let connection = if c["permission"].as_bool() != Some(true) {
         "keine Capture-Berechtigung (setcap fehlt)".to_string()
     } else if let Some(port) = c["locked_port"].as_u64() {
-        format!("verbunden (Port {port}, {})", c["device"].as_str().unwrap_or("?"))
+        format!(
+            "verbunden (Port {port}, {})",
+            c["device"].as_str().unwrap_or("?")
+        )
     } else if c["game_running"].as_bool() == Some(true) {
         "Spiel läuft, suche Verbindung".to_string()
     } else {
@@ -98,7 +107,10 @@ fn status_text(live: &serde_json::Value) -> String {
         connection,
         live["character"].as_str().unwrap_or("–"),
         live["dungeon"].as_str().unwrap_or("–"),
-        live["ping_ms"].as_i64().map(|p| format!("{p} ms")).unwrap_or_else(|| "–".into()),
+        live["ping_ms"]
+            .as_i64()
+            .map(|p| format!("{p} ms"))
+            .unwrap_or_else(|| "–".into()),
         recording_text(c),
     )
 }
@@ -140,7 +152,14 @@ fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::new(cli.listen, cli.port);
 
     if let Some(Command::Ctl { action }) = cli.command {
-        let local = SocketAddr::new(if cli.listen.is_unspecified() { [127, 0, 0, 1].into() } else { cli.listen }, cli.port);
+        let local = SocketAddr::new(
+            if cli.listen.is_unspecified() {
+                [127, 0, 0, 1].into()
+            } else {
+                cli.listen
+            },
+            cli.port,
+        );
         let (method, path) = match action {
             Action::ToggleLock => ("POST", "/api/overlay/toggle-lock"),
             Action::ToggleVisible => ("POST", "/api/overlay/toggle-visible"),
@@ -169,17 +188,29 @@ fn main() -> anyhow::Result<()> {
     }
 
     let db_path = cli.db.unwrap_or_else(default_db);
-    let database = db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
+    let database =
+        db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {
         Lang::De => "de",
         Lang::En => "en",
     };
-    let captures = db_path.parent().map(|p| p.join("captures")).unwrap_or_else(|| PathBuf::from("captures"));
+    let captures = db_path
+        .parent()
+        .map(|p| p.join("captures"))
+        .unwrap_or_else(|| PathBuf::from("captures"));
     let engine = engine::Engine::new(database, lang, captures);
     if cli.record {
         engine.set_recording(true);
     }
+
+    // Fail before capture threads or the overlay start if another meter owns
+    // the port. The asynchronous server task cannot report startup errors to
+    // a running native UI.
+    let listener = std::net::TcpListener::bind(addr)
+        .with_context(|| format!("Dashboard-Adresse {addr} ist nicht verfügbar"))?;
+    listener.set_nonblocking(true)?;
+    let addr = listener.local_addr()?;
 
     // Capture → parser
     let permission = capture::has_capture_permission();
@@ -187,36 +218,51 @@ fn main() -> anyhow::Result<()> {
     if !permission {
         tracing::error!(
             "No permission to capture packets. Run once:  sudo setcap cap_net_raw=ep {}",
-            std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_else(|_| "aion2-meter".into())
+            std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "aion2-meter".into())
         );
     }
     let (tx, rx) = mpsc::sync_channel(8192);
     {
         let engine = engine.clone();
-        std::thread::Builder::new().name("capture".into()).spawn(move || {
-            if let Err(e) = capture::run(tx) {
-                tracing::error!("Capture stopped: {e}");
-                engine.set_capture_error(Some(e.to_string()));
-            }
-        })?;
+        std::thread::Builder::new()
+            .name("capture".into())
+            .spawn(move || {
+                if let Err(e) = capture::run(tx) {
+                    tracing::error!("Capture stopped: {e}");
+                    engine.set_capture_error(Some(e.to_string()));
+                }
+            })?;
     }
     {
         let dispatcher = dispatcher::Dispatcher::new(engine.clone(), !cli.any_process);
         if cli.any_process {
             engine.set_game_running(true);
         }
-        std::thread::Builder::new().name("parser".into()).spawn(move || dispatcher.run(rx))?;
+        std::thread::Builder::new()
+            .name("parser".into())
+            .spawn(move || dispatcher.run(rx))?;
     }
     {
         let engine = engine.clone();
-        std::thread::Builder::new().name("meter".into()).spawn(move || engine.run_ticks())?;
+        std::thread::Builder::new()
+            .name("meter".into())
+            .spawn(move || engine.run_ticks())?;
     }
 
     // Web dashboard
-    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
-    let web = runtime.spawn(web::serve(engine.clone(), addr));
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?;
+    let web = runtime.spawn(web::serve(engine.clone(), listener));
 
-    let shown = if addr.ip().is_unspecified() { SocketAddr::new([127, 0, 0, 1].into(), addr.port()) } else { addr };
+    let shown = if addr.ip().is_unspecified() {
+        SocketAddr::new([127, 0, 0, 1].into(), addr.port())
+    } else {
+        addr
+    };
     let url = format!("http://{shown}/");
     if cli.no_overlay {
         runtime.block_on(web)??;

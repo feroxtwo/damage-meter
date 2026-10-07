@@ -103,7 +103,15 @@ pub struct OverlaySettings {
 
 impl Default for OverlaySettings {
     fn default() -> Self {
-        Self { locked: false, visible: true, opacity: 0.72, scale: 1.0, max_rows: 8, show_dps: true, hide_names: false }
+        Self {
+            locked: false,
+            visible: true,
+            opacity: 0.72,
+            scale: 1.0,
+            max_rows: 8,
+            show_dps: true,
+            hide_names: false,
+        }
     }
 }
 
@@ -182,9 +190,17 @@ impl Engine {
             calc,
             db: Arc::new(db),
             live: RwLock::new(Live::default()),
-            status: RwLock::new(CaptureStatus { game_running: false, ..Default::default() }),
+            status: RwLock::new(CaptureStatus {
+                game_running: false,
+                ..Default::default()
+            }),
             overlay: RwLock::new(OverlaySettings::default()),
-            run: Mutex::new(RunState { run_id: None, dungeon_id: 0, started_at: 0, members_written: HashSet::new() }),
+            run: Mutex::new(RunState {
+                run_id: None,
+                dungeon_id: 0,
+                started_at: 0,
+                members_written: HashSet::new(),
+            }),
             reset_requested: AtomicBool::new(false),
             target_mode: RwLock::new("bossTargets".into()),
             buffs: BuffTracker::default(),
@@ -259,6 +275,12 @@ impl Engine {
 
     pub fn recording_started(&self, path: &Path) {
         self.status.write().recording = Some(path.display().to_string());
+    }
+
+    /// A requested recording waits for a new connection without reporting a
+    /// file as active after its connection has gone away.
+    pub fn recording_paused(&self) {
+        self.status.write().recording = None;
     }
 
     pub fn stop_recording(&self, error: Option<String>) {
@@ -346,12 +368,27 @@ impl Engine {
                     None => return,
                 }
             };
-            let records = if force { calc.snapshot_boss_fights_force() } else { calc.snapshot_boss_fights() };
-            (records, self.live.read().rows.iter().find(|r| r.is_self).map(|r| r.id as i64))
+            let records = if force {
+                calc.snapshot_boss_fights_force()
+            } else {
+                calc.snapshot_boss_fights()
+            };
+            (
+                records,
+                self.live
+                    .read()
+                    .rows
+                    .iter()
+                    .find(|r| r.is_self)
+                    .map(|r| r.id as i64),
+            )
         };
         let dungeon = self.storage.current_dungeon_id();
         let dead = self.storage.get_dead_entities();
-        match self.db.save_fights(&records, dungeon, &self.self_names(), local, &dead) {
+        match self
+            .db
+            .save_fights(&records, dungeon, &self.self_names(), local, &dead)
+        {
             Ok(0) => return,
             Ok(n) => tracing::info!("Saved {n} fight(s)"),
             Err(e) => {
@@ -369,10 +406,22 @@ impl Engine {
     fn track_run(&self, now: i64) {
         let dungeon = self.storage.current_dungeon_id();
         let profile = self.storage.local_profile();
-        let me = profile.name.clone().or_else(|| self.storage.local_character_name());
+        let me = profile
+            .name
+            .clone()
+            .or_else(|| self.storage.local_character_name());
         if let Some(name) = &me {
-            let job = profile.class.map(|c| c.class_name().to_string()).unwrap_or_default();
-            let _ = self.db.note_my_character(name, profile.server_id, &job, profile.level.unwrap_or(0), now);
+            let job = profile
+                .class
+                .map(|c| c.class_name().to_string())
+                .unwrap_or_default();
+            let _ = self.db.note_my_character(
+                name,
+                profile.server_id,
+                &job,
+                profile.level.unwrap_or(0),
+                now,
+            );
         }
 
         let mut run = self.run.lock();
@@ -389,7 +438,10 @@ impl Engine {
             run.dungeon_id = dungeon;
             run.members_written.clear();
             if dungeon > 0 {
-                match self.db.start_run(dungeon, now, me.as_deref(), profile.server_id) {
+                match self
+                    .db
+                    .start_run(dungeon, now, me.as_deref(), profile.server_id)
+                {
                     Ok(id) => {
                         tracing::info!("Entered {} (run {id})", names::dungeon_label(dungeon));
                         run.run_id = Some(id);
@@ -409,7 +461,10 @@ impl Engine {
             .into_iter()
             .map(|(name, m)| Member {
                 is_self: me.as_deref() == Some(name.as_str()),
-                job: m.job.map(|j| j.class_name().to_string()).unwrap_or_default(),
+                job: m
+                    .job
+                    .map(|j| j.class_name().to_string())
+                    .unwrap_or_default(),
                 server_id: m.server_id,
                 level: m.level,
                 gear_score: m.gear_score,
@@ -418,35 +473,44 @@ impl Engine {
                 name,
             })
             .collect();
-        if let Some(name) = &me {
-            if !members.iter().any(|m| &m.name == name) {
-                members.push(Member {
-                    name: name.clone(),
-                    job: profile.class.map(|c| c.class_name().to_string()).unwrap_or_default(),
-                    server_id: profile.server_id,
-                    level: profile.level.unwrap_or(0) as i32,
-                    gear_score: 0,
-                    combat_power: 0,
-                    dbid: 0,
-                    is_self: true,
-                });
-            }
+        if let Some(name) = &me
+            && !members.iter().any(|m| &m.name == name)
+        {
+            members.push(Member {
+                name: name.clone(),
+                job: profile
+                    .class
+                    .map(|c| c.class_name().to_string())
+                    .unwrap_or_default(),
+                server_id: profile.server_id,
+                level: profile.level.unwrap_or(0) as i32,
+                gear_score: 0,
+                combat_power: 0,
+                dbid: 0,
+                is_self: true,
+            });
         }
         // Only touch the database when the party changed.
         let fresh: Vec<Member> = members
             .into_iter()
-            .filter(|m| run.members_written.insert(format!("{}|{}|{}", m.name, m.job, m.combat_power)))
+            .filter(|m| {
+                run.members_written
+                    .insert(format!("{}|{}|{}", m.name, m.job, m.combat_power))
+            })
             .collect();
-        if !fresh.is_empty() {
-            if let Err(e) = self.db.upsert_members(run_id, &fresh) {
-                tracing::error!("Saving party failed: {e:#}");
-            }
+        if !fresh.is_empty()
+            && let Err(e) = self.db.upsert_members(run_id, &fresh)
+        {
+            tracing::error!("Saving party failed: {e:#}");
         }
     }
 
     fn build_live(&self, dps: &DpsData) -> Live {
         let profile = self.storage.local_profile();
-        let me = profile.name.clone().or_else(|| self.storage.local_character_name());
+        let me = profile
+            .name
+            .clone()
+            .or_else(|| self.storage.local_character_name());
         let dead = self.storage.get_dead_entities();
         let mut rows: Vec<LiveRow> = dps
             .map
@@ -455,7 +519,11 @@ impl Engine {
                 let info = names::class_info(&p.job);
                 LiveRow {
                     id,
-                    name: if p.nickname.is_empty() { format!("#{id}") } else { p.nickname.clone() },
+                    name: if p.nickname.is_empty() {
+                        format!("#{id}")
+                    } else {
+                        p.nickname.clone()
+                    },
                     class_key: info.key,
                     class_name: info.name,
                     color: info.color,
@@ -487,7 +555,11 @@ impl Engine {
         } else {
             None
         };
-        let dungeon_id = if dps.dungeon_id > 0 { dps.dungeon_id } else { self.storage.current_dungeon_id() };
+        let dungeon_id = if dps.dungeon_id > 0 {
+            dps.dungeon_id
+        } else {
+            self.storage.current_dungeon_id()
+        };
         let run = self.run.lock();
         Live {
             rows,
@@ -526,13 +598,13 @@ impl Engine {
             let live = self.build_live(&dps);
             *self.live.write() = live;
 
-            if tick % 4 == 0 {
+            if tick.is_multiple_of(4) {
                 self.track_run(now_ms());
             }
-            if tick % SAVE_EVERY_TICKS == 0 {
+            if tick.is_multiple_of(SAVE_EVERY_TICKS) {
                 self.save_fights(false);
             }
-            if tick % 7_200 == 0 {
+            if tick.is_multiple_of(7_200) {
                 self.buffs.prune_old(now_ms());
             }
         }
