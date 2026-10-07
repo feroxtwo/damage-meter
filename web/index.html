@@ -129,7 +129,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   header { padding: 14px; }
   nav button { flex-direction: column; gap: 4px; padding: 8px 3px; font-size: 12px; }
 }
-.game-icon{width:24px;height:24px;object-fit:contain;flex-shrink:0;vertical-align:middle;border-radius:4px}.class-icon{width:20px;height:20px}.skill-label{display:inline-flex;align-items:center;gap:8px;max-width:100%;overflow-wrap:anywhere}.unknown-skill{display:inline-grid;place-items:center;width:24px;height:24px;background:var(--panel2);color:var(--muted);border-radius:4px;flex-shrink:0}#catalogRows details{max-width:260px;overflow-wrap:anywhere}#catalogSearch{flex:1;min-width:160px}
+.game-icon{width:24px;height:24px;object-fit:contain;flex-shrink:0;vertical-align:middle;border-radius:4px}.class-icon{width:20px;height:20px}.skill-label{display:inline-flex;align-items:center;gap:8px;max-width:100%;overflow-wrap:anywhere}.unknown-skill{display:inline-grid;place-items:center;width:24px;height:24px;background:var(--panel2);color:var(--muted);border-radius:4px;flex-shrink:0}.unknown-skill::before{content:"?"}#catalogRows details{max-width:260px;overflow-wrap:anywhere}#catalogSearch{flex:1;min-width:160px}
 </style>
 <link rel="stylesheet" href="/enhancements.css">
 </head>
@@ -277,7 +277,7 @@ let latestLive = null;
 function skillLanguage(){return settings?.skill_language||latestLive?.overlay?.skill_language||'de';}
 function skillName(s={}){return s.names?.[skillLanguage()]||s.names?.en||s.names?.de||s.name||'#'+(s.code??s.id??'?');}
 function iconUrl(s={}){return /^\/assets\/icons\/[a-z0-9-]+\.webp$/.test(s.icon||'')?s.icon:'';}
-function skillLabel(s={}){const url=iconUrl(s);return `<span class="skill-label">${url?`<img class="game-icon" src="${url}" alt="" loading="lazy">`:'<span class="unknown-skill" aria-hidden="true">?</span>'}<span>${esc(skillName(s))}</span></span>`;}
+function skillLabel(s={}){const url=iconUrl(s);return `<span class="skill-label">${url?`<img class="game-icon" src="${url}" alt="" loading="lazy">`:'<span class="unknown-skill" aria-hidden="true" title="Symbol nicht verfügbar"></span>'}<span>${esc(skillName(s))}</span></span>`;}
 const classKeys=['gladiator','templar','assassin','ranger','sorcerer','elementalist','cleric','chanter','fighter'];
 function classIcon(p={}){return classKeys.includes(p.class_key)?`<img class="game-icon class-icon" src="/assets/icons/class-${p.class_key}.webp" alt="" loading="lazy">`:'';}
 function localizedClass(p={}){const names={gladiator:['Gladiator','Gladiator'],templar:['Templer','Templar'],assassin:['Assassine','Assassin'],ranger:['Jäger','Ranger'],sorcerer:['Zauberer','Sorcerer'],elementalist:['Beschwörer','Elementalist'],cleric:['Kleriker','Cleric'],chanter:['Kantor','Chanter'],fighter:['Faustkämpfer','Brawler']};return names[p.class_key]?.[skillLanguage()==='en'?1:0]||p.class_name||'';}
