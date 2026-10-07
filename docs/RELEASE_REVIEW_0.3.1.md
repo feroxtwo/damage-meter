@@ -30,6 +30,7 @@ P0: Im geprüften Anwendungsumfang kein zusätzlicher allgemeiner Releaseblocker
 
 | Priorität | Befund / Reproduktion | Umsetzung | Nachweis |
 |---|---|---|---|
+| P1 | Frische Ubuntu-CI startet X11 nicht: dynamisch geladene libxkbcommon-x11 fehlt und winit panikt | DEB/RPM/CI-Abhängigkeit ergänzt, X11-Preflight mit konkreter Installhilfe | Reproduktion im GitHub-Runner, lokale Startchecks, Paketmetadata und erneute CI |
 | P1 | Reguläres Ende vor periodischem Snapshot verliert kurze Versuche; Menü nutzte process::exit | Gemeinsamer geordneter Shutdown für GUI, SIGTERM und Ctrl-C, forced Snapshot, Run-Ende, Thread-Cleanup | Engine-Shutdown-Test, echte Binary mit SIGTERM und Neustart |
 | P1 | Unvollständiger HTTP-Request kann graceful Serverende unbegrenzt aufhalten | Begrenztes Drain-Fenster, danach HTTP-Task abbrechen | Headless-Test mit absichtlich nicht abgeschicktem Header |
 | P1 | Fenstermaß hängt nach Scalewechsel einen Zoom hinterher; Position kann mit Zoom wandern | Tatsächlich angewendeten egui-Zoom zur Größenänderung verwenden; Position unabhängig von UI-Zoom speichern | Echtes X11-Fenster: 360/540/720/900/216 px, konstante Koordinaten, Neustart |
@@ -136,7 +137,7 @@ Technisch begrenzt: Zusatzkurven, Buffintervalle, TCP/Candidates und Aufnahme-Ro
 - Tar/DEB/RPM: Erstellung, Version/Architektur/GLIBC-Abhängigkeit, Inhalt, Docs, Capability-Manifeste und SHA256SUMS geprüft. Keine reale Paketmanagerinstallation in Fedora/Ubuntu/Bazzite behauptet.
 - JavaScript ist Vanilla-JS ohne TypeScriptprojekt; Syntaxcheck und Chromium statt eines erfundenen Typecheck-Schritts. Keine unnötigen Runtime-Abhängigkeiten: nur vorhandenes Tokio mit signal-Feature und transitiver signal-hook-registry ergänzt.
 
-Neue Rustregressionen decken gemeinsame Kurz-/Runfenster,64-Bit-Fightsumme/ungültige Quote, Memberdelimiter/aktive Runs, Tiertrennung/Versuche, shared curves/burst, strikte Effektgrenzen, Shutdown/Savefehler, defekte Settings, unabhängige Live/Detail/History/Replay-Mathematik und API-Limits ab. Neue Browserchecks decken Skillbedienung, KPI/Fokus, bounded/lazy/DPI, Privacydiagnose,24 lange Spielernamen/100 Skills/Zahlengrenze und Partialkurven ab. Neue Helfer: test-native.py, test-installer.py, test-real-web.cjs, benchmark-history.py, test-packages.py. CI führt Installer-/Nativechecks zusätzlich aus.
+Neue Rustregressionen decken gemeinsame Kurz-/Runfenster,64-Bit-Fightsumme/ungültige Quote, Memberdelimiter/aktive Runs, Tiertrennung/Versuche, shared curves/burst, strikte Effektgrenzen, Shutdown/Savefehler, defekte Settings, unabhängige Live/Detail/History/Replay-Mathematik und API-Limits ab. Neue Browserchecks decken Skillbedienung, KPI/Fokus, bounded/lazy/DPI, Privacydiagnose,24 lange Spielernamen/100 Skills/Zahlengrenze und Partialkurven ab. Neue Helfer: test-native.py, test-installer.py, test-real-web.cjs, benchmark-history.py, test-packages.py und test-native-dependencies.py. CI führt Installer-/Nativechecks zusätzlich aus. Der erste Native-CI-Lauf fand die fehlende dynamische X11-Bibliothek; der korrigierte Stand wird erneut auf einem frischen Runner geprüft.
 
 ## Zweite UX-Runde und Bilder
 
@@ -166,6 +167,6 @@ In Runde2 zusätzlich korrigiert: tatsächlicher angewendeter Zoom statt gewüns
 
 ## Geänderte Dateien und PR
 
-Core: Cargo.toml/Cargo.lock; src/analytics.rs, buffs.rs, capture.rs, db.rs, dispatcher.rs, engine.rs, main.rs, overlay.rs, web.rs. Oberfläche: web/index.html, enhancements.js/css und qol.js. Installation/Tests: scripts/install.sh, install-binary.sh, install-shortcuts.sh, desktop-exec.sh, package-linux.sh, test-headless.py, test-web.cjs sowie die fünf genannten neuen Helfer. CI: .github/workflows/ci.yml. Dokumentation: README, die drei historischen Dokumente, dieser Bericht, INGAME_ACCEPTANCE, Benchmark-JSON und review-images.
+Core: Cargo.toml/Cargo.lock; src/analytics.rs, buffs.rs, capture.rs, db.rs, dispatcher.rs, engine.rs, main.rs, overlay.rs, web.rs. Oberfläche: web/index.html, enhancements.js/css und qol.js. Installation/Tests: scripts/install.sh, install-binary.sh, install-shortcuts.sh, desktop-exec.sh, package-linux.sh, test-headless.py, test-web.cjs sowie die sechs genannten neuen Test-/Benchmarkhelfer. CI: .github/workflows/ci.yml. Dokumentation: README, die drei historischen Dokumente, dieser Bericht, INGAME_ACCEPTANCE, Benchmark-JSON und review-images.
 
-PR enthält die getesteten Änderungen; Freigabe/Merge bleibt beim Maintainer. Der veröffentlichte Pull Request ist in der GitHub-PR-Liste und im Abschlussbericht verlinkt. Keine Veröffentlichung eines endgültigen Releases durch diese Prüfung.
+PR enthält die getesteten Änderungen; Freigabe/Merge bleibt beim Maintainer. [PR #6](https://github.com/feroxtwo/damage-meter/pull/6) enthält den veröffentlichten Stand. Keine Veröffentlichung eines endgültigen Releases durch diese Prüfung.

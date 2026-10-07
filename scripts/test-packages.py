@@ -27,10 +27,12 @@ with tempfile.TemporaryDirectory(prefix='a2m-package-inspect-') as tmp:
     controls=Path(tmp)/'control';subprocess.run(['dpkg-deb','--control',str(deb),str(controls)],check=True)
     assert 'setcap cap_net_raw=ep /usr/bin/aion2-meter' in (controls/'postinst').read_text()
     fields=subprocess.check_output(['dpkg-deb','--field',str(deb),'Version','Architecture','Depends'],text=True)
-    assert version in fields and 'amd64' in fields and 'libcap2-bin' in fields and 'libc6 (>=' in fields
+    assert version in fields and 'amd64' in fields and 'libcap2-bin' in fields and 'libxkbcommon-x11-0' in fields and 'libc6 (>=' in fields
 if rpm.exists():
     assert shutil.which('rpm'),'rpm required to inspect generated RPM'
     fields=subprocess.check_output(['rpm','-qp','--qf','%{VERSION} %{ARCH}\n[%{FILENAMES} %{FILECAPS}\n]',str(rpm)],text=True)
+    requires=subprocess.check_output(['rpm','-qp','--requires',str(rpm)],text=True)
+    assert 'libxkbcommon-x11' in requires
     assert version+' x86_64' in fields
     assert '/usr/bin/aion2-meter cap_net_raw=ep' in fields
     assert '/usr/share/doc/aion2-meter/docs/INGAME_ACCEPTANCE.md' in fields

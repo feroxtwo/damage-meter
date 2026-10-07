@@ -16,6 +16,18 @@ use eframe::egui::{
 use crate::engine::{Engine, Live, metric_value, overlay_rows};
 use crate::names::{duration, short_number};
 
+/// winit loads this X11 keyboard library dynamically, so package dependency
+/// scanners cannot discover it from the executable's ELF imports.
+pub fn check_x11_dependencies() -> anyhow::Result<()> {
+    let handle = unsafe { libc::dlopen(c"libxkbcommon-x11.so.0".as_ptr(), libc::RTLD_LAZY) };
+    anyhow::ensure!(
+        !handle.is_null(),
+        "X11-Bibliothek libxkbcommon-x11.so.0 fehlt. Debian/Ubuntu: sudo apt install libxkbcommon-x11-0; Fedora: sudo dnf install libxkbcommon-x11. Danach das Meter neu starten."
+    );
+    unsafe { libc::dlclose(handle) };
+    Ok(())
+}
+
 pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;

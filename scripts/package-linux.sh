@@ -38,7 +38,7 @@ Package: aion2-meter
 Version: $version
 Architecture: amd64
 Maintainer: damage-meter contributors <noreply@github.com>
-Depends: libc6 (>= $glibc), libgcc-s1, libxkbcommon0, libegl1, libgl1, libcap2-bin, xdg-utils
+Depends: libc6 (>= $glibc), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libegl1, libgl1, libcap2-bin, xdg-utils
 Section: games
 Priority: optional
 Homepage: https://github.com/feroxtwo/damage-meter
@@ -67,7 +67,7 @@ Summary: Local AION 2 damage meter for Linux
 License: GPL-3.0-or-later
 URL: https://github.com/feroxtwo/damage-meter
 BuildArch: x86_64
-Requires: libxkbcommon, libglvnd-egl, libglvnd-glx, xdg-utils
+Requires: libxkbcommon, libxkbcommon-x11, libglvnd-egl, libglvnd-glx, xdg-utils
 %description
 Native overlay, local combat history and browser dashboard.
 %install

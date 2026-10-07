@@ -212,6 +212,9 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if !cli.no_overlay && (cli.x11 || std::env::var_os("WAYLAND_DISPLAY").is_none()) {
+        overlay::check_x11_dependencies()?;
+    }
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;

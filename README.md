@@ -29,12 +29,14 @@ Fertige Linux-Pakete entstehen in GitHub Actions als `aion2-meter-linux-packages
 
 Im Dashboard unter **Overlay → Version und Updates** lässt sich GitHub auf Klick prüfen. Ohne veröffentlichtes Release gibt es noch keinen Download über diesen Weg.
 
+Archivinstallation setzt die nativen Grafik-/Tastaturbibliotheken voraus. Debian/Ubuntu: `sudo apt install libxkbcommon0 libxkbcommon-x11-0 libegl1 libgl1 libcap2-bin xdg-utils`. Fedora: `sudo dnf install libxkbcommon libxkbcommon-x11 libglvnd-egl libglvnd-glx libcap xdg-utils`. Systempakete deklarieren diese Abhängigkeiten automatisch.
+
 ## Installation (Fedora / KDE)
 
 **Fedora Workstation / KDE Spin:**
 
 ```bash
-sudo dnf install rust cargo gcc git
+sudo dnf install rust cargo gcc git libxkbcommon libxkbcommon-x11 libglvnd-egl libglvnd-glx xdg-utils
 git clone https://github.com/feroxtwo/damage-meter.git
 cd damage-meter
 ./scripts/install.sh
@@ -234,6 +236,7 @@ Heilung umfasst erfasste Heilung seit Parser-Reset, mit der angezeigten Ziel-Kam
 ```bash
 python3 scripts/test-validation.py
 python3 scripts/test-installer.py
+python3 scripts/test-native-dependencies.py  # benötigt C-Compiler nur für diesen Test
 node scripts/test-real-web.cjs
 # Benötigt Xvfb, xdotool und Python Pillow; keine echte Spielsitzung.
 python3 scripts/test-native.py
