@@ -100,7 +100,8 @@ du einen schon getöteten Boss erneut angreifst. Für alles, was der Meter nicht
 ohne Bosskill), gibt es im Live-Tab **Neuer Run** oder `~/.local/bin/aion2-meter ctl new-run`.
 
 **Open World:** Außerhalb von Instanzen zeigt der Meter nur dich und deine Gruppe; fremde Spieler am selben Mob
-blendet er aus. *Overlay → Open World: andere Spieler anzeigen* holt sie zurück. In Dungeons und Expeditionen
+blendet er aus. Die Gruppe liest der Meter aus der Gruppenliste, die das Spiel bei jeder Änderung und jedem Zonenwechsel schickt.
+*Overlay → Open World: andere Spieler anzeigen* holt die Fremden zurück. In Dungeons und Expeditionen
 erscheint immer die ganze Gruppe.
 
 `~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem

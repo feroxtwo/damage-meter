@@ -210,9 +210,7 @@ pub fn run(path: &Path) -> Result<Value> {
                 if let Some(event) = crate::buffs::parse(payload) {
                     engine.buffs.record(event, header.ms);
                 }
-                if let Some(map) = crate::instances::map_load(payload) {
-                    engine.note_map_load(map, header.ms);
-                }
+                engine.note_packet(payload, header.ms);
             });
         }
         if header.ms - sampled_at >= 500 {

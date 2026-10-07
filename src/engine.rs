@@ -277,6 +277,9 @@ pub struct Engine {
     instance_entry_ms: AtomicI64,
     /// The map of the last zone load, 0 before the first.
     last_map: AtomicI32,
+    /// Your group from the game's own group list, you included; empty when
+    /// you play alone. See `instances::group_list`.
+    group: RwLock<HashSet<String>>,
     target_mode: RwLock<String>,
     pub buffs: BuffTracker,
     record_wanted: AtomicBool,
@@ -381,6 +384,7 @@ impl Engine {
             instance_load_ms: AtomicI64::new(i64::MIN),
             instance_entry_ms: AtomicI64::new(i64::MIN),
             last_map: AtomicI32::new(0),
+            group: RwLock::new(HashSet::new()),
             target_mode: RwLock::new(target_mode),
             buffs: BuffTracker::default(),
             record_wanted: AtomicBool::new(false),
@@ -616,6 +620,23 @@ impl Engine {
             }
         }
         self.sync_open_world();
+    }
+
+    /// A packet's payload (opcode first) for what the parser leaves out:
+    /// zone loads and the group list.
+    pub fn note_packet(&self, payload: &[u8], at_ms: i64) {
+        if let Some(map) = crate::instances::map_load(payload) {
+            self.note_map_load(map, at_ms);
+        } else if let Some(names) = crate::instances::group_list(payload).filter(|n| !n.is_empty())
+        {
+            // The list always names you; only you left: the group is over.
+            let names: HashSet<String> = if names.len() > 1 {
+                names.into_iter().collect()
+            } else {
+                HashSet::new()
+            };
+            *self.group.write() = names;
+        }
     }
 
     /// Whether the last zone load was into the open world.
@@ -1327,7 +1348,9 @@ impl Engine {
         };
         if dungeon_id <= 0 && !self.overlay.read().open_world_others {
             let known = me.is_some() || self.storage.local_player_id().is_some();
-            keep_own_rows(&mut rows, known, &self.storage.get_party_members());
+            let mut party: HashSet<String> = self.storage.get_party_members().into_keys().collect();
+            party.extend(self.group.read().iter().cloned());
+            keep_own_rows(&mut rows, known, &party);
         }
         rows.sort_by(|a, b| b.damage.total_cmp(&a.damage));
         let total: f64 = rows.iter().fold(0.0, |acc, r| acc + r.damage);
@@ -1527,15 +1550,11 @@ impl Engine {
 /// out, also while you are not fighting yourself (recordings showed a lone
 /// stranger's row). Without knowing who you are or who your party is,
 /// everyone stays, rather than an empty meter.
-fn keep_own_rows(
-    rows: &mut Vec<LiveRow>,
-    me_known: bool,
-    party: &HashMap<String, a2tools_dps_meter_lib::combat::data_storage::PartyMember>,
-) {
+fn keep_own_rows(rows: &mut Vec<LiveRow>, me_known: bool, party: &HashSet<String>) {
     if !me_known && !rows.iter().any(|r| r.is_self) && party.is_empty() {
         return;
     }
-    let party: HashSet<&str> = party.keys().map(|n| n.trim()).collect();
+    let party: HashSet<&str> = party.iter().map(|n| n.trim()).collect();
     rows.retain(|r| r.is_self || party.contains(r.name.trim()));
 }
 
@@ -2050,6 +2069,21 @@ mod tests {
             n.sort();
             n
         };
+        assert_eq!(names(&e), ["Me"]);
+        // A group formed in the open world: only the game's group list.
+        let mut list = vec![0x00, 0x92];
+        for name in ["Me", "Friend"] {
+            list.push(0x24);
+            list.extend_from_slice(b"03D7EFCF-F53C-4F08-915A-5B1E105E18E2");
+            list.extend_from_slice(&[0; 8]);
+            list.push(name.len() as u8);
+            list.extend_from_slice(name.as_bytes());
+        }
+        e.note_packet(&list, 2_500);
+        assert_eq!(names(&e), ["Friend", "Me"]);
+        e.note_packet(&list[..2], 2_600); // nothing decoded: kept
+        assert_eq!(names(&e), ["Friend", "Me"]);
+        e.note_packet(&list[..2 + 37 + 8 + 1 + 2], 2_700); // only you: over
         assert_eq!(names(&e), ["Me"]);
         e.storage.set_party_roster(
             vec![
