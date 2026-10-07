@@ -31,3 +31,4 @@ html[data-theme] .compact .bar {padding-top:7px;padding-bottom:7px}
 @media(max-width:800px) {.player-pair {grid-template-columns:1fr}}
 
 .player-pair .timeline {min-height:0}
+html:is([data-theme=aether],[data-theme=ember]) :is(input[type=search],input[type=date],input[type=text],input:not([type])) {background:var(--bg);border-color:var(--line)}

@@ -38,10 +38,11 @@ function pairReport(a,b,f) {
   return `<p class="analysis-note">Zwei Spieler im selben Kampf. Klasse, Ausrüstung und Aufgaben beeinflussen die Werte.</p><div class="player-pair">${[a,b].map(p=>`<div><h3>${esc(p.name)} · ${esc(p.class_name||p.job||'')}</h3><p>${num(p.dps)}/s · ${num(p.damage)} Schaden · ${num(p.heal||0)} Heilung</p>${pairSkills(p.skills)}${hitTimeline(p.skills,f.duration_ms,480)}${effectTimeline(f,p.actor_id,480)}</div>`).join('')}</div>`;
 }
 function installFightQol(f) {
-  const tools=$('#fightContent .fight-tools');
+  // After the fight-to-fight comparison, so export buttons and notes stay together.
+  const anchor=$('#comparison');
   const options=f.players.map(p=>`<option value="${Number(p.actor_id)}">${esc(p.name)}</option>`).join('');
   const block=document.createElement('div');block.innerHTML=`<h3>Spieler direkt vergleichen</h3><div class="row fight-tools"><select id="pairA" aria-label="Erster Spieler">${options}</select><select id="pairB" aria-label="Zweiter Spieler">${options}</select><button class="btn" id="pairCompare">Spieler vergleichen</button></div><div id="playerPair"></div><h3>Alle Spieler im selben Diagramm</h3>${partyCurve(f)}`;
-  tools.parentNode.insertBefore(block,tools.nextSibling);
+  anchor.parentNode.insertBefore(block,anchor.nextSibling);
   if(f.players.length>1)$('#pairB').selectedIndex=1;
   $('#pairCompare').onclick=()=>{$('#playerPair').innerHTML=pairReport(f.players.find(p=>String(p.actor_id)===$('#pairA').value),f.players.find(p=>String(p.actor_id)===$('#pairB').value),f);};
   $('#pngFight').onclick=()=>task(exportPng(f,$('#anonFight').checked));
