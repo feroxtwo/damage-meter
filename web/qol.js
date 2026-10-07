@@ -30,7 +30,7 @@ function partyCurve(f) {
   return `<p class="analysis-note">Beobachtete Intervall-DPS, ${f.analytics.resolution_ms||500} ms${step>1?' · Darstellung ausgedünnt (max. 601 Punkte je Spieler)':''}${f.analytics.partial?' · Daten unvollständig':''}. Kein Verlauf einzelner Schadenspakete. Vollständigkeit vor Aufnahmebeginn unbekannt.</p><div class="chart-legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.player.name)}</span>`).join('')}</div><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="DPS-Verlauf aller Spieler"><path d="M${L},${T}V${H-B}H${W-R}" fill="none" stroke="#7898b655"/>${lines}<text x="0" y="20">${num(max)}/s</text><text x="${L}" y="${H-5}">0:00</text><text x="${W-65}" y="${H-5}">${dur(end)}</text></svg>`;
 }
 function pairSkills(skills=[]) {
-  return `<div class="table-scroll pair-skills"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer/Ticks</th><th>Krit</th><th>Max</th></tr></thead><tbody>${skills.map(s=>`<tr><td>${esc(s.name)}${s.is_dot?' · DoT':''}</td><td>${num(s.damage)}</td><td>${s.hits??'—'}</td><td>${pct(s.crit_rate)}</td><td>${s.max>0?num(s.max):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-scroll pair-skills"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer/Ticks</th><th>Krit</th><th>Max</th></tr></thead><tbody>${skills.map(s=>`<tr><td>${skillLabel(s)}${s.is_dot?' · DoT':''}</td><td>${num(s.damage)}</td><td>${s.hits??'—'}</td><td>${pct(s.crit_rate)}</td><td>${s.max>0?num(s.max):'—'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function pairReport(a,b,f) {
   if(!a||!b)return '<p class="analysis-note">Zwei Spieler wählen.</p>';
@@ -94,7 +94,14 @@ function skillTraits(s) {
   for(const [k,v] of [['Multihit',s.multi_hit_count],['Miss',s.miss_count],['Resist',s.resist_count]])if(v!=null&&Number(v)>0)t.push(`${k} ${v}`);
   return t.join(' · ');
 }
-function reportBlocks(exp,curves) {
+async function reportImages(exp) {
+  const paths=[...new Set(exp.players.flatMap(p=>[classKeys.includes(p.class_key)?'/assets/icons/class-'+p.class_key+'.webp':'',...[...p.skills||[],...p.heal_skills||[],...p.buffs||[]].map(iconUrl)]).filter(Boolean))];
+  const images=new Map();
+  await Promise.all(paths.map(url=>new Promise(resolve=>{const img=new Image(),timer=setTimeout(()=>{img.src='';resolve();},3000);img.onload=()=>{clearTimeout(timer);images.set(url,img);resolve();};img.onerror=()=>{clearTimeout(timer);resolve();};img.src=url;})));
+  return images;
+}
+function reportBlocks(exp,curves,images=new Map()) {
+  const drawIcon=(ctx,url,x,y,size=22)=>{const img=images.get(url);if(img)ctx.drawImage(img,x,y,size,size);return Boolean(img);};
   const W=1400,X=40,blocks=[],font=(ctx,size,weight='')=>{ctx.font=`${weight} ${size}px system-ui, sans-serif`.trim();};
   const text=(ctx,s,x,y,color=reportInk.text,size=16,weight='',align='left',max=W-2*X)=>{font(ctx,size,weight);ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(fitText(ctx,s,max),x,y);ctx.textAlign='left';};
   const bar=(ctx,x,y,w,h,color)=>{ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,Math.max(2,w),h,[0,4,4,0]);ctx.fill();};
@@ -113,7 +120,8 @@ function reportBlocks(exp,curves) {
     blocks.push(heading('Gruppe · DPS'));
     for(const [i,p] of players.entries())blocks.push({h:34,draw:(ctx,y)=>{
       const c=i<reportColors.length?reportColors[i]:reportInk.faint;
-      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X,y+22,reportInk.text,16,'',`left`,300);
+      const classShift=drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X,y+5)?28:0;
+      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+classShift,y+22,reportInk.text,16,'',`left`,300);
       bar(ctx,360,y+6,(Number(p.dps)||0)/maxDps*700,22,c);
       text(ctx,`${num(p.dps)} DPS · ${num(p.damage)} · ${total>0?pct(p.damage*100/total):'—'}`,1080,y+22,reportInk.text,16,'','left',280);
     }});
@@ -143,7 +151,8 @@ function reportBlocks(exp,curves) {
     const color=i<reportColors.length?reportColors[i]:reportInk.faint;
     blocks.push({h:86,draw:(ctx,y)=>{
       ctx.fillStyle=reportInk.panel;ctx.fillRect(X-16,y+14,W-2*X+32,64);ctx.fillStyle=color;ctx.fillRect(X-16,y+14,6,64);
-      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+4,y+42,'#f4d8a7',22,'600',`left`,560);
+      const headShift=drawIcon(ctx,'/assets/icons/class-'+p.class_key+'.webp',X+4,y+22,28)?38:0;
+      text(ctx,`${p.name}${p.class_name?' · '+p.class_name:''}`,X+4+headShift,y+42,'#f4d8a7',22,'600',`left`,560);
       const kpis=[['Schaden',num(p.damage)],['DPS',num(p.dps)],['Heilung',num(p.heal||0)],['HPS',num(p.hps||0)],['Erlitten',num(p.damage_received||0)]];
       kpis.forEach(([k,v],j)=>{const x=640+j*144;text(ctx,v,x,y+44,reportInk.text,22,'600','left',140);text(ctx,k,x,y+66,reportInk.muted,13,'','left',140);});
     }});
@@ -155,7 +164,8 @@ function reportBlocks(exp,curves) {
         const traits=heal?'':skillTraits(s),range=s.min>0||s.max>0?`${s.min>0?num(s.min):'—'}–${s.max>0?num(s.max):'—'}`:'';
         const detail=[range?'Min–Max '+range:'',traits].filter(Boolean).join(' · ');
         blocks.push({h:detail?46:32,draw:(ctx,y)=>{
-          text(ctx,`${s.name}${s.is_dot&&!/\b(HoT|DoT)\b/.test(s.name)?(heal?' (HoT)':' (DoT)'):''}`,X,y+20,reportInk.text,16,'','left',300);
+          drawIcon(ctx,iconUrl(s),X,y+2);
+          text(ctx,`${s.name}${s.is_dot&&!/\b(HoT|DoT)\b/.test(s.name)?(heal?' (HoT)':' (DoT)'):''}`,X+28,y+20,reportInk.text,16,'','left',272);
           bar(ctx,360,y+6,(Number(s.damage)||0)/top*560,18,color);
           text(ctx,`${num(s.damage)} · ${sum>0?pct(s.damage*100/sum):'—'}`,940,y+20,reportInk.text,16,'','left',200);
           text(ctx,`${s.hits??'—'} Treffer/Ticks${s.hits>0?' · Ø '+num(s.damage/s.hits):''}`,W-X,y+20,reportInk.muted,14,'','right',220);
@@ -169,7 +179,8 @@ function reportBlocks(exp,curves) {
       for(let k=0;k<buffs.length;k+=2)blocks.push({h:30,draw:(ctx,y)=>{
         buffs.slice(k,k+2).forEach((b,j)=>{
           const x=X+j*670,u=Math.min(100,Math.max(0,Number(b.uptime)||0)),unknown=/^#\d+$/.test(String(b.name));
-          text(ctx,unknown?`Unbekannt ${b.name}`:b.name,x,y+19,unknown?reportInk.muted:reportInk.text,15,'','left',250);
+          drawIcon(ctx,iconUrl(b),x,y+2,20);
+          text(ctx,unknown?`Unbekannt ${b.name}`:b.name,x+26,y+19,unknown?reportInk.muted:reportInk.text,15,'','left',250);
           ctx.fillStyle=reportInk.grid;ctx.fillRect(x+260,y+7,300,16);bar(ctx,x+260,y+7,u*3,16,reportInk.buff);
           text(ctx,pct(b.uptime),x+572,y+19,reportInk.text,14,'','left',80);
         });
@@ -179,7 +190,7 @@ function reportBlocks(exp,curves) {
   return blocks;
 }
 async function exportPng(f,anonymous) {
-  const exp=fightExport(f,anonymous),blocks=reportBlocks(exp,reportCurves(f,exp.players));
+  const exp=fightExport(f,anonymous),images=await reportImages(exp),blocks=reportBlocks(exp,reportCurves(f,exp.players),images);
   // Bounded canvas height. Long reports become consecutive pages; every page repeats the header.
   const MAX=4800,FOOT=50,pages=[];let page=[],h=0;
   for(const [i,b] of blocks.entries()){if(i&&h+b.h>MAX-FOOT&&page.length>1){pages.push(page);page=[blocks[0]];h=blocks[0].h;}page.push(b);h+=b.h;}

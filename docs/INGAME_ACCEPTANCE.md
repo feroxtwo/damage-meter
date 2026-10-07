@@ -28,6 +28,8 @@
 | Tod / Wiederbelebung | Einzelner Tod, Respawn, neue Treffer nach Wiederbelebung; Death-Marker nicht in neuen Kampf übernehmen | Offen |
 | Buffs / Debuffs | Anwendung, Refresh, mehrere Caster, frühes Entfernen/Dispel; bekannte Entfernungslücke ausdrücklich messen | Offen |
 | Instanzwechsel | Eintritt, Wechsel Schwierigkeit, unmittelbar nach Boss verlassen, Partyauflösung; kurze Versuche gespeichert und Run-Zuordnung korrekt | Offen |
+| Expedition neu starten | Mit Mircos Mitschnitten vom 07.10.2026 (Expedition 600072, zwei Durchgänge, dazwischen Open World) nachgestellt: zwei Runs mit je Tière, Thamon und Vakron. Noch live prüfen: nach Abschluss raus und wieder rein ergibt einen neuen Run unter **Runs**; Neustart ohne Open-World-Umweg nach einem Bosskill ebenfalls. Neustart nach Wipe ohne Bosskill wird nicht automatisch erkannt: **Neuer Run** bzw. `aion2-meter ctl new-run` prüfen. Aufnahme mitschneiden | Offen |
+| Open World / Gruppe | Mitschnitt vom 07.10.2026 (Feldbosse): Ferox, Malondro und NexHealer sichtbar (Gruppenliste des Spiels), vorher bis zu fünf Fremde. Live prüfen: solo neben fremden Spielern am selben Mob nur eigene Zeile. Mit Gruppe: Gruppenmitglieder sichtbar, Fremde nicht. Einstellung „Open World: andere Spieler anzeigen“ zeigt alle. Im Dungeon immer ganze Gruppe | Offen |
 | Disconnect / Reconnect | Ruhige und laufende Verbindung, neue IP/Port, VPN; neuer Stream ohne Doppelschaden, Lücken sichtbar | Offen |
 | Charakter-/Klassenwechsel | Mehrere Charaktere derselben Sitzung; Filter und Bestwerte nicht vermischen; Profile/Streaming unverändert | Offen |
 | Mehrere Kämpfe | Direkt aufeinanderfolgende Bosse, mehrere Ziele/Adds, Zielwechsel, fehlender Spawn, gleicher Boss nach Wipe | Offen |
@@ -54,3 +56,23 @@ CSV-Spalten: `kind,code,is_dot,total`, eine Zeile pro Schadens-/Heilungsskill un
 ## Entscheidung
 
 Eine Ingame-Freigabe setzt vollständige unabhängige Referenz, nachvollziehbare Zeitfenster und die betroffene Desktop-/Paketumgebung voraus. Für jede Abweichung Bugreport mit anonymisiertem Export, lokal verfügbarer Aufnahme, Versionen und Reproduktionsschritten erstellen. Ergebnis pro Zeile: bestanden / nicht bestanden / nicht anwendbar mit Begründung. Erst danach im Releasebericht den Status ändern.
+
+## Zusätzliche reale Abnahme: DE/EN-Katalog und Symbole
+
+Diese Erweiterung verändert nur die Anzeige. Für eine Freigabe anhand echter Kampfdaten separat dokumentieren:
+
+| Fall | Nachweis | Status |
+|---|---|---|
+| Jede verfügbare Klasse | Skill-ID aus realer Aufnahme mit Spielname und Spielsymbol vergleichen, auch neue Faustkämpfer-Fähigkeiten | Offen |
+| Varianten / Kombofolgen | Haupt-, Folge-, Spezial-, DoT-/HoT- und Multihit-ID vergleichen; gleicher Name darf keine falsche Klassen-/Symbolzuordnung erzeugen | Offen |
+| Gemeinsame Namen | „Defiance“, „Impact Hit“, „Survival Willpower“ in unterschiedlichen Klassen getrennt kontrollieren | Offen |
+| Pets / Beschwörungen / Effekte | Paket-ID, Besitzer und Anzeige getrennt prüfen; unbekannte Effekte bleiben erkennbar | Offen |
+| Deutsch / Englisch | Dieselbe Messspanne in DE und EN öffnen; primäre ID, Treffer, Schaden, DPS/HPS, Zeiten und Reihenfolge nach numerischer Sortierung identisch | Offen |
+| Faustkämpfer DE | Community-Namen mit später verfügbaren offiziellen deutschen Spielnamen abgleichen und nötige Korrekturen dokumentieren | Offen |
+| Historie / Replay | Alten Bericht in beiden Sprachen öffnen und reale Aufnahme nachspielen; Zahlen bleiben identisch | Offen |
+| Export | JSON und PNG gegen DE/EN-Bericht vergleichen; richtige Skill-/Klassenicons; Anonymisierung von Spielern unverändert | Offen |
+| Offline / Neustart | Externe Webseiten unerreichbar, Meter neu starten; Katalog, Icons und gespeicherte Sprache funktionieren weiter | Offen |
+| Natives / OBS-Overlay | Alle Klassen, kompakte/normal große Zeilen, 60–200 %, lange Namen und verschiedene Hintergründe; Icons schneiden Zahlen/Namen nicht ab | Offen |
+| Unbekannte / neue ID | Rohcode und verfügbarer Name sichtbar, keine falsche Zuordnung zu einer zufälligen Fähigkeit | Offen |
+
+Pro Befund Original-ID, Klasse, Skillname im Spiel, Sprache/Clientpatch, erwartet/angezeigt und zugehörige lokale Aufnahme notieren. Es gibt keine Behauptung, dass ein sichtbares Icon die Genauigkeit des Parsers bestätigt.

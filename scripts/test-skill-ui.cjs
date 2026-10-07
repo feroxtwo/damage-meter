@@ -1,0 +1,28 @@
+// Presentation regression tests independent of Chromium availability.
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const read=n=>fs.readFileSync(path.join(__dirname,'../web',n),'utf8');
+const html=read('index.html'),enh=read('enhancements.js'),qol=read('qol.js');
+const nodes=new Map(),node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,textContent:'',innerHTML:'',addEventListener(){}});return nodes.get(id);};
+const ctx=vm.createContext({console,settings:{skill_language:'de'},settingsDirty:false,settingsSaving:false,latestLive:null,tab:'live',$:node,task:p=>p,api:async()=>({}),setTimeout,clearTimeout,Map,Image:class{set src(v){this.url=v;if(v)queueMicrotask(()=>this.onload?.());}},num:v=>String(v??0),dur:v=>String(v??0),date:()=>'',pct:v=>v==null?'—':String(v)+'%',esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))});
+vm.runInContext(html.slice(html.indexOf('// Local artwork'),html.indexOf('const chip =')),ctx);
+vm.runInContext(enh.slice(enh.indexOf('function skillTable'),enh.indexOf('function bindSkillTables')),ctx);
+vm.runInContext(enh.slice(enh.indexOf('function hitTimeline'),enh.indexOf('function playerReport')),ctx);
+vm.runInContext(enh.slice(enh.indexOf('function fightExport'),enh.indexOf('async function loadFights')),ctx);
+vm.runInContext(qol.slice(qol.indexOf('const reportColors'),qol.indexOf('async function exportPng')),ctx);
+vm.runInContext(read('skills.js'),ctx);
+ctx.exportPlayers=(ps,anonymous)=>ps.map((p,i)=>({...p,name:anonymous?'Spieler '+(i+1):p.name}));
+const skill={code:11170000,name:'Old stored name',names:{de:'Abwärtsschlag',en:'Overhead Slam'},icon:'/assets/icons/skill-11170000.webp',damage:12345,hits:7,dps:456,hit_timestamps:[100,300]};
+ctx.sample=skill;
+assert.match(vm.runInContext('skillTable([sample])',ctx),/Abwärtsschlag/);
+ctx.settings.skill_language='en';ctx.latestLive={overlay:{skill_language:'de'}};assert.equal(vm.runInContext('skillName(sample)',ctx),'Overhead Slam');ctx.latestLive=null;assert.match(vm.runInContext('skillTable([sample])',ctx),/Overhead Slam/);
+assert.match(vm.runInContext('hitTimeline([sample],1000)',ctx),/<image href="\/assets\/icons\/skill-11170000.webp"/);
+assert.doesNotMatch(vm.runInContext('hitTimeline([sample],1000)',ctx),/<title><span/);
+assert.match(vm.runInContext('skillLabel({code:99999999})',ctx),/#99999999/);
+assert.doesNotMatch(vm.runInContext('skillLabel({name:"<script>",icon:"https://evil.test/a.webp"})',ctx),/<script>|https:\/\/evil/);
+const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/catalog.json')));ctx.catalogFixture=catalog;vm.runInContext('skillCatalog=catalogFixture',ctx);
+node('#catalogSearch').value='11170010';vm.runInContext('renderSkillCatalog()',ctx);assert.match(node('#catalogRows').innerHTML,/Abwärtsschlag/);assert.equal((node('#catalogRows').innerHTML.match(/<tr>/g)||[]).length,1);
+node('#catalogSearch').value='';node('#catalogClass').value='fighter';vm.runInContext('renderSkillCatalog()',ctx);assert.equal((node('#catalogRows').innerHTML.match(/<tr>/g)||[]).length,41);assert.match(node('#catalogRows').innerHTML,/DE Community/);
+node('#catalogClass').value='';vm.runInContext('renderSkillCatalog()',ctx);assert.equal((node('#catalogRows').innerHTML.match(/<tr>/g)||[]).length,80);
+ctx.f={boss_name:'Boss',duration_ms:1000,players:[{name:'PRIVATE',class_key:'gladiator',damage:12345,dps:456,skills:[skill],heal_skills:[],buffs:[]}]};
+const exp=vm.runInContext('fightExport(f,true)',ctx);assert.equal(exp.players[0].name,'Spieler 1');assert.equal(exp.players[0].skills[0].name,'Overhead Slam');assert.equal(exp.players[0].skills[0].damage,12345);assert.equal(exp.players[0].skills[0].hits,7);assert.equal(skill.name,'Old stored name');
+(async()=>{ctx.exp=exp;const images=await vm.runInContext('reportImages(exp)',ctx);assert.equal(images.size,2);ctx.images=images;const blocks=vm.runInContext('reportBlocks(exp,null,images)',ctx);const draws=[],canvas=new Proxy({measureText:s=>({width:s.length*7}),drawImage:(img,...args)=>draws.push(img.url)}, {get:(t,k)=>k in t?t[k]:()=>{}});for(const b of blocks)b.draw(canvas,0);assert.ok(draws.includes(skill.icon));assert.ok(draws.includes('/assets/icons/class-gladiator.webp'));console.log('PASS skill language, IDs, escaping, catalog pagination, anonymous exports and PNG icons (6 presentation checks)');})().catch(e=>{console.error(e);process.exitCode=1;});

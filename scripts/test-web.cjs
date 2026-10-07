@@ -19,9 +19,9 @@ const live = {
 const characters = [{name:'FeroxTOO', class_name:'Kleriker', runs:12}, {name:'Alt', class_name:'Gladiator', runs:1}];
 const run = {id:1, started_at:Date.now()-3600000, ended_at:Date.now()-3000000, dungeon_name:'Ferocious Horn Den', difficulty:'Schwer', fights:2, members:[{name:'FeroxTOO',is_self:1,class_key:'cleric'}], my_dps:50000, note:'Test-Run'};
 const summary = {runs:12,fights:24,play_ms:7200000,partners:8,my_deaths:2,characters,per_dungeon:[{dungeon_name:run.dungeon_name,difficulty:'Schwer',runs:12,fastest_ms:600000}],my_best:[{boss_name:'Kargos',best_dps:50000,attempts:12,class_key:'cleric'}],per_day:[]};
-const skill={code:11,name:'Hieb',damage:4500000,hits:10,crit_rate:50,back_rate:25,perfect_rate:10,parry_rate:0,double_rate:20,frontal_rate:30,multi_hit_count:3,max:500000,hit_timestamps:[100,500,1000]};
+const skill={code:11,names:{de:'Hieb',en:'Strike'},icon:'/assets/icons/skill-11170000.webp',name:'Hieb',damage:4500000,hits:10,crit_rate:50,back_rate:25,perfect_rate:10,parry_rate:0,double_rate:20,frontal_rate:30,multi_hit_count:3,max:500000,hit_timestamps:[100,500,1000]};
 const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',started_at:run.started_at,duration_ms:90000,total_damage:9450000,
- players:live.rows.map(r=>({...r,actor_id:r.id,job:r.class_key,skills:[{...skill,damage:r.damage}],heal_skills:r.is_self?[{...skill,name:'Heilung',damage:r.heal}]:[],buffs:[{code:42,name:'Buff',uptime:50}]})),
+ players:live.rows.map(r=>({...r,actor_id:r.id,job:r.class_key,skills:[{...skill,damage:r.damage}],heal_skills:r.is_self?[{...skill,name:'Heilung',names:{de:'Heilung',en:'Healing'},damage:r.heal}]:[],buffs:[{code:42,name:'Buff',uptime:50}]})),
  analytics:{resolution_ms:500,partial:false,points:[{ms:500,damage:{1:1000,2:500}},{ms:1000,damage:{1:3000,2:1000}}],effects:[{target:1,code:42,start_ms:100,end_ms:1000}]},ping_history:[{tsMs:500,pingMs:42},{tsMs:1000,pingMs:50}]};
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
 const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
@@ -29,7 +29,8 @@ const profiles=new Map();
 let annotations=[],trainingStarts=[];
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':'index.html';
+  if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -47,7 +48,8 @@ const server = http.createServer((req,res) => {
   await context.route('**/api/**', async route => {
     const req = route.request(), u = new URL(req.url());
     let data = {};
-    if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
+    if(u.pathname==='/api/skills')data=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/catalog.json')));
+    else if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
     else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
     else if (u.pathname === '/api/live') data = live;
     else if(u.pathname==='/api/fights')data={fights:[fight,comparison,comparison2],more:false};
@@ -55,7 +57,7 @@ const server = http.createServer((req,res) => {
     else if(u.pathname==='/api/fights/f2'){if(slowComparison)await delay(350);data=comparison;}
     else if(u.pathname==='/api/fights/f3')data=comparison2;
     else if(u.pathname==='/api/fights/f1/annotation'){annotations.push(req.postDataJSON());}
-    else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={target_id:9,start_time:1000,skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};}
+    else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={target_id:9,start_time:1000,skills:[skill],heal_skills:[{...skill,name:'Heilung',names:{de:'Heilung',en:'Healing'}}],duration_ms:90000};}
     else if(u.pathname==='/api/training'){if(req.method()==='POST')trainingStarts.push(req.postDataJSON());data=null;}
     else if(u.pathname==='/api/overlay/profile'){
       const body=req.postDataJSON();
@@ -187,7 +189,7 @@ const server = http.createServer((req,res) => {
       await page.setViewportSize({width:390,height:844});
       for(const width of [320,390]) {
       await page.setViewportSize({width,height:844});
-      for(const tab of ['Live','Runs','Statistik','Overlay']) {
+      for(const tab of ['Live','Runs','Statistik','Fähigkeiten','Overlay']) {
         await page.getByRole('button',{name:tab,exact:true}).click(); await delay(100);
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab);
       }
@@ -209,7 +211,7 @@ const server = http.createServer((req,res) => {
       settings.visible=true;settings.hide_names=false;settings.max_rows=3;live.rows[1].name='<img src=x onerror=alert(1)>';
       await overlay.locator('#box').waitFor({state:'visible'});
       await overlay.waitForFunction(()=>document.querySelector('#rows').textContent.includes('<img'));
-      assert.equal(await overlay.locator('#rows img').count(),0);await overlay.close();
+      const icons=await overlay.locator('#rows img').evaluateAll(es=>es.map(e=>({src:e.getAttribute('src'),handler:e.hasAttribute('onerror'),alt:e.getAttribute('alt')})));assert.equal(icons.length,3);assert.ok(icons.every(i=>/^\/assets\/icons\/class-(cleric|gladiator|assassin)\.webp$/.test(i.src)&&!i.handler&&i.alt===''));await overlay.close();
     });
     await check('healing, live skill details and training controls',async()=>{
       await page.setViewportSize({width:1440,height:1000});
@@ -443,6 +445,25 @@ const server = http.createServer((req,res) => {
       await page.waitForFunction(()=>!document.querySelector('#captureHelp').hidden);
       assert.match(await page.locator('#captureHelp').textContent(),/sudo setcap cap_net_raw=ep '\/home\/me\/My Apps\/aion2-meter'/);
       live.capture=capture;
+    });
+    await check('offline catalog filters bilingual names aliases and community translations',async()=>{
+      await page.evaluate(()=>show('skills'));await page.locator('#catalogRows tr').first().waitFor();
+      assert.ok(await page.locator('#catalogRows .game-icon').count()>0);
+      await page.locator('#catalogSearch').fill('11170010');assert.equal(await page.locator('#catalogRows tr').count(),1);assert.match(await page.locator('#catalogRows').textContent(),/Abwärtsschlag.*Overhead Slam/s);
+      await page.locator('#catalogSearch').fill('');await page.locator('#catalogClass').selectOption('fighter');assert.equal(await page.locator('#catalogRows tr').count(),41);assert.match(await page.locator('#catalogRows').textContent(),/DE Community/);
+      await page.evaluate(()=>show('live'));
+    });
+    await check('language setting relabels skills and exports without changing measured values',async()=>{
+      // The empty-state check above intentionally removes all live rows.
+      live.rows=fight.players.map(({skills,heal_skills,buffs,actor_id,job,...row})=>row);
+      live.total_damage=fight.total_damage;live.battle_time_ms=fight.duration_ms;
+      await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('en');
+      await page.waitForFunction(()=>settings.skill_language==='en'&&!settingsDirty&&!settingsSaving);assert.equal(settings.skill_language,'en');
+      await page.evaluate(()=>show('live'));await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();
+      await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
+      assert.match(await page.locator('.skill-browser').first().textContent(),/Strike/);assert.ok(await page.locator('.skill-browser .game-icon').count()>0);
+      const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'Spieler 1');
+      await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
     });
     assert.deepEqual(errors,[]);
     console.log(`${checks} browser checks passed.`);

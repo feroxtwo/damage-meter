@@ -1,5 +1,5 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
-let latestLive = null, fightOffset = 0, fightSearchRequest = 0, fightSearchBusy = false, detailRequest = 0;
+let fightOffset = 0, fightSearchRequest = 0, fightSearchBusy = false, detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
 const pct = v => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(1).replace('.', ',') + '%';
 const metricKey = () => $('#liveMetric').value;
@@ -100,8 +100,8 @@ function download(name,body,type) {
 function csvCell(value) {let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
 function fightExport(f,anonymous) {
   // Deliberately allowlist fields: notes, network addresses and database IDs stay local.
-  const players=exportPlayers(f.players,anonymous).map(p=>({name:p.name,class_name:p.class_name,damage:p.damage,dps:p.dps,heal:p.heal,hps:p.hps,damage_received:p.damage_received,
-    skills:p.skills,heal_skills:p.heal_skills,buffs:(p.buffs||[]).map(b=>({name:b.name,uptime:b.uptime}))}));
+  const players=exportPlayers(f.players,anonymous).map(p=>({name:p.name,class_name:localizedClass(p),class_key:p.class_key,damage:p.damage,dps:p.dps,heal:p.heal,hps:p.hps,damage_received:p.damage_received,
+    skills:(p.skills||[]).map(s=>({...s,name:skillName(s)})),heal_skills:(p.heal_skills||[]).map(s=>({...s,name:skillName(s)})),buffs:(p.buffs||[]).map(b=>({code:b.code,name:skillName(b),names:b.names,icon:iconUrl(b),uptime:b.uptime}))}));
   return {boss:f.boss_name,difficulty:f.difficulty,started_at:f.started_at,duration_ms:f.duration_ms,healing_scope:f.healing_scope,numeric_limited:!!f.numeric_limited,players};
 }
 
@@ -136,12 +136,12 @@ $('#fightDialog').addEventListener('cancel',invalidateDetails);
 function skillTable(skills,heal=false) {
   if(!skills?.length)return '<p class="muted">Keine Skilldaten vorhanden.</p>';
   const total=skills.reduce((n,s)=>n+Number(s.damage||0),0);
-  const rows=skills.map(s=>({...s,share:s.share??(total>0?s.damage*100/total:null),average:s.average??(s.hits>0?s.damage/s.hits:null)}));
+  const rows=skills.map(s=>({...s,name:skillName(s),share:s.share??(total>0?s.damage*100/total:null),average:s.average??(s.hits>0?s.damage/s.hits:null)}));
   const columns=[['name','Skill'],['damage',heal?'Heilung':'Schaden'],['share','Anteil'],['dps',heal?'HPS':'DPS'],['hits','Treffer / Ticks'],['average','Ø Treffer']];
   if(!heal)columns.push(['crit_rate','Krit']);
   columns.push(['min','Min'],['max','Max']);
   const extra=heal?[]:[['back_rate','Rücken'],['frontal_rate','Frontal'],['perfect_rate','Perfekt'],['double_rate','Double'],['parry_rate','Pariert'],['multi_hit_count','Multihit'],['block_rate','Block'],['perfect_block_rate','Perfektblock'],['endurance_rate','Ausdauer'],['regeneration_rate','Regeneration'],['miss_count','Verfehlt'],['resist_count','Effekt resistiert']];
-  const cell=(s,key)=>key==='name'?`${esc(s.name)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}`:key==='share'||key.endsWith('_rate')?pct(s[key]):s[key]==null||(['min','max'].includes(key)&&s[key]<=0)?'—':num(s[key]);
+  const cell=(s,key)=>key==='name'?`${skillLabel(s)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}`:key==='share'||key.endsWith('_rate')?pct(s[key]):s[key]==null||(['min','max'].includes(key)&&s[key]<=0)?'—':num(s[key]);
   return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Skill suchen"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''} aria-sort="${k==='damage'?'descending':'none'}"><button type="button" class="sort-head" data-sort="${k}" title="Nach ${esc(label)} sortieren">${label}</button></th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
 }
 function bindSkillTables(root) {
@@ -156,7 +156,7 @@ function bindSkillTables(root) {
       const sorted=records.slice().sort((a,b)=>key==='name'?dir*a.s.name.localeCompare(b.s.name,'de'):dir*(value(a.s,key)-value(b.s,key))||a.s.name.localeCompare(b.s.name,'de'));
       box.querySelectorAll('th').forEach(th=>th.setAttribute('aria-sort',th.querySelector('.sort-head')?.dataset.sort===key?(dir>0?'ascending':'descending'):'none'));
       const body=box.querySelector('tbody');let count=0;
-      for(const {el,s} of sorted){el.hidden=!s.name.toLocaleLowerCase('de-DE').includes(search);if(!el.hidden)count++;body.append(el);}
+      for(const {el,s} of sorted){el.hidden=![s.name,s.code,...Object.values(s.names||{})].join(' ').toLocaleLowerCase('de-DE').includes(search);if(!el.hidden)count++;body.append(el);}
       box.querySelector('.skill-count').textContent=count+' / '+skills.length+' Skills';box.querySelector('.skill-empty').hidden=count!==0;
     };
     const select=box.querySelector('.skill-sort');
@@ -186,12 +186,12 @@ function damageCurve(f,actor=null) {
 function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';
   const end=Math.max(ms,1000),L=W<600?120:210,H=rows.length*25+30;
-  return `<p class="analysis-note">Trefferzeitpunkte, keine Cast-Anzahl. DoT und Multihit können mehrere Treffer pro Skill-Ausführung erzeugen. Pro Skill werden höchstens 250 Marker gezeichnet.</p><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="Skill-Trefferzeitlinie">${rows.map((s,i)=>`<text x="0" y="${i*25+18}">${esc(s.name.slice(0,28))}</text><path d="M${L},${i*25+14}H${W}" stroke="#7898b622"/>${s.hit_timestamps.filter((_,j)=>j%Math.max(1,Math.ceil(s.hit_timestamps.length/250))===0).map(t=>`<circle cx="${L+Math.min(end,Math.max(0,t))/end*(W-L)}" cy="${i*25+14}" r="3" fill="#edc57b"><title>${esc(s.name)} · ${(t/1000).toFixed(2)} s</title></circle>`).join('')}`).join('')}</svg>`;
+  return `<p class="analysis-note">Trefferzeitpunkte, keine Cast-Anzahl. DoT und Multihit können mehrere Treffer pro Skill-Ausführung erzeugen. Pro Skill werden höchstens 250 Marker gezeichnet.</p><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="Skill-Trefferzeitlinie">${rows.map((s,i)=>`${iconUrl(s)?`<image href="${iconUrl(s)}" x="0" y="${i*25+2}" width="20" height="20"/>`:""}<text x="24" y="${i*25+18}">${esc(skillName(s).slice(0,28))}</text><path d="M${L},${i*25+14}H${W}" stroke="#7898b622"/>${s.hit_timestamps.filter((_,j)=>j%Math.max(1,Math.ceil(s.hit_timestamps.length/250))===0).map(t=>`<circle cx="${L+Math.min(end,Math.max(0,t))/end*(W-L)}" cy="${i*25+14}" r="3" fill="#edc57b"><title>${esc(skillName(s))} · ${(t/1000).toFixed(2)} s</title></circle>`).join('')}`).join('')}</svg>`;
 }
 function effectTimeline(f,actor,W=900) {
   const effects=(f.analytics?.effects||[]).filter(e=>e.target===actor);if(!effects.length)return '';
   const keys=[...new Set(effects.map(e=>e.code))],L=W<600?120:210,end=Math.max(1000,f.duration_ms);
-  const names=Object.fromEntries([...(f.boss_debuffs||[]),...f.players.flatMap(p=>p.buffs||[])].map(e=>[e.code,e.name]));
+  const names=Object.fromEntries([...(f.boss_debuffs||[]),...f.players.flatMap(p=>p.buffs||[])].map(e=>[e.code,skillName(e)]));
   return `<h4>Buff-Zeitlinie</h4><p class="analysis-note">Aus beobachteter Anwendung und gemeldeter Dauer. Vorzeitiges Entfernen wird derzeit nicht erkannt.</p><svg class="timeline" viewBox="0 0 ${W} ${keys.length*24+20}" role="img" aria-label="Buff-Zeitlinie">${keys.map((code,i)=>`<text x="0" y="${i*24+17}">${esc((names[code]||'#'+code).slice(0,28))}</text>${effects.filter(e=>e.code===code).map(e=>`<rect x="${L+e.start_ms/end*(W-L)}" y="${i*24+5}" width="${Math.max(1,(e.end_ms-e.start_ms)/end*(W-L))}" height="13" rx="3" fill="#966ee6"><title>${esc(names[code]||code)} · ${(e.start_ms/1000).toFixed(1)}–${(e.end_ms/1000).toFixed(1)} s</title></rect>`).join('')}`).join('')}</svg>`;
 }
 function playerReport(p,f) {
@@ -252,7 +252,7 @@ async function compareFight() {
   if(old.boss_name!==f.boss_name||old.dungeon_id!==f.dungeon_id||!me||!before||me.name!==before.name||me.job!==before.job){$('#comparison').textContent='Dieser Vergleich passt nicht zu Boss, Schwierigkeit, Charakter oder Klasse.';return;}
   const skillKey=s=>String(s.code)+'|'+Boolean(s.is_dot);
   const keys=[...new Set([...(me.skills||[]),...(before.skills||[])].map(skillKey))];
-  $('#comparison').innerHTML=`<p>Aktueller Kampf gegenüber ${date(old.started_at)}: DPS ${delta(me.dps,before.dps)} · Dauer ${delta(f.duration_ms/1000,old.duration_ms/1000)} Sekunden</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden jetzt</th><th>Schaden zuvor</th><th>Differenz</th><th>Krit jetzt / zuvor</th></tr></thead><tbody>${keys.map(k=>{const a=(me.skills||[]).find(s=>skillKey(s)===k),b=(before.skills||[]).find(s=>skillKey(s)===k);return `<tr><td>${esc(a?.name||b?.name)}${(a||b)?.is_dot?' · DoT':''}</td><td>${num(a?.damage)}</td><td>${num(b?.damage)}</td><td>${delta(a?.damage,b?.damage)}</td><td>${pct(a?.crit_rate)} / ${pct(b?.crit_rate)}</td></tr>`;}).join('')}</tbody></table></div><h4>Buff-Uptime jetzt / zuvor</h4>${[...new Set([...(me.buffs||[]),...(before.buffs||[])].map(b=>b.code))].map(k=>{const a=me.buffs?.find(b=>b.code===k),b=before.buffs?.find(b=>b.code===k);return `<p>${esc(a?.name||b?.name)}: ${pct(a?.uptime)} / ${pct(b?.uptime)}</p>`;}).join('')}`;
+  $('#comparison').innerHTML=`<p>Aktueller Kampf gegenüber ${date(old.started_at)}: DPS ${delta(me.dps,before.dps)} · Dauer ${delta(f.duration_ms/1000,old.duration_ms/1000)} Sekunden</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden jetzt</th><th>Schaden zuvor</th><th>Differenz</th><th>Krit jetzt / zuvor</th></tr></thead><tbody>${keys.map(k=>{const a=(me.skills||[]).find(s=>skillKey(s)===k),b=(before.skills||[]).find(s=>skillKey(s)===k);return `<tr><td>${skillLabel(a||b||{})}${(a||b)?.is_dot?' · DoT':''}</td><td>${num(a?.damage)}</td><td>${num(b?.damage)}</td><td>${delta(a?.damage,b?.damage)}</td><td>${pct(a?.crit_rate)} / ${pct(b?.crit_rate)}</td></tr>`;}).join('')}</tbody></table></div><h4>Buff-Uptime jetzt / zuvor</h4>${[...new Set([...(me.buffs||[]),...(before.buffs||[])].map(b=>b.code))].map(k=>{const a=me.buffs?.find(b=>b.code===k),b=before.buffs?.find(b=>b.code===k);return `<p>${skillLabel(a||b||{})}: ${pct(a?.uptime)} / ${pct(b?.uptime)}</p>`;}).join('')}`;
 }
 async function overlayAction(action, message) {
   if(overlayActionBusy)return;

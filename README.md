@@ -19,6 +19,8 @@ Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regu
 
 [Releaseprüfung und Testmatrix](docs/RELEASE_REVIEW_0.3.1.md) · [Noch offene reale Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md).
 
+Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKILL_CATALOG.md) · [Abnahmematrix dieser Erweiterung](docs/RELEASE_REVIEW_SKILL_CATALOG.md).
+
 **Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
 ## Neu in 0.3.0
@@ -90,6 +92,17 @@ oder ein Tastenkürzel.
 Andere Tasten: `LOCK=Strg+Ü VISIBLE=Strg+Ö RESET=Strg+Ä ./scripts/install-shortcuts.sh`. Entfernen:
 `./scripts/install-shortcuts.sh --remove`. Danach lassen sie sich auch unter *Systemeinstellungen → Tastatur →
 Kurzbefehle* ändern.
+
+**Expedition neu starten:** Verlässt du die Instanz (das Spiel lädt dabei eine Open-World-Karte), endet der Run;
+beim nächsten Betreten beginnt ein neuer. So landet jeder Durchgang einer wiederholten Expedition in einem eigenen
+Run, auch wenn die Gruppe gleich bleibt. Startet das Spiel die Instanz ohne Umweg neu, beginnt der neue Run, sobald
+du einen schon getöteten Boss erneut angreifst. Für alles, was der Meter nicht sieht (Neustart nach einem Wipe
+ohne Bosskill), gibt es im Live-Tab **Neuer Run** oder `~/.local/bin/aion2-meter ctl new-run`.
+
+**Open World:** Außerhalb von Instanzen zeigt der Meter nur dich und deine Gruppe; fremde Spieler am selben Mob
+blendet er aus. Die Gruppe liest der Meter aus der Gruppenliste, die das Spiel bei jeder Änderung und jedem Zonenwechsel schickt.
+*Overlay → Open World: andere Spieler anzeigen* holt die Fremden zurück. In Dungeons und Expeditionen
+erscheint immer die ganze Gruppe.
 
 `~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem
 Spiel verbunden ist, ohne etwas umzuschalten.

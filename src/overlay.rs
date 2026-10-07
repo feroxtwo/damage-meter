@@ -52,6 +52,7 @@ pub struct Overlay {
     last_size: Vec2,
     last_position: Option<[f32; 2]>,
     last_scale: f32,
+    class_icons: std::collections::HashMap<String, egui::TextureHandle>,
 }
 
 fn masked(name: &str) -> String {
@@ -76,10 +77,11 @@ impl Overlay {
             passthrough: None,
             last_size: Vec2::ZERO,
             last_scale: 0.0,
+            class_icons: Default::default(),
         }
     }
 
-    pub fn run(self) -> eframe::Result {
+    pub fn run(mut self) -> eframe::Result {
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_title("AION2 Meter")
@@ -94,7 +96,25 @@ impl Overlay {
                 .with_resizable(false),
             ..Default::default()
         };
-        eframe::run_native("AION2 Meter", options, Box::new(|_cc| Ok(Box::new(self))))
+        eframe::run_native(
+            "AION2 Meter",
+            options,
+            Box::new(|cc| {
+                for key in crate::skills::CLASS_KEYS {
+                    if let Some(rgba) = crate::skills::class_rgba(key) {
+                        self.class_icons.insert(
+                            key.into(),
+                            cc.egui_ctx.load_texture(
+                                key,
+                                egui::ColorImage::from_rgba_unmultiplied([32, 32], rgba),
+                                egui::TextureOptions::LINEAR,
+                            ),
+                        );
+                    }
+                }
+                Ok(Box::new(self))
+            }),
+        )
     }
 
     fn header(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
@@ -317,6 +337,19 @@ impl Overlay {
                 format!("{}  {:>3.0}%", short_number(value), value * 100.0 / total)
             };
             let font = FontId::proportional(12.5);
+            let icon = self.class_icons.get(row.class_key);
+            if let Some(texture) = icon {
+                let icon_rect = Rect::from_center_size(
+                    inner.left_center() + Vec2::new(14.0, 0.0),
+                    Vec2::splat(18.0),
+                );
+                p.image(
+                    texture.id(),
+                    icon_rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
             let mut name_rect = inner;
             let right_width = p
                 .layout_no_wrap(right.clone(), FontId::monospace(11.5), Color32::WHITE)
@@ -324,7 +357,7 @@ impl Overlay {
                 .x;
             name_rect.set_right((inner.right() - right_width - 16.0).max(inner.left()));
             p.with_clip_rect(name_rect).text(
-                inner.left_center() + Vec2::new(6.0, 0.0),
+                inner.left_center() + Vec2::new(if icon.is_some() { 28.0 } else { 6.0 }, 0.0),
                 Align2::LEFT_CENTER,
                 format!("{}. {}{}", i + 1, if row.dead { "† " } else { "" }, name),
                 font.clone(),
