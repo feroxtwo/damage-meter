@@ -1,6 +1,6 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
 let latestLive = null, fightOffset = 0, fightSearchRequest = 0, fightSearchBusy = false, detailRequest = 0;
-let currentFight = null, lastTraining = null;
+let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
 const pct = v => (Number(v) || 0).toFixed(1).replace('.', ',') + '%';
 const metricKey = () => $('#liveMetric').value;
 function metricRows(rows) {
@@ -50,10 +50,12 @@ async function copyText(text) {
   }
   toast('Ergebnis kopiert.');
 }
-function rankingText(title,players,ms) {
-  return [title+' · '+dur(ms),...players.map((p,i)=>`${i+1}. ${p.name} | ${num(p.damage)} Schaden | ${num(p.dps)}/s | ${num(p.heal||0)} Heilung`)].join('\n');
+function rankingText(title,players,ms,metric='damage') {
+  const label=metric==='heal'?'Heilung':metric==='damage_received'?'Erlittener Schaden':'Schaden';
+  const rate=metric==='heal'?'HPS':metric==='damage_received'?'pro Sekunde':'DPS';
+  return [title+' · '+dur(ms),...players.map((p,i)=>`${i+1}. ${p.name} | ${num(p.damage)} ${label} | ${num(p.dps)} ${rate}${metric==='damage'?' | '+num(p.heal||0)+' Heilung':''}`)].join('\n');
 }
-$('#copyLive').onclick=()=>{if(latestLive)task(copyText(rankingText(latestLive.target_name||'Kampf',exportPlayers(latestLive.rows,$('#anonymousExport').checked),latestLive.battle_time_ms)));};
+$('#copyLive').onclick=()=>{if(latestLive)task(copyText(rankingText(latestLive.target_name||'Kampf',exportPlayers(metricRows(latestLive.rows),$('#anonymousExport').checked),latestLive.battle_time_ms,metricKey())));};
 function download(name,body,type) {
   const url=URL.createObjectURL(new Blob([body],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -88,7 +90,9 @@ window.loadFights=loadFights;
 $('#searchFights').onclick=()=>task(loadFights());$('#moreFights').onclick=()=>task(loadFights(false));
 $('#fightSearch').onkeydown=e=>{if(e.key==='Enter')task(loadFights());};
 $('#fightFavorites').onchange=()=>task(loadFights());
-$('#closeDialog').onclick=()=>{$('#fightDialog').close();detailRequest++;};
+function invalidateDetails() {detailRequest++;comparisonRequest++;currentFight=null;}
+$('#closeDialog').onclick=()=>{invalidateDetails();$('#fightDialog').close();};
+$('#fightDialog').addEventListener('cancel',invalidateDetails);
 
 function skillTable(skills,heal=false) {
   if(!skills?.length)return '<p class="muted">Keine Skilldaten vorhanden.</p>';
@@ -122,6 +126,7 @@ function playerReport(p,f) {
   return `<details><summary>${chip(p)} · ${num(p.dps)}/s · ${num(p.heal||0)} Heilung · ${num(p.damage_received||0)} erlitten</summary><h4>Schadensskills</h4>${skillTable(p.skills)}<h4>Heilungsskills</h4>${skillTable(p.heal_skills,true)}${uptimes(p.buffs,false)}<h4>Skill-Trefferzeitlinie</h4>${hitTimeline(p.skills,f.duration_ms)}${effectTimeline(f,p.actor_id)}<h4>DPS-Verlauf</h4>${damageCurve(f,p.actor_id)}</details>`;
 }
 async function openLivePlayer(id) {
+  comparisonRequest++;currentFight=null;
   const request=++detailRequest;const p=await api('/api/players/'+id);if(request!==detailRequest)return;
   const row=latestLive?.rows.find(r=>r.id===id);
   $('#dialogTitle').textContent=row?.name||'Spielerdetails';
@@ -129,6 +134,7 @@ async function openLivePlayer(id) {
   $('#refreshPlayer').onclick=()=>task(openLivePlayer(id));if(!$('#fightDialog').open)$('#fightDialog').showModal();
 }
 async function openFight(id) {
+  comparisonRequest++;currentFight=null;
   const request=++detailRequest;const f=await api('/api/fights/'+encodeURIComponent(id));if(request!==detailRequest)return;
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
@@ -144,6 +150,7 @@ async function openFight(id) {
   $('#jsonFight').onclick=()=>download('aion2-kampf.json',JSON.stringify(fightExport(f,$('#anonFight').checked),null,2),'application/json');
   $('#csvFight').onclick=()=>{const exp=fightExport(f,$('#anonFight').checked);download('aion2-kampf.csv','\uFEFF'+[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])].map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
   $('#compareBtn').onclick=()=>task(compareFight());
+  $('#compareFight').onchange=()=>{comparisonRequest++;$('#comparison').textContent='';};
   try {const data=await api('/api/fights?query='+encodeURIComponent(f.boss_name||'')+'&character='+encodeURIComponent(f.players.find(p=>p.is_self)?.name||''));if(request!==detailRequest)return;
     const candidates=(data.fights||[]).filter(c=>c.id!==id&&c.boss_name===f.boss_name&&c.dungeon_id===f.dungeon_id);
     $('#compareFight').innerHTML='<option value="">Vergleichskampf wählen</option>'+candidates.map(c=>`<option value="${esc(c.id)}">${date(c.started_at)} · ${dur(c.duration_ms)} · ${num(c.my_dps)}/s</option>`).join('');
@@ -152,15 +159,27 @@ async function openFight(id) {
 window.openFight=openFight;
 function delta(a,b){const d=(Number(a)||0)-(Number(b)||0);return `<span class="${d>=0?'compare-positive':'compare-negative'}">${d>=0?'+':''}${num(d)}${b?' ('+(d/b*100).toFixed(1)+'%)':''}</span>`;}
 async function compareFight() {
+  const f=currentFight;if(!f)return;
   const id=$('#compareFight').value;if(!id){toast('Vergleichskampf wählen.');return;}
-  const f=currentFight,request=detailRequest;const old=await api('/api/fights/'+encodeURIComponent(id));if(request!==detailRequest)return;
+  const detail=detailRequest,request=++comparisonRequest;
+  $('#comparison').textContent='Vergleich wird geladen …';
+  const old=await api('/api/fights/'+encodeURIComponent(id));if(detail!==detailRequest||request!==comparisonRequest)return;
   const me=f.players.find(p=>p.is_self),before=old.players.find(p=>p.is_self);
   if(old.boss_name!==f.boss_name||old.dungeon_id!==f.dungeon_id||!me||!before||me.name!==before.name||me.job!==before.job){$('#comparison').textContent='Dieser Vergleich passt nicht zu Boss, Schwierigkeit, Charakter oder Klasse.';return;}
   const skillKey=s=>String(s.code)+'|'+Boolean(s.is_dot);
   const keys=[...new Set([...(me.skills||[]),...(before.skills||[])].map(skillKey))];
   $('#comparison').innerHTML=`<p>Aktueller Kampf gegenüber ${date(old.started_at)}: DPS ${delta(me.dps,before.dps)} · Dauer ${delta(f.duration_ms/1000,old.duration_ms/1000)} Sekunden</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden jetzt</th><th>Schaden zuvor</th><th>Differenz</th><th>Krit jetzt / zuvor</th></tr></thead><tbody>${keys.map(k=>{const a=(me.skills||[]).find(s=>skillKey(s)===k),b=(before.skills||[]).find(s=>skillKey(s)===k);return `<tr><td>${esc(a?.name||b?.name)}${(a||b)?.is_dot?' · DoT':''}</td><td>${num(a?.damage)}</td><td>${num(b?.damage)}</td><td>${delta(a?.damage,b?.damage)}</td><td>${pct(a?.crit_rate)} / ${pct(b?.crit_rate)}</td></tr>`;}).join('')}</tbody></table></div><h4>Buff-Uptime jetzt / zuvor</h4>${[...new Set([...(me.buffs||[]),...(before.buffs||[])].map(b=>b.code))].map(k=>{const a=me.buffs?.find(b=>b.code===k),b=before.buffs?.find(b=>b.code===k);return `<p>${esc(a?.name||b?.name)}: ${pct(a?.uptime)} / ${pct(b?.uptime)}</p>`;}).join('')}`;
 }
-$('#saveProfile').onclick=()=>task(api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:$('#profileName').value.trim()||latestLive?.character||'Standard',save:true})}).then(()=>toast('Profil gespeichert.')));
-$('#loadProfile').onclick=()=>task(api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:$('#profileName').value.trim()||latestLive?.character||'Standard',save:false})}).then(()=>loadSettings()).then(()=>toast('Profil geladen.')));
-$('#recoverOverlay').onclick=()=>task(api('/api/overlay').then(s=>api('/api/overlay',{method:'POST',body:JSON.stringify({...s,position:[40,40],visible:true,locked:false})})).then(()=>loadSettings()).then(()=>toast('Overlay auf Startposition zurückgeholt.')));
+async function overlayAction(action, message) {
+  if(overlayActionBusy)return;
+  overlayActionBusy=true;settingsRequest++;
+  const controls=[...document.querySelectorAll('#settings input,#settings select,#settings button')].map(el=>[el,el.disabled]);
+  controls.forEach(([el])=>el.disabled=true);
+  try {await saveSettings();await action();await loadSettings();toast(message);}
+  finally {controls.forEach(([el,disabled])=>el.disabled=disabled);overlayActionBusy=false;}
+}
+const profileKey=()=>$('#profileName').value.trim()||latestLive?.character||'Standard';
+$('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:true})}),'Profil gespeichert.'));
+$('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
+$('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay').then(s=>api('/api/overlay',{method:'POST',body:JSON.stringify({...s,position:[40,40],visible:true,locked:false})})),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());

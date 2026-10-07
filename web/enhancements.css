@@ -10,5 +10,6 @@ input[type=search],input[type=date],input[type=text],input:not([type]) {backgrou
 .analysis-note {font-size:12px;color:var(--muted);line-height:1.6}
 #liveRows .bar {cursor:pointer} #liveRows .bar:focus-visible {outline:2px solid var(--accent)}
 .compare-positive {color:var(--green)} .compare-negative {color:var(--red)}
+.save-status {color:var(--muted);font-size:12px} .save-error {color:var(--red)}
 #trainingResult .row {margin-top:8px} .fight-tools {flex-wrap:wrap;margin:12px 0}
 @media(max-width:600px) {dialog {padding:14px;width:calc(100vw - 16px)} .dialog-head{top:-14px} #fightLibrary .row>*{max-width:100%} }

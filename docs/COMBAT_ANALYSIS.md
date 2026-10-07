@@ -6,11 +6,11 @@ Aufbauend auf Dashboard-Modernisierung und dem aktuellen `main`-Stand `854533c`.
 
 | Vorschlag | Umsetzung |
 | --- | --- |
-| Persistente Einstellungen | SQLite `meta`, einschließlich Zielmodus und nativer Position. Benannte Overlay-Profile und Wiederherstellung auf [40, 40]. |
+| Persistente Einstellungen | SQLite `meta`, einschließlich Zielmodus und nativer Position. Benannte Overlay-Profile und Wiederherstellung auf [40, 40]. Profilaktionen warten auf ausstehende Änderungen. Speicherstatus und Wiederholen bei Fehlern. |
 | Eigene Zeile | In nativem und OBS-Overlay sichtbar, auch wenn außerhalb der Top N. Der tatsächliche Rang wird beibehalten. |
 | Live-Spielerdetails | Klick auf eine Ranglistenzeile. Schadens- und Heilungsskills, Trefferarten, Trefferzeitpunkte und Aktualisieren. |
 | Heilung und erlittener Schaden | Ranglisten auswählbar, auch im Overlay. Reine Heiler erscheinen bei vorhandenen Heilungsdaten. Gruppenheilung wird nicht erneut zu den Skillwerten addiert. |
-| Kopieren / Export | Ranglisten als Text, Kampfberichte als CSV/JSON. Anonymisierung standardmäßig für Kampfexporte. CSV-Zellen schützen gegen Formelausführung. Exporte verwenden eine Feldauswahl. |
+| Kopieren / Export | Ranglisten als Text mit der ausgewählten Kennzahl und Reihenfolge, Kampfberichte als CSV/JSON. Anonymisierung standardmäßig für Kampfexporte. CSV-Zellen schützen gegen Formelausführung. Exporte verwenden eine Feldauswahl. |
 | Kampfsuche | Boss/Notiz/Tag, Zeitraum, Charakter, Favoriten, Pagination. Kämpfe ohne Run und Training sind erreichbar. |
 | Direkter Vergleich | Boss, Dungeon-/Schwierigkeits-ID, Charakter und Klasse werden geprüft. DPS-, Dauer- und Skill-Schadensdifferenzen, Kritraten und Buff-Uptime. |
 | Zusätzliche Skillwerte | Double, Frontal, Multihit, Minimum/Maximum und Schaden je Skill. Treffer/Ticks heißen bewusst nicht Casts. |
@@ -32,9 +32,9 @@ Aufbauend auf Dashboard-Modernisierung und dem aktuellen `main`-Stand `854533c`.
 
 ## Validierung
 
-54 Rust-Tests prüfen unter anderem den gespeicherten Overlay-Zustand nach Neustart, Profile, tatsächlichen Rang der eigenen Zeile, Trainingsabschluss/Bestwert, Live-Heilung und Burst aus Parser-Aggregaten, Datenbank-Upserts mit Favoriten/Analytics, reine Heiler, Suche, neue API-Aktionsguards, TCP-Wraparound/Überlappung/Duplikate und Capture-Roundtrip/Truncation, v2/v3-Kompatibilität, leere Payloads, Uhrzeitsprünge und V1-Portwechsel.
+55 Rust-Tests prüfen unter anderem den gespeicherten Overlay-Zustand nach Neustart, Profile, tatsächlichen Rang der eigenen Zeile, Trainingsabschluss/Bestwert, Live-Heilung und Burst aus Parser-Aggregaten, Datenbank-Upserts mit Favoriten/Analytics, reine Heiler, Suche, neue API-Aktionsguards, TCP-Wraparound/Überlappung/Duplikate und Capture-Roundtrip/Truncation, v2/v3-Kompatibilität, leere Payloads, Uhrzeitsprünge und V1-Portwechsel sowie Unicode-Grenzen für Profilnamen, Notizen und Tags.
 
-13 Chromium-Prüfungen umfassen die vorhandenen Dashboard-Regressionsfälle plus Heilungsrangliste, Live-Skills, Trainingsaktion, Kampfvergleich, Annotationen, Diagramme, anonymisierte Exporte, CSV-Download, Formelschutz, mobiles Dialoglayout und eigene Zeile im OBS-Overlay. Die Screenshots verwenden synthetische Daten.
+19 Chromium-Prüfungen umfassen die vorhandenen Dashboard-Regressionsfälle plus Heilungsrangliste, Live-Skills, Trainingsaktion, Kampfvergleich, Annotationen, Diagramme, anonymisierte Exporte, CSV-Download, Formelschutz, mobiles Dialoglayout und eigene Zeile im OBS-Overlay. Zusätzlich: ausstehende Settings bei Profilaktionen, Wiederholen nach Speicherfehlern, veraltete Settings-Antworten, Escape während Live-Aktualisierung, Ranglisten-Kopieren für alle Kennzahlen und überholte Vergleichsanfragen. Die Screenshots verwenden synthetische Daten.
 
 Der Binary-Smoke-Test startet die echte Release-Binary, prüft API und Assets, speichert Einstellungen und Profile, startet erneut, bestätigt die Persistenz und führt die Replay-CLI mit gültigen v1/v2/v3-Dateien, Uhrzeitsprüngen und ungültigen v2-Dateien aus. Build-Gates: Format, Clippy ohne Warnungen, Rust-Tests, Release, Browser und MSRV 1.88.
 

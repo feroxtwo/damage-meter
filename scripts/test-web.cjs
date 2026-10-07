@@ -24,6 +24,8 @@ const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',st
  players:live.rows.map(r=>({...r,actor_id:r.id,job:r.class_key,skills:[{...skill,damage:r.damage}],heal_skills:r.is_self?[{...skill,name:'Heilung',damage:r.heal}]:[],buffs:[{code:42,name:'Buff',uptime:50}]})),
  analytics:{resolution_ms:500,partial:false,points:[{ms:500,damage:{1:1000,2:500}},{ms:1000,damage:{1:3000,2:1000}}],effects:[{target:1,code:42,start_ms:100,end_ms:1000}]},ping_history:[{tsMs:500,pingMs:42},{tsMs:1000,pingMs:50}]};
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
+const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
+const profiles=new Map();
 let annotations=[],trainingStarts=[];
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
@@ -41,18 +43,24 @@ const server = http.createServer((req,res) => {
   const context = await browser.newContext({viewport:{width:1440,height:1000}});
   const errors = [];
   let writes = [], activeWrites = 0, maxActiveWrites = 0, failReset = false, failRuns = false;
-  let slowMain = false;
+  let slowMain = false, failSettings = false, slowSettingsRead = false, slowComparison = false, slowPlayer = false;
   await context.route('**/api/**', async route => {
     const req = route.request(), u = new URL(req.url());
     let data = {};
     if (u.pathname === '/api/live') data = live;
-    else if(u.pathname==='/api/fights')data={fights:[fight,comparison],more:false};
+    else if(u.pathname==='/api/fights')data={fights:[fight,comparison,comparison2],more:false};
     else if(u.pathname==='/api/fights/f1')data=fight;
-    else if(u.pathname==='/api/fights/f2')data=comparison;
+    else if(u.pathname==='/api/fights/f2'){if(slowComparison)await delay(350);data=comparison;}
+    else if(u.pathname==='/api/fights/f3')data=comparison2;
     else if(u.pathname==='/api/fights/f1/annotation'){annotations.push(req.postDataJSON());}
-    else if(u.pathname.startsWith('/api/players/'))data={skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};
+    else if(u.pathname.startsWith('/api/players/')){if(slowPlayer)await delay(350);data={skills:[skill],heal_skills:[{...skill,name:'Heilung'}],duration_ms:90000};}
     else if(u.pathname==='/api/training'){if(req.method()==='POST')trainingStarts.push(req.postDataJSON());data=null;}
-    else if(u.pathname==='/api/overlay/profile')data=settings;
+    else if(u.pathname==='/api/overlay/profile'){
+      const body=req.postDataJSON();
+      if(body.save)profiles.set(body.key,{...settings});
+      else Object.assign(settings,profiles.get(body.key));
+      data=settings;
+    }
     else if (u.pathname === '/api/characters') data = characters;
     else if (u.pathname === '/api/runs') {
       if (failRuns) { await route.fulfill({status:500,body:'error'}); return; }
@@ -68,9 +76,11 @@ const server = http.createServer((req,res) => {
       if(req.method() === 'POST') {
         activeWrites++; maxActiveWrites = Math.max(maxActiveWrites,activeWrites);
         const body = req.postDataJSON(); writes.push(body); await delay(300);
+        if(failSettings){activeWrites--;await route.fulfill({status:500,body:'error'});return;}
         Object.assign(settings,body); activeWrites--;
       }
-      data = settings;
+      data = {...settings};
+      if(req.method()==='GET'&&slowSettingsRead){slowSettingsRead=false;await delay(800);}
     }
     else if (u.pathname === '/api/reset' && failReset) { await route.fulfill({status:500,body:'error'}); return; }
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -121,6 +131,45 @@ const server = http.createServer((req,res) => {
       await delay(900);
       assert.equal(settings.scale,2); assert.equal(maxActiveWrites,1); assert.equal(writes.length,2);
     });
+    await check('profile actions flush pending settings and cannot be overwritten by them',async()=>{
+      await page.fill('#profileName','Test');
+      await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.25';i.dispatchEvent(new Event('input'));document.querySelector('#saveProfile').click();});
+      await page.waitForFunction(()=>document.querySelector('#toast').textContent==='Profil gespeichert.');
+      assert.equal(profiles.get('Test').scale,1.25);
+      await page.locator('[data-k="scale"]').evaluate(i=>{i.value='2';i.dispatchEvent(new Event('input'));document.querySelector('#loadProfile').click();});
+      await page.waitForFunction(()=>document.querySelector('#toast').textContent==='Profil geladen.');
+      await delay(250);
+      assert.equal(settings.scale,1.25);
+      assert.equal(await page.locator('[data-k="scale"]').inputValue(),'1.25');
+      assert.equal(maxActiveWrites,1);
+    });
+    await check('failed setting writes retain edits and can be retried without another edit',async()=>{
+      failSettings=true;
+      await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.75';i.dispatchEvent(new Event('input'));});
+      await page.locator('#retrySettings').waitFor({state:'visible'});
+      assert.equal(settings.scale,1.25);
+      await page.setViewportSize({width:320,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'settings-save-error.png'),fullPage:true});
+      await page.setViewportSize({width:1440,height:1000});
+      await page.evaluate(()=>loadSettings());
+      assert.equal(await page.locator('[data-k="scale"]').inputValue(),'1.75');
+      failSettings=false;
+      await page.locator('#retrySettings').click();
+      await page.waitForFunction(()=>document.querySelector('#settingsStatus').textContent==='Einstellungen gespeichert.');
+      assert.equal(settings.scale,1.75);
+      await page.locator('#retrySettings').waitFor({state:'hidden'});
+    });
+    await check('late setting reads cannot replace a newly saved profile',async()=>{
+      profiles.set('Test',{...settings,scale:1.1});
+      slowSettingsRead=true;
+      const stale=page.evaluate(()=>loadSettings());
+      await delay(50);
+      await page.locator('#loadProfile').click();
+      await page.waitForFunction(()=>document.querySelector('#toast').textContent==='Profil geladen.');
+      await stale;
+      assert.equal(await page.locator('[data-k="scale"]').inputValue(),'1.1');
+    });
     await check('mobile tabs have no page overflow',async()=>{
       await page.setViewportSize({width:390,height:844});
       for(const width of [320,390]) {
@@ -162,6 +211,35 @@ const server = http.createServer((req,res) => {
       await delay(100);assert.deepEqual(trainingStarts.at(-1),{seconds:180});
       await page.selectOption('#liveMetric','damage');
     });
+    await check('Escape cancels an in-flight player refresh without reopening the dialog',async()=>{
+      await page.locator('#liveRows .bar').first().click();
+      await page.locator('#fightDialog[open]').waitFor();
+      slowPlayer=true;
+      await page.locator('#refreshPlayer').click();
+      await page.keyboard.press('Escape');
+      await delay(450);
+      assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),false);
+      slowPlayer=false;
+    });
+    await check('copied rankings use the displayed metric order, values and privacy setting',async()=>{
+      const oldHeal=live.rows[1].heal,oldHps=live.rows[1].hps;
+      live.rows[1].heal=3000000;live.rows[1].hps=33333;live.rows[1].damage_received=90000;
+      await page.waitForFunction(()=>latestLive.rows[1].heal===3000000);
+      await page.evaluate(()=>{window.copyText=async text=>{window.copiedRanking=text;};});
+      await page.locator('#anonymousExport').check();
+      await page.selectOption('#liveMetric','heal');await page.locator('#copyLive').click();
+      let text=await page.evaluate(()=>window.copiedRanking);
+      assert.match(text.split('\n')[1],/Spieler 1 \| 3,00M Heilung \| 33,3K HPS/);
+      assert.ok(!text.includes('FeroxTOO')&&!text.includes('Moon'));
+      await page.locator('#anonymousExport').uncheck();
+      await page.selectOption('#liveMetric','damage_received');await page.locator('#copyLive').click();
+      text=await page.evaluate(()=>window.copiedRanking);
+      assert.match(text.split('\n')[1],/90,0K Erlittener Schaden \| 1,0K pro Sekunde/);
+      await page.selectOption('#liveMetric','damage');await page.locator('#copyLive').click();
+      assert.match((await page.evaluate(()=>window.copiedRanking)).split('\n')[1],/FeroxTOO \| 4,50M Schaden \| 50,0K DPS/);
+      live.rows[1].heal=oldHeal;live.rows[1].hps=oldHps;live.rows[1].damage_received=0;
+      await page.locator('#anonymousExport').check();
+    });
     await check('fight search, comparison, notes and timeline render',async()=>{
       await page.getByRole('button',{name:'Runs',exact:true}).click();
       await page.locator('[data-open-fight="f1"]').click();
@@ -174,6 +252,15 @@ const server = http.createServer((req,res) => {
       await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
       await delay(100);assert.deepEqual(annotations.at(-1),{favorite:true,note:'neues Gear',tags:'rotation'});
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'combat-analysis.png'),fullPage:true});
+    });
+    await check('late comparisons cannot replace the last chosen fight',async()=>{
+      slowComparison=true;
+      await page.selectOption('#compareFight','f2');await page.locator('#compareBtn').click();
+      await page.selectOption('#compareFight','f3');await page.locator('#compareBtn').click();
+      await page.waitForFunction(()=>document.querySelector('#comparison').textContent.includes('25,0K'));
+      await delay(450);
+      assert.match(await page.locator('#comparison').textContent(),/25,0K/);
+      slowComparison=false;
     });
     await check('anonymous JSON and CSV exports do not leak names or formulas',async()=>{
       const exp=await page.evaluate(()=>fightExport(currentFight,true));

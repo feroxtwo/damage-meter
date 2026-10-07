@@ -221,6 +221,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">Kennzahl <select data-k="metric"><option value="damage">Schaden</option><option value="heal">Heilung</option><option value="damage_received">Erlittener Schaden</option></select></label>
       <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
       <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
+      <div class="row"><p id="settingsStatus" class="save-status" role="status">Änderungen werden automatisch gespeichert.</p><button class="btn" id="retrySettings" hidden>Erneut speichern</button></div>
       <label class="set">Pakete mitschneiden (bleibt nach Neustart an) <input type="checkbox" id="recAuto"></label>
       <p class="muted">Der Mitschnitt hilft, Ausweichen und nDPS zu entschlüsseln. Die Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
     </div>
@@ -236,7 +237,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     </div>
   </section>
 </main>
-<dialog id="fightDialog"><div class="row dialog-head"><h2 id="dialogTitle">Kampfanalyse</h2><button class="btn" id="closeDialog">Schließen</button></div><div id="fightContent"></div></dialog>
+<dialog id="fightDialog" aria-labelledby="dialogTitle"><div class="row dialog-head"><h2 id="dialogTitle">Kampfanalyse</h2><button class="btn" id="closeDialog">Schließen</button></div><div id="fightContent"></div></dialog>
 <div id="toast" role="status" hidden></div>
 <script>
 const $ = (s, el = document) => el.querySelector(s);
@@ -504,6 +505,12 @@ $('#bossSel').onchange = drawBoss;
 
 // Settings
 let settings = null, settingsTimer, settingsSaving = false, settingsDirty = false;
+let settingsSavePromise = null, settingsRequest = 0;
+function settingsStatus(message, error = false) {
+  $('#settingsStatus').textContent = message;
+  $('#settingsStatus').classList.toggle('save-error', error);
+  $('#retrySettings').hidden = !error;
+}
 function settingsValues() {
   document.querySelectorAll('[data-for]').forEach(o => {
     const v = settings[o.dataset.for]; o.value = o.dataset.for === 'opacity' ? Math.round(v * 100) + '%' : o.dataset.for === 'scale' ? v.toFixed(2) + '×' : v;
@@ -511,28 +518,40 @@ function settingsValues() {
 }
 async function loadSettings() {
   if (settingsSaving || settingsDirty) return;
+  const request = ++settingsRequest;
   const loaded = await api('/api/overlay');
-  if (settingsSaving || settingsDirty) return;
+  if (request !== settingsRequest || settingsSaving || settingsDirty) return;
   settings = loaded;
   document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v ?? i.value; });
   settingsValues();
 }
-async function saveSettings() {
-  if (settingsSaving) return;
+function saveSettings() {
+  clearTimeout(settingsTimer);
+  if (settingsSavePromise) return settingsSavePromise;
+  if (!settingsDirty) return Promise.resolve();
   settingsSaving = true;
-  try {
+  settingsRequest++;
+  settingsStatus('Einstellungen werden gespeichert …');
+  settingsSavePromise = (async () => {
     while (settingsDirty) {
       settingsDirty = false;
       await api('/api/overlay', { method: 'POST', body: JSON.stringify(settings) });
     }
-  } catch (e) { toast('Overlay-Einstellungen konnten nicht gespeichert werden. Bitte erneut ändern.', true); }
-  finally { settingsSaving = false; }
+    settingsStatus('Einstellungen gespeichert.');
+  })().catch(e => {
+    settingsDirty = true;
+    settingsStatus('Speichern fehlgeschlagen. Deine Änderungen bleiben hier erhalten.', true);
+    throw e;
+  }).finally(() => { settingsSaving = false; settingsSavePromise = null; });
+  return settingsSavePromise;
 }
+$('#retrySettings').onclick = () => saveSettings().catch(() => {});
 document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
   if (!settings) return;
   settings[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.tagName === 'SELECT' ? i.value : Number(i.value);
-  settingsValues(); settingsDirty = true;
-  clearTimeout(settingsTimer); settingsTimer = setTimeout(saveSettings, 180);
+  settingsValues(); settingsDirty = true; settingsRequest++;
+  settingsStatus('Änderungen noch nicht gespeichert …');
+  clearTimeout(settingsTimer); settingsTimer = setTimeout(() => saveSettings().catch(() => {}), 180);
 });
 
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== tab) show(t); });
