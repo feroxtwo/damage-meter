@@ -16,7 +16,7 @@ Aufbauend auf Dashboard-Modernisierung und dem aktuellen `main`-Stand `854533c`.
 | Zusätzliche Skillwerte | Double, Frontal, Multihit, Minimum/Maximum und Schaden je Skill. Treffer/Ticks heißen bewusst nicht Casts. |
 | Training | 60/180/300 Sekunden ab erstem Treffer, Abschlussbericht, persistente persönliche Bestleistung, letzter Bericht über Neustarts. |
 | Burst / Zeitlinien | Fester 5s-Nenner für Burst, einschließlich der ersten fünf Sekunden. Schaden anhand kumulativer Beobachtungen mit 500ms-Takt, Trefferzeitpunkte und Ping werden gespeichert. Buff-Intervalle werden erfasst. |
-| TCP / Replay | Reihenfolge, überlappende Segmente, Duplikate, Wraparound, begrenzter Puffer und explizite Lücken. Aufnahmen v2 behalten Verbindungsmetadaten und Pre-Lock-Pakete. Replay v1/v2 mit Capture-Zeit und isolierter Datenbank. |
+| TCP / Replay | Reihenfolge, überlappende Segmente, Duplikate, Wraparound, begrenzter Puffer und explizite Lücken. Aufnahmen v3 behalten Verbindungsmetadaten, rohe Payload-Bytes und Pre-Lock-Pakete. Replay v1/v2/v3 mit Capture-Zeit und isolierter Datenbank. |
 
 ## Daten und Grenzen
 
@@ -27,15 +27,15 @@ Aufbauend auf Dashboard-Modernisierung und dem aktuellen `main`-Stand `854533c`.
 - Buff-Zeitlinien stammen aus Anwendung/Refresh und gemeldeter Dauer. Vorzeitige Entfernung wird noch nicht dekodiert. Heilungstimestamps liefert der gepinnte Upstream nicht.
 - Trainingsauswertung erfolgt auf dem 500ms-Takt. Tatsächliche Dauer wird als Nenner verwendet. Testende wird nicht als millisekundengenau dargestellt. Alte Kämpfe bekommen keine nachträglich erfundenen Zeitdaten.
 - TCP-Aufnahme beginnt ohne SYN-Verfolgung mit dem ersten beobachteten Payload. Eine Lücke kann nur beim nächsten Payload wiederhergestellt werden. Replay weist am Dateiende noch gepufferte Bytes separat aus. Fehlende Daten werden nicht ersetzt.
-- V1-Dateien besitzen keine Sequenz-/Host-Metadaten. Ihr Replay verwendet die vorhandene Reihenfolge und nennt diese Einschränkung im Bericht. Eine große Datei wird Datensatz für Datensatz gelesen, mit Längenlimits. JSON-Ausgabe enthält lokale Analyseinformationen und ist nicht anonymisiert.
+- V1-Dateien besitzen keine Sequenz-/Host-Metadaten. Ihr Replay verwendet je Server-Port die vorhandene Reihenfolge und nennt diese Einschränkung im Bericht. Eine große Datei wird Datensatz für Datensatz gelesen, mit Längenlimits (v3: 64 KiB Header, 2 MiB Payload; v2: 8 MiB JSON, 2 MiB dekodierte Payload). In v2 bleibt das Payload-Feld Pflicht; v3 liest die Bytes nach dem Header. Rückwärts laufende Zeitstempel halten die Replay-Zeit bis zum Aufholen an. `clock_steps_back` zählt die Rücksprünge gegenüber dem vorherigen Paket, `clock_clamped_packets` die angeglichenen Pakete. JSON-Ausgabe enthält lokale Analyseinformationen und ist nicht anonymisiert.
 - Die native Position hängt weiterhin von den Regeln des Wayland-Compositors ab. Ein echter Spielkampf unter Proton und der native Fenstertest auf KDE bleiben Vor-Ort-Prüfungen.
 
 ## Validierung
 
-48 Rust-Tests prüfen unter anderem den gespeicherten Overlay-Zustand nach Neustart, Profile, tatsächlichen Rang der eigenen Zeile, Trainingsabschluss/Bestwert, Live-Heilung und Burst aus Parser-Aggregaten, Datenbank-Upserts mit Favoriten/Analytics, reine Heiler, Suche, neue API-Aktionsguards, TCP-Wraparound/Überlappung/Duplikate und Capture-Roundtrip/Truncation.
+54 Rust-Tests prüfen unter anderem den gespeicherten Overlay-Zustand nach Neustart, Profile, tatsächlichen Rang der eigenen Zeile, Trainingsabschluss/Bestwert, Live-Heilung und Burst aus Parser-Aggregaten, Datenbank-Upserts mit Favoriten/Analytics, reine Heiler, Suche, neue API-Aktionsguards, TCP-Wraparound/Überlappung/Duplikate und Capture-Roundtrip/Truncation, v2/v3-Kompatibilität, leere Payloads, Uhrzeitsprünge und V1-Portwechsel.
 
 13 Chromium-Prüfungen umfassen die vorhandenen Dashboard-Regressionsfälle plus Heilungsrangliste, Live-Skills, Trainingsaktion, Kampfvergleich, Annotationen, Diagramme, anonymisierte Exporte, CSV-Download, Formelschutz, mobiles Dialoglayout und eigene Zeile im OBS-Overlay. Die Screenshots verwenden synthetische Daten.
 
-Der Binary-Smoke-Test startet die echte Release-Binary, prüft API und Assets, speichert Einstellungen und Profile, startet erneut, bestätigt die Persistenz und führt die Replay-CLI mit gültiger v1- und ungültiger v2-Datei aus. Build-Gates: Format, Clippy ohne Warnungen, Rust-Tests, Release, Browser und MSRV 1.88.
+Der Binary-Smoke-Test startet die echte Release-Binary, prüft API und Assets, speichert Einstellungen und Profile, startet erneut, bestätigt die Persistenz und führt die Replay-CLI mit gültigen v1/v2/v3-Dateien, Uhrzeitsprüngen und ungültigen v2-Dateien aus. Build-Gates: Format, Clippy ohne Warnungen, Rust-Tests, Release, Browser und MSRV 1.88.
 
 ![Kampfanalyse mit synthetischen Daten](images/combat-analysis.png)
