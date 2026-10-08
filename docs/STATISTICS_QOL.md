@@ -8,7 +8,7 @@ Im Vergleich lassen sich Spieler über die beschriftete Legende aus- und einblen
 
 Unter **Statistik** steht der eigene Boss-Verlauf zuerst. Boss und Schwierigkeit sowie letzte 20, letzte 50 oder alle Versuche sind auswählbar. Kennzahlen zeigen letzten Versuch, Bestwert, arithmetischen Durchschnitt und Anzahl im gewählten Ausschnitt. Die gestrichelte Linie markiert diesen Durchschnitt. Versuchsauswahl, Datum, Kampfdauer und Veränderung gegenüber dem unmittelbar vorherigen Versuch erleichtern den Vergleich. **Kampfbericht öffnen** führt zum gespeicherten Bericht, sofern dessen ID vorliegt. Die Bossauswahl bleibt beim Neuladen anhand von Boss und Dungeon-ID erhalten, auch wenn sich die Reihenfolge der Liste ändert.
 
-Die Aktivität der letzten 30 Tage nennt zusätzlich Runs und aktive Tage. Lange Charakter-/Spielernamen und mobile Diagramme werden innerhalb der vorhandenen Karten und Dialoge umgebrochen.
+Die Aktivität der letzten 30 Tage nennt zusätzlich Runs und aktive Tage; ohne Aktivität erscheint ein erklärender Leerzustand. Auf schmalen Displays stehen die sechs Übersichtskarten in zwei Spalten. Lange Charakter-/Spielernamen und mobile Diagramme werden innerhalb der vorhandenen Karten und Dialoge umgebrochen.
 
 ## Bedeutung der Werte
 

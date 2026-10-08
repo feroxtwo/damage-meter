@@ -525,7 +525,7 @@ async function loadStats() {
   const days = []; const map = Object.fromEntries(s.per_day.map(d => [d.day, d.runs]));
   for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); const k = d.toLocaleDateString('sv-SE'); days.push([k, map[k] || 0]); }
   const maxR = Math.max(1, ...days.map(d => d[1]));
-  $('#perDay').innerHTML = days.map(([k, v]) => `<div title="${k}: ${v}" style="height:${v / maxR * 100}%"></div>`).join('');
+  $('#perDay').innerHTML = days.some(([,v])=>v>0)?days.map(([k, v]) => `<div title="${k}: ${v} Runs" style="height:${v / maxR * 100}%;opacity:${v?'.75':'.15'}"></div>`).join(''):'<div class="activity-empty">Keine Runs in diesem Zeitraum.</div>';
   $('#perDayLbl').textContent = `${days.reduce((n,d)=>n+d[1],0)} Runs an ${days.filter(d=>d[1]>0).length} aktiven Tagen · ${days[0][0]} – ${days[29][0]}`;
 }
 
