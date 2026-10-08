@@ -6,9 +6,9 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 
 | | |
 |---|---|
-| **Overlay** | Kleines, transparentes Fenster über dem Spiel: Ziel mit HP-Balken, Kampfzeit, Gruppen-DPS, pro Spieler Schaden, DPS und Anteil (Klassenfarben, du bist gold umrandet), Ping und aktueller Dungeon. |
+| **Overlay** | Kleines, transparentes Fenster über dem Spiel: Ziel mit HP-Balken, Kampfzeit, Gruppen-DPS, pro Spieler Schaden, DPS und Anteil (Klassenicons/-farben, eigene Zeile hervorgehoben; Kompaktmodus mit dominanter Rate), Ping und aktueller Dungeon. |
 | **Dashboard** | `http://127.0.0.1:8787/` im Browser: Live-Meter, alle Runs mit Gruppe und Bossen, Skill-Aufschlüsselung pro Kampf (Krit/Rücken/Perfekt), Statistiken. |
-| **Statistik** | **Top 5 Mitspieler**, mit denen du am häufigsten in Expeditionen warst, Runs pro Dungeon mit Bestzeit, deine beste DPS pro Boss, Aktivität der letzten 30 Tage. |
+| **Statistik** | Persönlicher Boss-Verlauf mit Versuchsauswahl, vergleichbarer Leistungseinordnung und Konstanz; **Top 5 Mitspieler**, mit denen du am häufigsten in Expeditionen warst, Runs pro Dungeon mit Bestzeit, deine beste DPS pro Boss, Aktivität der letzten 30 Tage. |
 | **Datenbank** | `~/.local/share/aion2-meter/meter.db` (SQLite). Ein Run beginnt beim Betreten einer Instanz und endet beim Verlassen. |
 
 Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
@@ -22,6 +22,8 @@ Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regu
 Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKILL_CATALOG.md) · [Abnahmematrix dieser Erweiterung](docs/RELEASE_REVIEW_SKILL_CATALOG.md).
 
 [Übersichtlichere Statistik und Schadensverläufe](docs/STATISTICS_QOL.md): Gruppe oder Spieler, DPS oder Gesamtschaden, 5-Sekunden-Glättung, bedienbare Zeit-/Versuchsauswahl und Bosskennzahlen.
+
+[Premium Combat Experience und technische Abnahmematrix](docs/PREMIUM-UX-ACCEPTANCE.md): eigene Leistung/Rang zuerst, anklickbare beobachtete 5s-Peaks, Treffer/Ticks im gewählten Fenster, persönliche Boss-Einordnung und das bestehende native Overlay mit 312-Pixel-Kompaktmodus. Dashboard und natives Fenster laufen weiterhin parallel.
 
 **Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 

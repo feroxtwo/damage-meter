@@ -31,9 +31,27 @@ pub fn check_x11_dependencies() -> anyhow::Result<()> {
 pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
-const ROW: f32 = 26.0;
+const ROW: f32 = 32.0;
 fn row_height(compact: bool) -> f32 {
     if compact { 22.0 } else { ROW }
+}
+fn overlay_width(compact: bool) -> f32 {
+    if compact { 312.0 } else { WIDTH }
+}
+fn header_height(compact: bool) -> f32 {
+    if compact { 36.0 } else { HEADER }
+}
+fn footer_height(compact: bool) -> f32 {
+    if compact { 20.0 } else { FOOTER }
+}
+fn overlay_size(compact: bool, rows: usize) -> Vec2 {
+    Vec2::new(
+        overlay_width(compact),
+        header_height(compact)
+            + footer_height(compact)
+            + row_height(compact) * rows.max(1) as f32
+            + 4.0,
+    )
 }
 fn palette(theme: &str) -> ([u8; 3], [u8; 3], [u8; 3]) {
     match theme {
@@ -53,6 +71,8 @@ pub struct Overlay {
     last_position: Option<[f32; 2]>,
     last_scale: f32,
     class_icons: std::collections::HashMap<String, egui::TextureHandle>,
+    #[cfg(debug_assertions)]
+    fixture: Option<Live>,
 }
 
 fn masked(name: &str) -> String {
@@ -67,6 +87,88 @@ fn with_alpha(c: [u8; 3], a: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(c[0], c[1], c[2], a)
 }
 
+/// A short shadow keeps foreground text readable over bright game scenes.
+fn shadow_text(
+    p: &egui::Painter,
+    pos: Pos2,
+    align: Align2,
+    text: impl ToString,
+    font: FontId,
+    color: Color32,
+) {
+    let text = text.to_string();
+    p.text(
+        pos + Vec2::new(0.0, 1.0),
+        align,
+        &text,
+        font.clone(),
+        Color32::from_black_alpha(240),
+    );
+    p.text(pos, align, text, font, color);
+}
+
+/// Single-line text that ends in "…" instead of being cut mid-glyph.
+fn shadow_text_elided(
+    p: &egui::Painter,
+    left_center: Pos2,
+    text: String,
+    font: FontId,
+    color: Color32,
+    max_width: f32,
+) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_width.max(0.0));
+    let galley = p.layout_job(job);
+    let pos = left_center - Vec2::new(0.0, galley.size().y / 2.0);
+    p.galley_with_override_text_color(
+        pos + Vec2::new(0.0, 1.0),
+        galley.clone(),
+        Color32::from_black_alpha(240),
+    );
+    p.galley(pos, galley, color);
+}
+
+// Debug-only visual QA input; no packet/API injection and absent from release builds.
+#[cfg(debug_assertions)]
+fn native_fixture() -> Option<Live> {
+    let path = std::env::var_os("A2M_NATIVE_FIXTURE")?;
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() > 1024 * 1024 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let mut live = Live {
+        target_name: "SYNTHETISCH · Kargos".into(),
+        target_hp: Some(0.38),
+        dungeon: "Synthetischer Hornbau".into(),
+        battle_time_ms: 90_000,
+        ping_ms: Some(42),
+        ..Default::default()
+    };
+    live.capture.permission = true;
+    live.capture.game_running = true;
+    live.capture.locked_port = Some(13328);
+    for (i, r) in v.get("rows")?.as_array()?.iter().take(24).enumerate() {
+        let class = crate::names::class_info(r.get("job")?.as_str()?);
+        let damage = r.get("damage")?.as_f64()?.clamp(0.0, 1e15);
+        live.rows.push(crate::engine::LiveRow {
+            id: i as i32 + 1,
+            name: r.get("name")?.as_str()?.chars().take(100).collect(),
+            class_key: class.key,
+            class_name: class.name,
+            color: class.color,
+            damage,
+            dps: damage / 90.0,
+            heal: damage / 5.0,
+            hps: damage / 450.0,
+            is_self: i == 0,
+            dead: i == 3,
+            ..Default::default()
+        });
+    }
+    Some(live)
+}
+
 impl Overlay {
     pub fn new(engine: Arc<Engine>, web_url: String) -> Self {
         let last_position = engine.overlay.read().position;
@@ -78,6 +180,8 @@ impl Overlay {
             last_size: Vec2::ZERO,
             last_scale: 0.0,
             class_icons: Default::default(),
+            #[cfg(debug_assertions)]
+            fixture: native_fixture(),
         }
     }
 
@@ -88,7 +192,7 @@ impl Overlay {
                 .with_app_id(APP_ID)
                 .with_position(self.engine.overlay.read().position.unwrap_or([40.0, 40.0]))
                 .with_inner_size([WIDTH, HEADER + FOOTER + ROW * 2.0])
-                .with_min_inner_size([200.0, 60.0])
+                .with_min_inner_size([160.0, 48.0])
                 .with_decorations(false)
                 .with_transparent(true)
                 .with_always_on_top()
@@ -118,89 +222,81 @@ impl Overlay {
     }
 
     fn header(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
-        let (rect, resp) =
-            ui.allocate_exact_size(Vec2::new(width, HEADER), Sense::click_and_drag());
+        let settings = self.engine.overlay.read().clone();
+        let (rect, resp) = ui.allocate_exact_size(
+            Vec2::new(width, header_height(settings.compact)),
+            Sense::click_and_drag(),
+        );
         let p = ui.painter();
         p.rect_filled(
             rect,
-            CornerRadius {
-                nw: 8,
-                ne: 8,
-                sw: 0,
-                se: 0,
-            },
-            with_alpha(
-                palette(&self.engine.overlay.read().theme).1,
-                bg.saturating_add(40),
-            ),
+            6,
+            with_alpha(palette(&settings.theme).1, bg.saturating_add(40)),
         );
-
-        let mut title = if live.target_name.is_empty() {
-            "Kein Ziel".to_string()
+        let title = if live.target_name.is_empty() {
+            "Kein Ziel"
         } else {
-            live.target_name.clone()
+            &live.target_name
         };
-        let metric = self.engine.overlay.read().metric.clone();
-        if metric != "damage" {
-            title = format!(
-                "{} · {}",
-                if metric == "heal" {
-                    "Heilung"
-                } else {
-                    "Erlitten"
-                },
-                title
-            );
-        }
         let time = duration(live.battle_time_ms);
-        let total: f64 = live
-            .rows
-            .iter()
-            .fold(0.0, |sum, r| sum + metric_value(r, &metric));
-        let dps_total = total * 1000.0 / live.battle_time_ms.max(1000) as f64;
-        let right = format!("{time}  ·  {}/s", short_number(dps_total));
-        let right_width = p
-            .layout_no_wrap(right.clone(), FontId::monospace(12.0), Color32::WHITE)
-            .size()
-            .x;
         let mut title_rect = rect;
-        title_rect.set_right((rect.right() - right_width - 20.0).max(rect.left()));
-        p.with_clip_rect(title_rect).text(
-            rect.left_top() + Vec2::new(8.0, 4.0),
+        title_rect.set_right(rect.right() - 50.0);
+        shadow_text(
+            &p.with_clip_rect(title_rect),
+            rect.left_top() + Vec2::new(8.0, 3.0),
             Align2::LEFT_TOP,
             title,
-            FontId::proportional(13.5),
-            with_alpha(palette(&self.engine.overlay.read().theme).2, 255),
+            FontId::proportional(12.5),
+            with_alpha(palette(&settings.theme).2, 255),
         );
-        p.text(
-            rect.right_top() + Vec2::new(-8.0, 4.0),
+        shadow_text(
+            p,
+            rect.right_top() + Vec2::new(-8.0, 3.0),
             Align2::RIGHT_TOP,
-            right,
+            time,
             FontId::monospace(12.0),
-            Color32::from_gray(210),
+            Color32::WHITE,
         );
-
-        // Boss HP
-        let bar = Rect::from_min_size(
-            rect.left_top() + Vec2::new(8.0, 24.0),
-            Vec2::new(width - 16.0, 8.0),
+        let total = live
+            .rows
+            .iter()
+            .map(|r| metric_value(r, &settings.metric))
+            .sum::<f64>();
+        let rate = total * 1000.0 / live.battle_time_ms.max(1000) as f64;
+        let label = match settings.metric.as_str() {
+            "heal" => "HPS",
+            "damage_received" => "Erlitten/s",
+            _ => "DPS",
+        };
+        shadow_text(
+            p,
+            rect.left_top() + Vec2::new(8.0, 19.0),
+            Align2::LEFT_TOP,
+            format!("Gruppe  {} {label}", short_number(rate)),
+            FontId::proportional(10.0),
+            Color32::from_gray(205),
         );
-        p.rect_filled(bar, 3, Color32::from_black_alpha(160));
         if let Some(hp) = live.target_hp {
-            let mut fill = bar;
-            fill.set_width(bar.width() * hp as f32);
-            p.rect_filled(fill, 3, Color32::from_rgb(196, 52, 52));
-            p.text(
-                bar.center(),
-                Align2::CENTER_CENTER,
+            shadow_text(
+                p,
+                rect.right_top() + Vec2::new(-8.0, 19.0),
+                Align2::RIGHT_TOP,
                 format!(
-                    "{}{:.1}%",
+                    "{}{} % HP",
                     if live.hp_estimated { "~" } else { "" },
-                    hp * 100.0
+                    format!("{:.1}", hp * 100.0).replace('.', ",")
                 ),
-                FontId::proportional(9.0),
-                Color32::WHITE,
+                FontId::proportional(10.0),
+                Color32::from_gray(220),
             );
+            let bar = Rect::from_min_size(
+                rect.left_bottom() + Vec2::new(8.0, -3.0),
+                Vec2::new(width - 16.0, 2.0),
+            );
+            p.rect_filled(bar, 1, Color32::from_black_alpha(160));
+            let mut fill = bar;
+            fill.set_width(bar.width() * hp.clamp(0.0, 1.0) as f32);
+            p.rect_filled(fill, 1, Color32::from_rgb(238, 104, 116));
         }
 
         // Ask for the move on the press itself, while that press is the
@@ -308,17 +404,42 @@ impl Overlay {
                     .spawn();
             }
             let p = ui.painter();
-            let inner = rect.shrink2(Vec2::new(4.0, 1.5));
-            p.rect_filled(inner, 3, Color32::from_black_alpha(90));
-            let mut fill = inner;
-            fill.set_width(inner.width() * (value / top).clamp(0.0, 1.0) as f32);
-            p.rect_filled(fill, 3, with_alpha(row.color, 115));
+            let inner = rect.shrink2(Vec2::new(4.0, 1.0));
+            p.rect_filled(
+                inner,
+                3,
+                Color32::from_black_alpha(if row.is_self { 155 } else { 110 }),
+            );
+            let track = Rect::from_min_size(
+                inner.left_bottom() - Vec2::new(0.0, 2.0),
+                Vec2::new(inner.width(), 2.0),
+            );
+            p.rect_filled(track, 1, Color32::from_black_alpha(160));
+            let mut fill = track;
+            fill.set_width(track.width() * (value / top).clamp(0.0, 1.0) as f32);
+            p.rect_filled(
+                fill,
+                1,
+                with_alpha(row.color, if row.dead { 100 } else { 220 }),
+            );
             if row.is_self {
+                // Own row: accent edge plus outline, independent of the class colour.
+                let accent = with_alpha(palette(&settings.theme).2, 235);
                 p.rect_stroke(
                     inner,
                     3,
-                    Stroke::new(1.0_f32, Color32::from_rgb(255, 215, 120)),
+                    Stroke::new(1.0_f32, with_alpha(palette(&settings.theme).2, 190)),
                     StrokeKind::Inside,
+                );
+                p.rect_filled(
+                    Rect::from_min_size(inner.left_top(), Vec2::new(3.0, inner.height())),
+                    CornerRadius {
+                        nw: 3,
+                        sw: 3,
+                        ne: 0,
+                        se: 0,
+                    },
+                    accent,
                 );
             }
             let name = if hide_names && !row.is_self {
@@ -326,59 +447,120 @@ impl Overlay {
             } else {
                 row.name.clone()
             };
-            let right = if show_dps {
-                format!(
-                    "{}  {}/s  {:>3.0}%",
-                    short_number(value),
-                    short_number(rate),
-                    value * 100.0 / total
-                )
+            response.on_hover_text(format!(
+                "{}. {}\n{} gesamt · {}/s · {:.1}%{}",
+                i + 1,
+                name,
+                short_number(value),
+                short_number(rate),
+                value * 100.0 / total,
+                if row.dead { "\nTod erfasst" } else { "" },
+            ));
+            let primary = if show_dps {
+                format!("{}/s", short_number(rate))
             } else {
-                format!("{}  {:>3.0}%", short_number(value), value * 100.0 / total)
+                short_number(value)
             };
-            let font = FontId::proportional(12.5);
+            let share = format!("{:0.0}%", value * 100.0 / total);
+            let primary_font = FontId::proportional(14.0);
+            let primary_width = p
+                .layout_no_wrap(primary.clone(), primary_font.clone(), Color32::WHITE)
+                .size()
+                .x;
+            let primary_x = inner.right() - if settings.compact { 35.0 } else { 6.0 };
+            let secondary = if settings.compact {
+                share.clone()
+            } else if show_dps {
+                format!("{}  ·  {share}", short_number(value))
+            } else {
+                share.clone()
+            };
+            let secondary_font = FontId::proportional(9.0);
+            let secondary_width = p
+                .layout_no_wrap(secondary.clone(), secondary_font.clone(), Color32::WHITE)
+                .size()
+                .x;
+            // Numbers own the right side; the name ends with "…" before the wider of them.
+            let numbers_left = if settings.compact {
+                primary_x - primary_width
+            } else {
+                (primary_x - primary_width).min(inner.right() - 6.0 - secondary_width)
+            };
+            let color = if row.dead {
+                Color32::from_gray(155)
+            } else {
+                Color32::WHITE
+            };
+            shadow_text(
+                p,
+                inner.left_center() + Vec2::new(6.0, -1.0),
+                Align2::LEFT_CENTER,
+                (i + 1).to_string(),
+                FontId::monospace(10.0),
+                Color32::from_gray(190),
+            );
             let icon = self.class_icons.get(row.class_key);
             if let Some(texture) = icon {
                 let icon_rect = Rect::from_center_size(
-                    inner.left_center() + Vec2::new(14.0, 0.0),
-                    Vec2::splat(18.0),
+                    inner.left_center() + Vec2::new(30.0, -1.0),
+                    Vec2::splat(if settings.compact { 16.0 } else { 18.0 }),
                 );
                 p.image(
                     texture.id(),
                     icon_rect,
                     Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                    Color32::WHITE,
+                    color,
                 );
             }
-            let mut name_rect = inner;
-            let right_width = p
-                .layout_no_wrap(right.clone(), FontId::monospace(11.5), Color32::WHITE)
-                .size()
-                .x;
-            name_rect.set_right((inner.right() - right_width - 16.0).max(inner.left()));
-            p.with_clip_rect(name_rect).text(
-                inner.left_center() + Vec2::new(if icon.is_some() { 28.0 } else { 6.0 }, 0.0),
-                Align2::LEFT_CENTER,
-                format!("{}. {}{}", i + 1, if row.dead { "† " } else { "" }, name),
-                font.clone(),
-                if row.dead {
-                    Color32::from_gray(170)
-                } else {
-                    Color32::WHITE
-                },
+            let name_x = inner.left() + if icon.is_some() { 42.0 } else { 23.0 };
+            shadow_text_elided(
+                p,
+                Pos2::new(name_x, inner.center().y - 1.0),
+                format!("{}{}", if row.dead { "† " } else { "" }, name),
+                FontId::proportional(12.0),
+                color,
+                numbers_left - 8.0 - name_x,
             );
-            p.text(
-                inner.right_center() - Vec2::new(6.0, 0.0),
+            let y = if settings.compact {
+                inner.center().y - 1.0
+            } else {
+                inner.top() + 9.0
+            };
+            shadow_text(
+                p,
+                Pos2::new(primary_x, y),
                 Align2::RIGHT_CENTER,
-                right,
-                FontId::monospace(11.5),
-                Color32::WHITE,
+                primary,
+                primary_font,
+                color,
             );
+            if settings.compact {
+                shadow_text(
+                    p,
+                    inner.right_center() + Vec2::new(-5.0, -1.0),
+                    Align2::RIGHT_CENTER,
+                    secondary,
+                    secondary_font,
+                    Color32::from_gray(185),
+                );
+            } else {
+                shadow_text(
+                    p,
+                    inner.right_bottom() + Vec2::new(-6.0, -4.0),
+                    Align2::RIGHT_BOTTOM,
+                    secondary,
+                    secondary_font,
+                    Color32::from_gray(185),
+                );
+            }
         }
     }
 
     fn footer(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, FOOTER), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(
+            Vec2::new(width, footer_height(live.overlay.compact)),
+            Sense::click(),
+        );
         let p = ui.painter();
         p.rect_filled(
             rect,
@@ -405,7 +587,14 @@ impl Overlay {
                 "keine Capture-Berechtigung".to_string(),
             )
         } else if c.locked_port.is_some() {
-            (Color32::from_rgb(80, 200, 100), live.dungeon.clone())
+            (
+                Color32::from_rgb(80, 200, 100),
+                if live.dungeon.is_empty() {
+                    "Verbunden".to_string()
+                } else {
+                    live.dungeon.clone()
+                },
+            )
         } else if c.game_running {
             (
                 Color32::from_rgb(230, 180, 60),
@@ -420,7 +609,7 @@ impl Overlay {
         p.with_clip_rect(state_rect).text(
             rect.left_center() + Vec2::new(18.0, 0.0),
             Align2::LEFT_CENTER,
-            state,
+            state.clone(),
             FontId::proportional(10.5),
             Color32::from_gray(200),
         );
@@ -481,7 +670,7 @@ impl Overlay {
             FontId::monospace(10.5),
             Color32::from_gray(200),
         );
-        resp.context_menu(|ui| self.menu(ui));
+        resp.on_hover_text(state).context_menu(|ui| self.menu(ui));
     }
 }
 
@@ -599,6 +788,10 @@ impl eframe::App for Overlay {
             }
         }
         let mut live = self.engine.live();
+        #[cfg(debug_assertions)]
+        if let Some(fixture) = &self.fixture {
+            live = fixture.clone();
+        }
         live.overlay = self.engine.overlay.read().clone();
         let settings = live.overlay.clone();
         ctx.set_zoom_factor(settings.scale.clamp(0.6, 2.5));
@@ -610,10 +803,8 @@ impl eframe::App for Overlay {
         }
 
         let rows = live.rows.len().min(settings.max_rows);
-        let size = Vec2::new(
-            WIDTH,
-            HEADER + FOOTER + row_height(settings.compact) * rows.max(1) as f32 + 4.0,
-        );
+        let size = overlay_size(settings.compact, rows);
+        let width = size.x;
         if size != self.last_size || applied_scale != self.last_scale {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
             self.last_size = size;
@@ -631,10 +822,10 @@ impl eframe::App for Overlay {
                 let full = Rect::from_min_size(Pos2::ZERO, size);
                 ui.painter()
                     .rect_filled(full, 8, with_alpha(palette(&settings.theme).0, bg));
-                self.header(ui, &live, WIDTH, bg);
+                self.header(ui, &live, width, bg);
                 if live.rows.is_empty() {
                     let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(WIDTH, row_height(settings.compact)),
+                        Vec2::new(width, row_height(settings.compact)),
                         Sense::hover(),
                     );
                     ui.painter().text(
@@ -648,20 +839,36 @@ impl eframe::App for Overlay {
                     self.rows(
                         ui,
                         &live,
-                        WIDTH,
+                        width,
                         settings.max_rows,
                         settings.show_dps,
                         settings.hide_names,
                     );
                 }
                 ui.add_space(4.0);
-                self.footer(ui, &live, WIDTH, bg);
+                self.footer(ui, &live, width, bg);
             });
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compact_geometry_keeps_a_single_window_small() {
+        assert_eq!(
+            super::overlay_size(true, 0),
+            eframe::egui::vec2(312.0, 82.0)
+        );
+        assert_eq!(
+            super::overlay_size(true, 5),
+            eframe::egui::vec2(312.0, 170.0)
+        );
+        assert_eq!(
+            super::overlay_size(false, 5),
+            eframe::egui::vec2(360.0, 226.0)
+        );
+    }
+
     #[test]
     fn masks_names() {
         assert_eq!(super::masked("Mirco"), "M***o");

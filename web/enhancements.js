@@ -1,4 +1,73 @@
 // Local combat analysis and QoL. No upload service or third-party assets.
+// Insights use stored observations, never infer casts, effective healing or kill success.
+function observedPeak(f,actor=null) {
+  if(f.numeric_limited)return null;
+  const points=f.analytics?.points||[],resolution=Math.max(1,Number(f.analytics?.resolution_ms)||500);
+  if(!points.length)return null;
+  const total=p=>actor==null?Object.values(p.damage||{}).reduce((n,v)=>n+Number(v),0):Number(p.damage?.[actor]||0);
+  const samples=f.analytics.partial?points:[{ms:0,damage:{}},...points];
+  let base=0,validFrom=0,best=null;
+  for(let i=1;i<samples.length;i++) {
+    const p=samples[i],prev=samples[i-1];
+    if(!Number.isFinite(total(p))||!Number.isFinite(total(prev))||p.ms<=prev.ms||p.ms-prev.ms>resolution*3||total(p)<total(prev))validFrom=i;
+    base=Math.max(base,validFrom);
+    while(base+1<i&&samples[base+1].ms<=p.ms-5000)base++;
+    const start=samples[base],span=p.ms-start.ms;
+    if(span<5000||span>5000+resolution||base<validFrom)continue;
+    const dps=(total(p)-total(start))*1000/span;
+    if(Number.isFinite(dps)&&dps>0&&(!best||dps>best.dps))best={dps,start:start.ms,end:p.ms,partial:!!f.analytics.partial};
+  }
+  return best;
+}
+function windowHits(f,actor,start,end) {
+  const players=(f.players||[]).filter(p=>actor==null||String(p.actor_id)===String(actor));
+  const hits=[];let available=false;
+  for(const p of players)for(const s of p.skills||[]) {
+    if(!Array.isArray(s.hit_timestamps))continue;
+    available=true;const count=s.hit_timestamps.reduce((n,t)=>n+(t>start&&t<=end?1:0),0);
+    if(count)hits.push({player:p.name,skill:s,count});
+  }
+  return {available,hits:hits.sort((a,b)=>b.count-a.count)};
+}
+function knownClassJob(job) {
+  return ['검성','수호성','궁성','살성','마도성','치유성','정령성','호법성','권성','gladiator','templar','ranger','assassin','sorcerer','cleric','elementalist','chanter','fighter'].includes(job);
+}
+function bossPerformance(attempts,characterSelected) {
+  if(!characterSelected)return {hint:'Für persönliche Einordnung oben einen Charakter wählen.'};
+  if(attempts.length<3)return {hint:'Mindestens drei vergleichbare Versuche für eine persönliche Einordnung nötig.'};
+  const last=attempts.at(-1);
+  if(!knownClassJob(last.job)||attempts.some(p=>p.job!==last.job||!Number.isFinite(p.dps)||p.dps<0||![false,0].includes(p.numeric_limited)))return {hint:'Die Einordnung braucht verlässliche Werte derselben Klasse im ausgewählten Ausschnitt.'};
+  const previous=attempts.slice(0,-1),mean=previous.reduce((n,p)=>n+p.dps,0)/previous.length;
+  const allMean=attempts.reduce((n,p)=>n+p.dps,0)/attempts.length,best=Math.max(...attempts.map(p=>p.dps));
+  const rank=1+attempts.filter(p=>p.dps>last.dps).length;
+  return {count:attempts.length,rank,previousMean:mean,gap:best>0?(best-last.dps)*100/best:null,change:mean>0?(last.dps-mean)*100/mean:null,
+    deviation:allMean>0?attempts.reduce((n,p)=>n+Math.abs(p.dps-allMean),0)/attempts.length/allMean*100:null};
+}
+// One summary row: the plain values, and the comparison only when it is reliable.
+function bossStory(attempts,characterSelected) {
+  const v=bossPerformance(attempts,characterSelected),percent=n=>Math.abs(n).toFixed(1).replace('.',',')+' %';
+  const last=attempts.at(-1),best=Math.max(...attempts.map(p=>p.dps)),mean=attempts.reduce((n,p)=>n+p.dps,0)/attempts.length;
+  const cell=(value,label,cls='')=>`<div${cls?` class="${cls}"`:''}><strong>${value}</strong><span>${label}</span></div>`;
+  if(v.hint)return {hint:v.hint,summary:cell(num(last.dps)+' DPS','Letzter Versuch')+cell(num(best)+' DPS','Bestwert im Ausschnitt')+cell(num(mean)+' DPS','Ø pro Versuch')+cell(attempts.length,'Versuche im Ausschnitt')};
+  return {hint:'',summary:cell(num(last.dps)+' DPS',`Letzter Versuch · Rang ${v.rank} von ${v.count}`,'trend-lead')
+    +cell(v.change==null?'—':`<b class="${v.change>=0?'compare-positive':'compare-negative'}">${v.change>=0?'+':'−'}${percent(v.change)}</b>`,`zum Ø der ${v.count-1} vorherigen Versuche (${num(v.previousMean)} DPS)`)
+    +cell(num(best)+' DPS','Bestwert im Ausschnitt · '+(v.gap?`letzter ${percent(v.gap)} darunter`:'letzter Versuch'))
+    +cell(num(mean)+' DPS',`Ø aller ${v.count} Versuche · Schwankung ±${v.deviation==null?'—':percent(v.deviation)}`)};
+}
+function fightStory(f) {
+  if(f.numeric_limited)return '';
+  const me=f.players.find(p=>p.is_self),actor=me?.actor_id??null,peak=observedPeak(f,actor);
+  const top=me?.skills?.reduce((a,b)=>Number(b.damage)>Number(a?.damage||0)?b:a,null);
+  const rank=me?1+f.players.filter(p=>Number(p.damage)>Number(me.damage)).length:0;
+  const parts=[];
+  if(peak)parts.push(`<div><strong><button type="button" class="story-link" data-story-peak title="Dieses Fenster im Schadensverlauf anzeigen">${num(peak.dps)} DPS ↗</button></strong><span>Stärkstes beobachtetes 5s-Fenster${peak.partial?' im Ausschnitt':''} · ${dur(peak.start)}–${dur(peak.end)}</span></div>`);
+  if(top&&me.damage>0&&top.damage>0&&top.damage<=me.damage)parts.push(`<div><strong>${skillLabel(top)}</strong><span>${pct(top.damage*100/me.damage)} deines Schadens${top.is_dot?' · DoT':''}</span></div>`);
+  if(!parts.length)return '';
+  // The lead cell carries your own result, so the story starts with data instead of a label.
+  const lead=me?`<strong>${num(me.dps)} DPS</strong><small>Deine DPS · Rang ${rank} von ${f.players.length}${me.share!=null?' · '+pct(me.share)+' Anteil':''}</small>`:`<strong>Gruppenleistung</strong><small>Kein eigener Charakter in diesem Kampf erfasst</small>`;
+  return `<div class="performance-story fight-story" aria-label="Kampfzusammenfassung"><div class="story-intro"><span class="eyebrow">Kampf im Fokus</span>${lead}</div>${parts.join('')}</div>`;
+}
+
 const FIGHT_PAGE = 10;
 let detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
@@ -31,6 +100,9 @@ function renderLiveMetrics(l) {
   for(const [id,value] of [['groupDps',dps],['selfDps',rows.find(r=>r.is_self)?.dps||0],['totalDamage',total]]) {
     $('#'+id).textContent=num(value);$('#'+id).title=Number(value).toLocaleString('de-DE',{maximumFractionDigits:2});
   }
+  const me=rows.find(r=>r.is_self);
+  $('#selfRank').textContent=me?'#'+(rows.indexOf(me)+1):'—';
+  $('#selfContext').textContent=me?pct(me.share)+' Anteil · '+rows.length+' Spieler':'Warte auf eigene Kampfdaten';
   $('#selfBurst').hidden=metric!=='damage';
 }
 function updateLiveRows(l) {
@@ -269,18 +341,21 @@ function fightChartControls(f) {
     <label>Wert <select id="fightChartMetric"><option value="dps">DPS</option><option value="total">Gesamtschaden</option></select></label>
     <label>Glättung <select id="fightChartWindow"><option value="5000">5 Sekunden</option><option value="0">Einzelne Intervalle</option></select></label></div>
     <p class="analysis-note" data-curve-note></p><div class="chart-legend" data-curve-legend></div><div data-curve-plot></div>
-    <label class="curve-scrubber">Zeitpunkt <input type="range" data-curve-range min="0" max="0" value="0" aria-label="Zeitpunkt im Schadensverlauf"></label><div class="curve-readout" data-curve-readout></div></div>`;
+    <label class="curve-scrubber">Zeitpunkt <input type="range" data-curve-range min="0" max="0" value="0" aria-label="Zeitpunkt im Schadensverlauf"></label><div class="curve-readout" data-curve-readout></div><div class="curve-actions"><button class="btn" data-curve-peak disabled>Stärkstes 5s-Fenster</button><button class="btn" data-curve-hits disabled>Treffer im Zeitfenster</button></div><div data-curve-detail class="curve-detail"></div></div>`;
 }
 function bindFightChart(f) {
   const root=$('#fightDamageChart');if(!root)return;
   const scope=$('#fightChartScope'),metric=$('#fightChartMetric'),smooth=$('#fightChartWindow'),hidden=new Set();
-  let selected=-1;
+  let selected=-1,peakActive=false;
   function render() {
     const unit=metric.value==='total'?'Schaden':'DPS',windowMs=Number(smooth.value),all=scope.value==='players';
     smooth.disabled=metric.value==='total';
     const actors=all?f.players:scope.value==='group'?[{actor_id:null,name:'Gesamte Gruppe'}]:f.players.filter(p=>String(p.actor_id)===scope.value);
     const samples=actors.map(p=>damageSamples(f,p.actor_id,windowMs));
-    const points=samples[0]||[];
+    const points=samples[0]||[],peak=observedPeak(f,all||scope.value==='group'?null:Number(scope.value));
+    const peakButton=root.querySelector('[data-curve-peak]'),hitsButton=root.querySelector('[data-curve-hits]'),detail=root.querySelector('[data-curve-detail]');
+    peakButton.disabled=!peak;hitsButton.disabled=!points.length;detail.replaceChildren();
+    let interval=null;
     const series=actors.map((p,i)=>({name:p.name,color:all?chartColors[i%chartColors.length]:'var(--accent)',value:(_,j)=>samples[i][j][metric.value==='total'?'total':'dps']}));
     const visible=series.filter((_,i)=>!all||!hidden.has(i));
     root.querySelector('[data-curve-note]').textContent=metric.value==='total'?'Gespeicherter Gesamtschaden bis zum gewählten Zeitpunkt.':windowMs?'DPS im gleitenden 5-Sekunden-Fenster, gerundet auf gespeicherte Beobachtungen; am Anfang über die bereits beobachtete Zeit.':'DPS je gespeichertem Beobachtungsintervall.';
@@ -301,16 +376,38 @@ function bindFightChart(f) {
       const svg=plot.querySelector('svg'),line=plot.querySelector('.curve-cross');
       if(line){const W=svg.viewBox.baseVal.width,end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),x=58+point.ms/end*(W-76);line.setAttribute('x1',x);line.setAttribute('x2',x);}
     };
-    show(selected<0?points.length-1:selected);range.oninput=()=>show(Number(range.value));
+    const clearInterval=()=>{interval=null;peakActive=false;plot.querySelector('[data-curve-highlight]')?.remove();detail.replaceChildren();};
+    show(selected<0?points.length-1:selected);range.oninput=()=>{clearInterval();show(Number(range.value));};
+    peakButton.textContent=all||scope.value==='group'?'Stärkstes Gruppen-5s-Fenster':'Stärkstes 5s-Fenster';
+    peakButton.onclick=()=>{
+      if(!peak)return;clearInterval();interval=peak;peakActive=true;
+      show(points.reduce((best,p,i)=>Math.abs(p.ms-peak.end)<Math.abs(points[best].ms-peak.end)?i:best,0));
+      const svg=plot.querySelector('svg');
+      if(svg){const W=svg.viewBox.baseVal.width,end=Math.max(1000,f.duration_ms||0,points.at(-1).ms),band=document.createElementNS('http://www.w3.org/2000/svg','rect');
+        band.setAttribute('data-curve-highlight','');band.setAttribute('x',58+peak.start/end*(W-76));band.setAttribute('y',26);band.setAttribute('width',(peak.end-peak.start)/end*(W-76));band.setAttribute('height',180);svg.insertBefore(band,svg.firstChild);}
+      detail.textContent=`${num(peak.dps)} beobachtete DPS · ${(peak.start/1000).toLocaleString('de-DE')}–${(peak.end/1000).toLocaleString('de-DE')} s${peak.partial?' · gespeicherter Ausschnitt':''}`;
+    };
+    hitsButton.onclick=()=>{
+      const end=interval?.end??points[selected]?.ms,start=interval?.start??Math.max(0,end-5000),actor=all||scope.value==='group'?null:Number(scope.value),v=windowHits(f,actor,start,end);
+      detail.innerHTML=`<h4>Beobachtete Treffer · ${(start/1000).toLocaleString('de-DE')}–${(end/1000).toLocaleString('de-DE')} s</h4><p class="analysis-note">Treffer/Ticks, keine Casts oder Schadenszuordnung. DoT und Multihit können mehrere Ereignisse erzeugen. Fehlende oder gekürzte Zeitpunkte werden nicht ergänzt.</p>`+(v.available?(v.hits.length?`<ol class="window-hits">${v.hits.slice(0,8).map(h=>`<li><span>${skillLabel(h.skill)}${h.skill.is_dot?' · DoT':''}<small>${esc(h.player)}</small></span><strong>${h.count} Treffer/Ticks</strong></li>`).join('')}</ol>${v.hits.length>8?`<p class="analysis-note">Die 8 häufigsten Skills von ${v.hits.length} im Fenster.</p>`:''}`:'<p class="analysis-note">Keine gespeicherten Treffer in diesem Fenster. Die Aufzeichnung kann unvollständig sein.</p>'):'<p class="analysis-note">Keine Trefferzeitpunkte gespeichert.</p>');
+    };
     const hit=plot.querySelector('.curve-hit');
-    if(hit)hit.onpointermove=hit.onpointerdown=e=>{
+    // Hover only moves the crosshair; a click selects a new point and drops the marked window.
+    if(hit){hit.onpointermove=e=>{
       const r=hit.getBoundingClientRect(),end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),ms=(e.clientX-r.left)/r.width*end;
       let lo=0,hi=points.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(points[mid].ms<ms)lo=mid+1;else hi=mid;}
       if(lo>0&&ms-points[lo-1].ms<points[lo].ms-ms)lo--;show(lo);
-    };
+    };hit.onpointerdown=e=>{clearInterval();hit.onpointermove(e);};}
+    if(peakActive)peakButton.onclick();
   }
-  scope.onchange=metric.onchange=smooth.onchange=render;
+  // A resize redraw keeps the marked window; changing the view starts fresh.
+  scope.onchange=metric.onchange=smooth.onchange=()=>{peakActive=false;render();};
   root.renderCurve=render;render();
+  const storyButton=$('[data-story-peak]');
+  if(storyButton)storyButton.onclick=()=>{
+    scope.value=String(f.players.find(p=>p.is_self)?.actor_id??'group');metric.value='dps';smooth.value='5000';
+    render();root.querySelector('[data-curve-peak]').click();root.scrollIntoView({block:'nearest'});
+  };
 }
 function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';
@@ -350,6 +447,7 @@ async function openFight(id) {
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
+    ${fightStory(f)}
     <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
     ${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
@@ -400,6 +498,7 @@ $('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',
 $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
 $('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());
+if(tab==='stats')drawBoss();
 
 // One redraw per frame and only when the chart width changed; keeps hover targets stable.
 let fightChartFrame=0;

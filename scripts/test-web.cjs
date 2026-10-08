@@ -668,6 +668,84 @@ const server = http.createServer((req,res) => {
         assert.deepEqual(result.captured,{text:'Äon 11170010',inside:true,selected:'Äon 11170010'.length});assert.equal(result.ok,true);assert.equal(result.focused,true);assert.equal(result.failed,false);assert.equal(result.clean,true);assert.equal(result.focusAfterError,true);assert.equal(result.error,true);assert.match(result.message,/Zwischenablage/);
       } finally {await isolated.close();}
     });
+    await check('performance story links a complete peak window to observed skill ticks',async()=>{
+      const focused={...fight,id:'insight',duration_ms:10000,total_damage:6000,
+        players:fight.players.slice(0,2).map((p,i)=>({...p,damage:(i+1)*2000,dps:(i+1)*200,skills:[{...skill,damage:(i+1)*2000,hit_timestamps:[1000,4000,5000,9000]}]})),
+        analytics:{resolution_ms:500,partial:false,points:Array.from({length:20},(_,i)=>({ms:(i+1)*500,damage:{1:(i+1)*100,2:(i+1)*200}}))}};
+      await page.route('**/api/fights/insight',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(focused)}));
+      await page.evaluate(()=>openFight('insight'));await page.locator('[data-curve-peak]').waitFor();
+      assert.match(await page.locator('.fight-story').textContent(),/200.*5s-Fenster.*100,0%/);
+      assert.match(await page.locator('.fight-story .story-intro').textContent(),/200 DPS.*Rang 2 von 2.*47,6%/);
+      assert.ok(await page.evaluate(()=>document.querySelector('.fight-story').compareDocumentPosition(document.querySelector('.fight-tools'))&Node.DOCUMENT_POSITION_FOLLOWING),'story leads the report before export tools');
+      await page.locator('[data-story-peak]').click();assert.equal(await page.locator('#fightChartScope').inputValue(),'1');assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      // Moving the pointer over the chart or resizing must not silently drop the marked window.
+      await page.locator('[data-curve-plot] .curve-hit').hover({position:{x:40,y:40}});assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      await page.setViewportSize({width:1000,height:1000});await page.waitForFunction(()=>Math.abs(document.querySelector('#fightDamageChart').drawnWidth-document.querySelector('#fightDamageChart').clientWidth)<1);
+      assert.equal(await page.locator('[data-curve-highlight]').count(),1);await page.setViewportSize({width:1440,height:1000});
+      await page.locator('[data-curve-plot] .curve-hit').click({position:{x:40,y:40}});assert.equal(await page.locator('[data-curve-highlight]').count(),0);
+      await page.locator('[data-curve-peak]').click();
+      assert.match(await page.locator('[data-curve-readout]').textContent(),/5 s/);
+      await page.locator('[data-curve-hits]').click();assert.equal(await page.locator('.window-hits li').count(),1);
+      assert.match(await page.locator('.curve-detail').textContent(),/3 Treffer\/Ticks/);
+      await page.selectOption('#fightChartScope','1');await page.locator('[data-curve-peak]').click();await page.locator('[data-curve-hits]').click();
+      assert.equal(await page.locator('.window-hits li').count(),1);
+      await page.selectOption('#fightChartMetric','total');assert.match(await page.locator('[data-curve-readout]').textContent(),/Schaden/);
+      await page.setViewportSize({width:320,height:844});assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
+      await page.setViewportSize({width:1440,height:1000});await page.selectOption('#fightChartMetric','dps');await page.locator('[data-curve-peak]').click();
+      if(process.env.SCREENSHOT_DIR){
+        await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-peak-window.png'),fullPage:true});
+        await page.locator('#fightDialog').evaluate(e=>e.scrollTop=0);
+        await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-fight-story.png'),fullPage:true});
+      }
+      await page.locator('#closeDialog').click();await page.unroute('**/api/fights/insight');
+    });
+    await check('personal progression requires a character and a comparable class',async()=>{
+      const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',numeric_limited:0,started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
+      await page.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
+      await page.selectOption('#charSel','FeroxTOO');await page.getByRole('button',{name:'Statistik',exact:true}).click();
+      await page.waitForFunction(()=>document.querySelector('#bossSummary').textContent.includes('+100,0 %'));
+      const summary=await page.locator('#bossSummary').textContent();
+      assert.match(summary,/Rang 1 von 3/);assert.match(summary,/Ø der 2 vorherigen Versuche \(10,0K DPS\)/);assert.match(summary,/Ø aller 3 Versuche/);
+      assert.equal(await page.locator('#bossSummary > div').count(),4,'one summary row, no duplicated insight cards');
+      assert.equal(await page.locator('#bossInsights').textContent(),'');
+      await page.locator('#bossAttempt').fill('2');assert.match(await page.locator('#bossReadout').textContent(),/\+100,0 % zum vorherigen Versuch/);
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-progression.png'),fullPage:true});
+      await page.selectOption('#charSel','');await page.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('Charakter wählen'));
+      await page.unroute('**/api/stats/boss-history**');
+    });
+    await check('direct statistics reload tolerates delayed enhancement scripts',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.addInitScript(()=>localStorage.setItem('a2m-character','FeroxTOO'));
+        await isolated.route('**/enhancements.js',async route=>{await delay(600);await route.continue();});
+        await isolated.goto(base+'/#stats');await isolated.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('Mindestens drei'));
+        assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);
+        assert.equal(await isolated.locator('#toast.error').isVisible(),false);
+      } finally {await isolated.close();}
+    });
+    await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
+      await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
+      await page.waitForFunction(()=>document.querySelector('#selfRank').textContent==='#1');assert.match(await page.locator('#selfContext').textContent(),/47,6%.*3 Spieler/);
+      // Group proportions stay visible as a tinted bar, not a hairline.
+      const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,row:r.getBoundingClientRect().height,opacity:Number(getComputedStyle(f).opacity)};}));
+      assert.ok(bars.length>=3&&bars.every(b=>b.height>=b.row-1&&b.opacity>=.25),JSON.stringify(bars));
+      await page.selectOption('#liveMetric','heal');assert.equal(await page.locator('#selfBurst').isVisible(),false);assert.match(await page.locator('#selfDpsLabel').textContent(),/HPS/);
+      await page.selectOption('#liveMetric','damage');await page.emulateMedia({reducedMotion:'reduce'});
+      for(const theme of ['midnight','aether','ember']){
+        settings.theme=theme;await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,theme);
+        for(const width of [1440,320]){
+          await page.setViewportSize({width,height:1000});await page.evaluate(()=>{document.querySelector('#toast').hidden=true;scrollTo(0,0);});
+          assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+          assert.equal(await page.locator('#selfDps').evaluate(e=>getComputedStyle(e).fontVariantNumeric),'tabular-nums');
+          if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,`premium-live-${theme}-${width}.png`),fullPage:true});
+        }
+      }
+      settings.theme='midnight';await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({reducedMotion:'no-preference'});
+      const obs=await context.newPage();obs.on('pageerror',e=>errors.push(e.message));settings.compact=true;settings.show_dps=true;settings.scale=1;
+      await obs.goto(base+'/overlay');await obs.locator('#rows .row').first().waitFor();assert.equal(await obs.locator('#box').evaluate(e=>Math.round(e.getBoundingClientRect().width)),314);
+      assert.match(await obs.locator('#rows .n strong').first().textContent(),/\/s/);
+      if(process.env.SCREENSHOT_DIR)await obs.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'premium-obs.png')});await obs.close();
+    });
     assert.deepEqual(errors,[]);
     console.log(`${checks} browser checks passed.`);
   } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
