@@ -183,6 +183,7 @@ mod tests {
         assert_eq!(dungeon_label(123), "Instanz 123");
         assert_eq!(dungeon_activity(600093), Some("expedition"));
         assert_eq!(dungeon_activity(600055), Some("transcendence"));
+        assert_eq!(dungeon_activity(600163), Some("expedition"));
         assert_eq!(dungeon_activity(600999), None);
     }
 

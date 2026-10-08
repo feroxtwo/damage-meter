@@ -236,14 +236,17 @@
   },
   "600161": {
     "name": "Consumed Deus Research Base",
-    "difficulty": "exploration"
+    "difficulty": "exploration",
+    "activity": "expedition"
   },
   "600162": {
     "name": "Consumed Deus Research Base",
-    "difficulty": "normal"
+    "difficulty": "normal",
+    "activity": "expedition"
   },
   "600163": {
     "name": "Consumed Deus Research Base",
-    "difficulty": "hard"
+    "difficulty": "hard",
+    "activity": "expedition"
   }
 }
