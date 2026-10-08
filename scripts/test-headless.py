@@ -43,7 +43,8 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
                     raise AssertionError("Meter did not start")
                 time.sleep(.05)
         with urllib.request.urlopen(base, timeout=2) as response:
-            assert "Gruppen-DPS" in response.read().decode()
+            html = response.read().decode()
+            assert 'id="groupDps"' in html and 'aria-label="Live-Kennzahlen"' in html
         # Release lookup must also be guarded, so a foreign page cannot initiate it.
         request = urllib.request.Request(base + "/api/update-check", method="POST")
         try:
