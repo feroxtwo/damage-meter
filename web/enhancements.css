@@ -222,3 +222,78 @@ html[data-theme=aether] {--gold:#edc57b}
 @media(max-width:450px){.live-metrics.performance-hero.without-signal{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.live-signal figcaption span:last-child{max-width:125px;text-align:right}.training-panel>.row{grid-template-columns:1fr auto}}
 
 .training-best span{overflow-wrap:anywhere}#postFight .story-intro strong{font-size:34px}#postFight .fight-story strong{font-size:25px}
+
+/* Review pass: one performance instrument, a lane ranking and a debrief that compares. */
+.telemetry-heading {align-items:center;margin:4px 0 14px;flex-wrap:wrap}
+.telemetry-heading .live-controls {display:flex;gap:2px;margin:0;padding:0;border:0;font-size:11px}
+.telemetry-heading .live-controls .btn {background:none;border-color:transparent;color:var(--muted);font-size:11px;padding:6px 10px}
+.telemetry-heading .live-controls .btn:hover {color:var(--text);border-color:var(--line)}
+.telemetry-heading .live-controls select {font-size:11px;padding:5px 8px;background:transparent;color:var(--muted);border-color:var(--line)}
+.live-metrics.performance-hero {grid-template-columns:minmax(0,1fr) minmax(0,1.55fr) minmax(0,.55fr);gap:36px;padding:30px 0 34px;border-bottom:1px solid var(--line);margin-bottom:28px}
+.live-metrics .personal-rate .v {background:linear-gradient(180deg,var(--text) 35%,color-mix(in srgb,var(--accent) 55%,var(--text)));-webkit-background-clip:text;background-clip:text;color:transparent}
+.self-context {margin-top:10px;font-size:13px;color:var(--text)}
+.self-context strong {min-width:46px;height:30px;border:0;border-radius:3px;background:var(--gold);color:var(--bg);font-size:19px;font-weight:800;letter-spacing:-.5px}
+.share-ribbon {display:flex;gap:2px;height:8px;margin:16px 0 0;max-width:380px}
+.share-ribbon i {display:block;height:100%;min-width:2px;opacity:.38;border-radius:1px}
+.share-ribbon i.me {opacity:1;box-shadow:0 0 0 1px var(--bg),0 0 0 2px var(--gold);position:relative;z-index:1}
+.self-signal {display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-top:14px;font-size:12px}
+.self-signal .burst-pill {margin:0;font-weight:600}
+#selfGap {color:var(--muted);font-variant-numeric:tabular-nums}
+.live-signal {margin:6px 0 0}
+#liveSignal {height:170px;border-bottom-color:var(--line)}
+#liveSignal svg {height:150px}
+.signal-area {fill:url(#signalFill);stroke:none}.signal-stop-top {stop-color:var(--accent);stop-opacity:.32}.signal-stop-bottom {stop-color:var(--accent);stop-opacity:0}
+.signal-line {stroke-width:2.4}
+.signal-average {stroke:var(--gold);stroke-width:1;stroke-dasharray:4 5;opacity:.75;vector-effect:non-scaling-stroke}
+.signal-mark,.signal-dot,.signal-avg-label {position:absolute;pointer-events:none;font-variant-numeric:tabular-nums}
+.signal-mark {transform:translate(-50%,-150%);white-space:nowrap;font-size:10px;color:var(--muted);padding:2px 6px;border-radius:3px;background:color-mix(in srgb,var(--bg) 80%,transparent);border:1px solid var(--edge)}
+.signal-mark b {color:var(--text);font-size:11px}
+.signal-mark::after {content:'';position:absolute;left:50%;bottom:-7px;width:5px;height:5px;margin-left:-3px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.signal-dot {width:9px;height:9px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--text);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 45%,transparent)}
+.signal-avg-label {right:0;transform:translateY(-120%);font-size:9px;color:var(--gold);letter-spacing:.5px}
+.live-metrics .group-rate .v {color:var(--text);font-size:30px}
+.live-metrics .group-rate .total-value {font-size:22px;color:var(--muted)}
+/* Ranking lanes: rank, identity, proportional track, rate and share in one line. */
+#liveRows .bar.telemetry-row {grid-template-columns:34px minmax(150px,1.15fr) minmax(60px,2fr) minmax(92px,auto) 52px;gap:4px 16px;min-height:58px;padding:8px 14px 8px 10px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+#liveRows .bar.telemetry-row:hover {background:color-mix(in srgb,var(--panel2) 45%,transparent)}
+#liveRows .bar.telemetry-row.me {background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 11%,transparent),color-mix(in srgb,var(--gold) 3%,transparent) 70%);box-shadow:inset 3px 0 var(--gold)}
+#liveRows .bar.telemetry-row.dead {opacity:.62}
+.rank-badge {font-size:16px;text-align:left}.me .rank-badge {display:grid;place-items:center;width:30px;height:24px;border-radius:3px;background:var(--gold);color:var(--bg);font-weight:800;font-size:14px;letter-spacing:0}
+.ranking-identity em {font-style:normal;color:var(--gold);font-weight:700;letter-spacing:.5px}
+.ranking-track {grid-column:auto;height:10px;margin:0;border-radius:2px;background:color-mix(in srgb,var(--line) 45%,transparent)}
+#liveRows .bar .ranking-track .fill {height:10px;border-radius:2px;opacity:.9;background-image:linear-gradient(90deg,transparent 0,#ffffff1f 100%)!important}
+#liveRows .bar.me .ranking-track .fill {box-shadow:0 0 14px color-mix(in srgb,var(--gold) 35%,transparent)}
+.ranking-value strong {font-size:22px}.ranking-value>span {margin-top:1px}
+.ranking-share {text-align:right;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}.me .ranking-share {color:var(--gold)}
+@media(max-width:750px){#liveRows .bar.telemetry-row{grid-template-columns:30px minmax(0,1fr) auto 48px}.ranking-track{grid-column:2/-1;grid-row:2}}
+@media(max-width:450px){#liveRows .bar.telemetry-row{grid-template-columns:30px minmax(0,1fr) auto;padding:10px 6px;gap:6px 10px}.ranking-value{grid-column:3;grid-row:1;text-align:right;display:block}.ranking-share{grid-column:3;grid-row:2;font-size:11px}.ranking-track{grid-column:2/3;grid-row:2;align-self:center;height:8px}#liveRows .bar .ranking-track .fill{height:8px}.share-ribbon{max-width:none}.live-metrics.performance-hero{grid-template-columns:1fr;gap:22px}.live-metrics .group-rate{border-left:0;padding-left:0;display:grid;grid-template-columns:1fr 1fr;column-gap:16px}.live-metrics .group-rate #totalDamageLabel{margin-top:0;grid-row:1;grid-column:2}.live-metrics .group-rate .total-value{grid-row:2;grid-column:2}.telemetry-heading .live-controls{width:100%}.live-signal{grid-column:auto;grid-row:auto}}
+@media(max-width:1050px) and (min-width:451px){.live-metrics.performance-hero{grid-template-columns:1.3fr 1fr}}
+/* Fight debrief: result, personal comparison, peak with its place in the fight, top skill. */
+.fight-story {grid-template-columns:minmax(0,1.15fr) repeat(3,minmax(0,1fr));gap:28px}
+.fight-story .eyebrow {display:block;font-size:9px;letter-spacing:1.6px;color:var(--muted);margin-bottom:6px}
+.fight-story .story-intro .eyebrow {color:var(--accent)}
+.story-rank {display:inline-block;padding:1px 7px;margin-right:4px;border-radius:3px;background:var(--gold);color:var(--bg);font-weight:800}
+.fight-story .story-intro small {color:var(--text)}
+.story-compare strong {font-size:28px}.trend-up {color:var(--green)}.trend-down {color:var(--red)}
+.story-detail {font-size:11px}.story-record {font-style:normal;color:var(--gold);font-weight:700}
+.peak-spark {display:block;width:100%;height:44px;margin:6px 0 4px}.peak-line {fill:none;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke}.peak-band {fill:var(--gold);fill-opacity:.22}
+.story-meter {display:block;height:6px;margin:10px 0 4px;background:var(--line);border-radius:2px;overflow:hidden}.story-meter b {display:block;height:100%;background:var(--accent)}
+.saved-moment-head strong span {font-size:12px;font-weight:400;color:var(--muted);margin-left:10px}
+#postFight {padding:22px 26px;border-left-width:3px}
+#postFight .fight-story {grid-template-columns:minmax(0,1.15fr) repeat(3,minmax(0,1fr))}
+@media(max-width:1000px){.fight-story,#postFight .fight-story{grid-template-columns:1fr 1fr}.fight-story .story-intro{grid-column:1/-1}}
+@media(max-width:450px){.fight-story,#postFight .fight-story{grid-template-columns:1fr}.fight-story>div:not(.story-intro){border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:12px}}
+#liveSignal {margin-top:24px;height:160px}#liveSignal svg {height:160px}
+.ranking-identity b {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.fight-story>div:not(.story-intro){justify-content:flex-start}
+rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold);stroke-opacity:.55}
+.curve-peak-label {fill:var(--gold)!important;font:600 11px system-ui!important;pointer-events:none}
+.peak-spark {cursor:pointer}
+.trend-verdict {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;padding:18px 0 4px}
+.trend-verdict strong {font-size:30px;letter-spacing:-1px;font-weight:800}.trend-verdict span {color:var(--muted);font-size:13px}.trend-verdict b {color:var(--text)}
+.trend-verdict.up strong {color:var(--green)}.trend-verdict.down strong {color:var(--red)}.trend-verdict.flat strong {color:var(--text)}
+.curve-rolling {fill:none;stroke:var(--accent);stroke-width:7;stroke-opacity:.16;stroke-linecap:round;stroke-linejoin:round}
+/* Statistic counters as one quiet strip instead of six boxes. */
+#stats #kpis {gap:0;border-block:1px solid var(--line)}
+#stats #kpis .card.kpi {background:none;border:0;border-radius:0;box-shadow:none;padding:18px 20px;border-left:1px solid var(--line)}#stats #kpis .card.kpi:first-child {border-left:0;padding-left:0}
+@media(max-width:600px){#stats #kpis .card.kpi{border-left:0;border-bottom:1px solid var(--line);padding:12px 0}}
