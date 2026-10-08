@@ -593,7 +593,8 @@ const server = http.createServer((req,res) => {
         await isolated.selectOption('#activitySel','expedition');await isolated.selectOption('#contentSel','600093');
         assert.deepEqual(await isolated.locator('#bossSel option').allTextContents(),['Gesamte Expedition (1 Run)','Kargos · #100 (1 Versuch)','Kargos · #102 (1 Versuch)','Wachposten (1 Versuch)']);
         assert.match(await isolated.locator('#bossSummary').textContent(),/42,0K/);assert.match(await isolated.locator('#bossNote').textContent(),/gemeinsame erfasste Kampfzeit/);
-        await isolated.locator('#bossOpen').click();assert.match(await isolated.locator('#dialogTitle').textContent(),/Ferocious/);await isolated.locator('#closeDialog').click();
+        if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-total.png'),fullPage:true});
+        await isolated.locator('#bossOpen').click();await isolated.locator('#runDetail #backBtn').waitFor();assert.match(await isolated.locator('#runDetail').textContent(),/Ferocious/);assert.equal(await isolated.locator('#runs').evaluate(e=>e.classList.contains('active')),true);await isolated.locator('nav [data-tab="stats"]').click();await isolated.locator('#bossChart svg').waitFor();
         await isolated.selectOption('#bossSel',{label:'Kargos · #100 (1 Versuch)'});assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);
         groups.reverse();await isolated.evaluate(()=>loadBossHistory());assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);assert.equal(await isolated.locator('#contentSel').inputValue(),'600093');
         for(const width of [1440,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-'+width+'.png'),fullPage:true});}
@@ -602,11 +603,11 @@ const server = http.createServer((req,res) => {
         await isolated.selectOption('#activitySel','open_world');assert.equal(await isolated.locator('#bossSel option').count(),1);assert.match(await isolated.locator('#bossSummary').textContent(),/10,0K/);
         await isolated.selectOption('#activitySel','nightmare');assert.equal(await isolated.locator('#bossChart svg').count(),0);assert.equal(await isolated.locator('#bossOpen').isDisabled(),true);
         await isolated.selectOption('#activitySel','unclassified');if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','nightmare');
-        await isolated.selectOption('#activitySel','nightmare');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        assert.equal(await isolated.locator('#activitySel').inputValue(),'nightmare');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
         await isolated.reload();await isolated.locator('#bossChart svg').waitFor();await isolated.selectOption('#activitySel','nightmare');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
         assert.equal(groups.find(g=>g.dungeon_id===900001).activity,'unclassified','browser mapping must not alter records');
         if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','secret_dungeon');await isolated.selectOption('#activitySel','secret_dungeon');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
-        if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','');await isolated.selectOption('#activitySel','unclassified');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','');assert.equal(await isolated.locator('#activitySel').inputValue(),'unclassified');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
       } finally {await isolated.close();await page.evaluate(()=>localStorage.removeItem('a2m-activity-overrides'));}
     });
     await check('trimmed history does not invent a first-interval damage spike',async()=>{

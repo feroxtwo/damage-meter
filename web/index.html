@@ -575,7 +575,7 @@ function renderActivityMapping(b) {
   $('#activityOverride').value=activityOverrides[key]||'';
   $('#activityOverride').onchange=()=>{
     const next={...activityOverrides};if($('#activityOverride').value)next[key]=$('#activityOverride').value;else delete next[key];
-    try {localStorage.setItem('a2m-activity-overrides',JSON.stringify(next));activityOverrides=next;refreshActivityFilters();}
+    try {localStorage.setItem('a2m-activity-overrides',JSON.stringify(next));activityOverrides=next;$('#activitySel').value=next[key]||(Object.hasOwn(activityLabels,b.activity)?b.activity:'unclassified');refreshActivityFilters();}
     catch {toast('Bereichszuordnung konnte nicht gespeichert werden.',true);}
   };
 }
@@ -619,7 +619,7 @@ function drawBoss() {
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);
     const cross=$('#bossCross');cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));
-    open.disabled=isRun?!p.run_id:!p.fight_id;open.onclick=isRun?(p.run_id?()=>task(openRun(p.run_id)):null):(p.fight_id?()=>task(openFight(p.fight_id)):null);
+    open.disabled=isRun?!p.run_id:!p.fight_id;open.onclick=isRun?(p.run_id?()=>{show('runs');task(openRun(p.run_id));}:null):(p.fight_id?()=>task(openFight(p.fight_id)):null);
   };
   select(bossSelectedKey===bossKey(b)&&bossSelectedAttempt>=offset&&bossSelectedAttempt<offset+k.length?bossSelectedAttempt-offset:k.length-1);range.oninput=()=>select(Number(range.value));
   $('#bossHit').onpointermove=$('#bossHit').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();select(k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((e.clientX-r.left)/r.width*(k.length-1)))));};

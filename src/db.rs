@@ -1169,8 +1169,14 @@ impl Db {
             let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
             row["difficulty"] = json!(names::dungeon_difficulty(id));
             let mob = row["mob_code"].as_i64().unwrap_or(0) as i32;
-            let activity = row["activity"].as_str().unwrap_or("unclassified").to_string();
-            bosses.entry((boss, id, mob, activity)).or_default().push(row);
+            let activity = row["activity"]
+                .as_str()
+                .unwrap_or("unclassified")
+                .to_string();
+            bosses
+                .entry((boss, id, mob, activity))
+                .or_default()
+                .push(row);
         }
         let mut bosses: Vec<_> = bosses.into_iter().collect();
         bosses.sort_by_key(|(_, list)| std::cmp::Reverse(list.len()));
@@ -1547,7 +1553,13 @@ mod tests {
             assert_eq!(group["activity"], activity);
             assert_eq!(group["attempts"].as_array().unwrap().len(), 1);
         }
-        assert!(db.boss_history("Alt").unwrap().as_array().unwrap().is_empty());
+        assert!(
+            db.boss_history("Alt")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1589,10 +1601,19 @@ mod tests {
             .find(|p| p["is_self"] == 1)
             .unwrap();
         assert_eq!(point["dps"], me["dps"]);
-        assert!(db.run_history("Alt").unwrap().as_array().unwrap().is_empty());
+        assert!(
+            db.run_history("Alt")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         db.conn
             .lock()
-            .execute("UPDATE fights SET numeric_limited=NULL WHERE id='second'", [])
+            .execute(
+                "UPDATE fights SET numeric_limited=NULL WHERE id='second'",
+                [],
+            )
             .unwrap();
         assert!(db.run_history("Me").unwrap()[0]["attempts"][0]["numeric_limited"].is_null());
     }
