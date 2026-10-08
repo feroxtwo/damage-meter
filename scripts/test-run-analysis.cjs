@@ -51,4 +51,17 @@ assert.equal(run('runSelection(runCombatModel({})).damage'), 0);
 assert.equal(run('runSkillRows([{code:1,damage:2,hits:1,crit_rate:50},{code:1,damage:3,hits:1,crit_rate:null}],1000)[0].crit_rate'), null);
 context.unknown = {fights:[{id:'x',players:[{actor_id:1,name:'#1',damage:10}]},{id:'y',players:[{actor_id:1,name:'#1',damage:20}]}]};
 assert.equal(run('runCombatModel(unknown).players.length'),2,'generated actor aliases do not imply a stable player across fights');
+context.partial = {fights: [
+  {id: 'early', started_at: 1, duration_ms: 1000, players: [{actor_id: 7, name: 'Late', server_id: 0, job: '', damage: 100}, {actor_id: 8, name: 'Twin', server_id: 0, job: '', damage: 10}],
+    analytics: {points: [{ms: 1000, damage: {7: 100, 8: 10}}]}},
+  {id: 'later', started_at: 2, duration_ms: 1000, players: [{actor_id: 9, name: 'Late', server_id: 3, job: 'cleric', class_name: 'Kleriker', damage: 200},
+    {actor_id: 10, name: 'Twin', server_id: 1, job: 'cleric', damage: 20}, {actor_id: 11, name: 'Twin', server_id: 2, job: 'cleric', damage: 30}],
+    analytics: {points: [{ms: 1000, damage: {9: 200, 10: 20, 11: 30}}]}}]};
+run('pm = runCombatModel(partial); late = pm.players.filter(p => p.name === "Late")');
+assert.equal(run('late.length'), 1, 'a fight before class/server were decoded joins the only known identity');
+assert.equal(run('late[0].damage'), 300);
+assert.equal(run('late[0].class_name'), 'Kleriker');
+assert.equal(run('late[0].server_id'), 3);
+assert.deepEqual(plain(run('runDamageSamples(pm, late[0].key, 0, "total").samples.map(p => p.total)')), [100, 300]);
+assert.equal(run('pm.players.filter(p => p.name === "Twin").length'), 3, 'an ambiguous partial identity is not guessed');
 console.log('PASS run analysis: shared windows, identities, skill sums/quality, missing participation, gaps, boundaries, legacy data and immutable measurements');

@@ -1,9 +1,28 @@
 // Run reports combine saved observations, never infer unrecorded fights.
 const runNumber = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 const runNamedPlayer = p => !!p.name && p.name !== '#' + p.actor_id;
-function runMemberKey(player, fightId) {
-  return runNamedPlayer(player) ? JSON.stringify([player.name, player.server_id ?? null, player.job ?? null])
-    : JSON.stringify(['unknown', fightId, player.actor_id]);
+// Server 0 and an empty class are "not decoded yet", not a different player.
+const runKnownField = value => value != null && value !== '' && Number(value) !== 0 ? value : null;
+function runMemberKey(player, fightId, identities) {
+  if (!runNamedPlayer(player)) return JSON.stringify(['unknown', fightId, player.actor_id]);
+  let server = runKnownField(player.server_id), job = runKnownField(player.job);
+  if (identities && (server == null || job == null)) {
+    // Only a single complete identity with this name may fill the gap.
+    const matches = (identities.get(player.name) || []).filter(([s, j]) => (server == null || s === server) && (job == null || j === job));
+    if (matches.length === 1) [server, job] = matches[0];
+  }
+  return JSON.stringify([player.name, server == null ? null : Number(server), job]);
+}
+function runIdentities(fights) {
+  const identities = new Map();
+  for (const f of fights) for (const p of f.players || []) {
+    const server = runKnownField(p.server_id), job = runKnownField(p.job);
+    if (!runNamedPlayer(p) || server == null || job == null) continue;
+    const list = identities.get(p.name) || [];
+    if (!list.some(([s, j]) => s === server && j === job)) list.push([server, job]);
+    identities.set(p.name, list);
+  }
+  return identities;
 }
 function runSkillRows(rows, duration) {
   const groups = new Map();
@@ -33,15 +52,19 @@ function runSkillRows(rows, duration) {
 function runCombatModel(run) {
   const fights = (run.fights || []).filter(f => !f.is_train).slice()
     .sort((a, b) => runNumber(a.started_at) - runNumber(b.started_at) || String(a.id).localeCompare(String(b.id)));
-  const players = new Map();
+  const players = new Map(), identities = runIdentities(fights), keys = new Map();
   let duration = 0;
   const windows = fights.map(f => {
     const start = duration, length = Math.max(1000, runNumber(f.duration_ms));
     duration += length;
     for (const p of f.players || []) {
-      const key = runMemberKey(p, f.id);
+      const key = runMemberKey(p, f.id, identities);
+      keys.set(JSON.stringify([f.id, p.actor_id]), key);
       if (!players.has(key)) players.set(key, {...p, key, identity_known: runNamedPlayer(p), source_fight_id: f.id, damage: 0, skills: [], skill_fights: 0, fights: 0});
       const total = players.get(key);
+      // Class and server shown for the merged player come from a fight that decoded them.
+      if (runKnownField(total.job) == null && runKnownField(p.job) != null) Object.assign(total, {job: p.job, class_key: p.class_key, class_name: p.class_name});
+      if (runKnownField(total.server_id) == null && runKnownField(p.server_id) != null) total.server_id = p.server_id;
       total.damage += runNumber(p.damage);
       total.is_self = !!(total.is_self || p.is_self); total.fights++;
       if (Array.isArray(p.skills)) { total.skills.push(...p.skills); total.skill_fights++; }
@@ -51,7 +74,7 @@ function runCombatModel(run) {
   const members = [...players.values()].map(p => ({...p, dps: p.damage * 1000 / Math.max(1000, duration),
     skills: runSkillRows(p.skills, duration)}))
     .sort((a, b) => b.damage - a.damage || a.key.localeCompare(b.key));
-  return {windows, duration, players: members};
+  return {windows, duration, players: members, keyOf: (p, fightId) => keys.get(JSON.stringify([fightId, p.actor_id])) ?? runMemberKey(p, fightId, identities)};
 }
 function runSelection(model, key = 'group') {
   const players = key === 'group' ? model.players : model.players.filter(p => p.key === key);
@@ -64,7 +87,7 @@ function runDamageSamples(model, key = 'group', windowMs = 5000, metric = 'dps')
   const samples = [];
   let carry = 0, missing = 0, partial = 0;
   for (const {fight: f, start, length} of model.windows) {
-    const players = (f.players || []).filter(p => key === 'group' || runMemberKey(p, f.id) === key);
+    const players = (f.players || []).filter(p => key === 'group' || model.keyOf(p, f.id) === key);
     const actors = new Set(players.map(p => String(p.actor_id)));
     const source = Array.isArray(f.analytics?.points) ? f.analytics.points : [];
     const countersValid = source.every(p => p && p.damage && typeof p.damage === 'object' && !Array.isArray(p.damage) && Object.values(p.damage).every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0));
@@ -111,7 +134,7 @@ async function loadRunAnalysis(id, request) {
 function renderRunAnalysis(root, run) {
   const model = runCombatModel(run);
   const label = p => (p.name || 'Unbekannter Spieler') + (!p.identity_known ? ' · Kampf ' + (model.windows.findIndex(w => w.fight.id === p.source_fight_id) + 1) : model.players.some(other => other !== p && other.name === p.name)
-    ? ' · ' + (p.class_name || p.job || 'Klasse unbekannt') + ' · Server ' + (p.server_id ?? 'unbekannt') : '');
+    ? ' · ' + (runKnownField(p.job) == null ? 'Klasse unbekannt' : p.class_name || p.job) + ' · Server ' + (runKnownField(p.server_id) ?? 'unbekannt') : '');
   root.innerHTML = `<h2>Dungeon-Gesamtstatistik</h2><p class="analysis-note">Über ${model.windows.length} erfasste Kämpfe dieses Runs, ohne Training. Kampfzeit ohne Wege und Pausen, mindestens 1 Sekunde je Kampf. Fehlende Teilnahme zählt als 0 Schaden. Ein Run belegt keine vollständige Dungeon-Abdeckung.</p>
     <div class="chart-tools run-analysis-tools"><label>Auswertung <select data-run-player aria-label="Spieler für Dungeon-Gesamtstatistik"><option value="group">Gesamte Gruppe</option>${model.players.map(p => `<option value="${esc(p.key)}">${esc(label(p))}${p.is_self ? ' · Du' : ''}</option>`).join('')}</select></label>
     <label>Verlauf <select data-run-metric aria-label="Wert im Dungeon-Verlauf"><option value="dps">DPS</option><option value="total">Gesamtschaden</option></select></label>
