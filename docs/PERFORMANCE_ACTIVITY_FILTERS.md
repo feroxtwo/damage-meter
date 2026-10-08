@@ -68,3 +68,24 @@ Die Bilder stammen aus echten Chromium-Renderings mit gekennzeichneten synthetis
 Keine zusätzliche Oberfläche, keine neue Laufzeitabhängigkeit und keine Änderung der Messdatenspeicherung.
 
 Reale Ingame-Abnahme bleibt offen: korrekte Gebietserkennung, tatsächliche Modi und Zuordnung anhand echter Pakete sowie Übereinstimmung mit einer unabhängigen Messreferenz. Überheal, Shields, rDPS oder nicht erfasste Ereignisse werden daraus nicht abgeleitet.
+
+## Unabhängige Gegenprüfung von PR #18
+
+Verglichen mit `main` (`d6df049`) und dem ursprünglichen PR-Head `4ee050e`, ohne Merge. Die bestehende Run-Formel, Ausschluss von Training/aktiven Runs, getrennte Gebiets-/Mob-IDs und Berichtssprünge waren korrekt. Ein gespeicherter Run bleibt ausdrücklich kein Beleg für eine vollständige Expedition oder einen Kill.
+
+Korrekturen:
+
+- Alte History-Einträge mit `NULL` als Gebiets-ID behalten diese fehlende Information. Sie fallen nicht mehr mit expliziter ID `0` zusammen und bekommen keine gebietslose Mob-Zuordnung. Eine fehlende ID wird nicht aus dem Bossnamen geraten.
+- Beim Laden einer anderen Charakterhistorie werden alte Kennzahlen, Diagramm und Berichtshandler sofort entfernt. Beide Antworten müssen zur aktuellen Anfrage und zum aktuellen Charakter passen. Fehler zeigen einen verständlichen Wiederholhinweis; neue Auswahlfelder bleiben während des Ladens gesperrt.
+- Bereich, konkrete Expedition und Gesamt/Boss werden lokal gespeichert und nach Reload nur wiederhergestellt, wenn sie noch existieren. Entfallene Ziele erhalten eine gültige Alternative; entfallene gespeicherte Kategorien fallen bei vorhandenen Daten auf alle Bereiche zurück. Beschädigter/gesperrter Browserspeicher bleibt ohne Auswirkung auf Messdaten.
+- Expeditionen verlangen eine konkrete Expedition vor der Auswertung. Bei Feldboss/Open World mit ausschließlich ID `0` entfällt das Gebietsfeld. Gleiche Gebietsnamen werden durch Roh-IDs unterscheidbar; fehlende Schwierigkeit heißt ausdrücklich „Schwierigkeit unbekannt“.
+- Auf 320 px teilen sich Bereich und Zeitraum eine Zeile; die Auswertung folgt auf die Expedition. Die Zuordnung steht als geschlossene Detailansicht hinter der Analyse. 1440, 768 und 320 px wurden auf Überlauf und visuell geprüft. Der Browsertest sichert zusätzlich die kompakte Filterhöhe und gemeinsame erste Zeile ab.
+- Die Zuordnungsdetails nennen Gebiets-/Ziel-ID, lokale Browsergeltung und unveränderte Messwerte. Freie Namen oder frei eingegebene IDs bietet diese Oberfläche nicht an; Namen/Unicode werden weiterhin escaped dargestellt.
+
+Zusätzliche Regressionen: fehlende Gebiets-ID gegenüber ID `0`; getrennte Normal/Schwer/unbekannte Runs mit wiederholtem Boss, Nullschaden, kurzen Zeitfenstern, abweichender Speicherreihenfolge und fehlender Teilnahme; Auswahlpersistenz/entfallene Ziele; verspätete Charakterantworten und gesperrte Berichtssprünge; gleiche Gebietsnamen mit anderen IDs; beschädigter und gesperrter localStorage. Bestehende Tests für Zuordnungsänderung/-entfernung, leere Kategorien und Run-/Kampfberichtssprünge bleiben erhalten.
+
+Lokale Prüfung der Gegenrevision: **97 Rust-Tests, 58 Browserprüfungen, 58 Insight-Assertions, 8 Skill- und 9 Chart-Prüfungen**, fmt, Clippy mit `-D warnings`, Release-Build sowie API-/Persistenz-/Replay-Integration und das echte Release-Dashboard. Die vollständige GitHub-CI prüft zusätzlich Rust 1.88, Paketierung und native X11-Abnahme am aktualisierten Head.
+
+Die 14 vom Nutzer bereitgestellten Aufzeichnungen wurden ausschließlich lokal abgespielt und gegen einen separaten `main`-Build verglichen. Alle gemeldeten Werte stimmen überein; nur ungeordnete Ziel-/Akteur-/Skilllisten und Hit-Zeitstempel wurden für den Vergleich sortiert, die Reihenfolge der Analytics-Zeitpunkte blieb erhalten. Eine v1-Datei hat eingeschränkte Metadaten, eine v3-Datei enthält drei erkannte Datenlücken. Rohaufzeichnungen und personenbezogene Replayberichte werden nicht ins Repository aufgenommen. Replaygleichheit ist kein unabhängiger Beleg für reale Boss-/Gebietszuordnung oder vollständige Bossabdeckung.
+
+Urteil der Gegenprüfung: **PR #18 MIT KLEINEN KORREKTUREN GUT**. Reale Protokoll-/Gebietsgenauigkeit, Kill-/Wipe-Auslegung und menschliche KDE/Wayland-Abnahme bleiben die bereits dokumentierten offenen Abnahmepunkte.

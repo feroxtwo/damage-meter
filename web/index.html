@@ -203,14 +203,14 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     <div class="grid stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-top:16px">
       <div class="card" style="grid-column:1 / -1"><h2>Wie entwickelt sich meine DPS?</h2>
         <div class="chart-tools activity-filters"><label>Bereich <select id="activitySel" aria-label="Bereich für DPS-Verlauf"><option value="all">Alle Bereiche</option><option value="field_boss">Feldbosse</option><option value="open_world">Open World</option><option value="expedition">Expeditionen</option><option value="secret_dungeon">Secret Dungeons</option><option value="nightmare">Nightmare</option><option value="transcendence">Transzendenz</option><option value="sanctuary">Sanctuary / Raids</option><option value="daily">Tägliche Dungeons</option><option value="unclassified">Nicht zugeordnet</option></select></label>
-        <label><span id="contentFilterLabel">Expedition / Gebiet</span> <select id="contentSel" aria-label="Expedition oder Gebiet für DPS-Verlauf"><option value="">Alle Gebiete</option></select></label>
+        <label id="contentFilter"><span id="contentFilterLabel">Expedition / Gebiet</span> <select id="contentSel" aria-label="Expedition oder Gebiet für DPS-Verlauf"><option value="">Alle Gebiete</option></select></label>
         <label>Auswertung <select id="bossSel" aria-label="Boss oder gesamte Expedition für DPS-Verlauf"></select></label>
-        <label>Versuche / Runs <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
-        <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details>
+        <label class="attempt-limit">Zeitraum <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
         <div id="bossInsights"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
         <label class="curve-scrubber"><span id="bossAttemptLabel">Versuch</span> <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
-        <p class="analysis-note" id="bossNote"></p></div>
+        <p class="analysis-note" id="bossNote"></p>
+        <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details></div>
       <div class="grid" id="kpis"></div>
       <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
       <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
@@ -401,7 +401,7 @@ async function loadCharacters() {
   const sel = $('#charSel');
   sel.innerHTML = '<option value="">Alle Charaktere</option>' + list.map(c =>
     `<option value="${esc(c.name)}">${esc(c.name)}${c.class_name ? ' · ' + esc(c.class_name) : ''}${c.runs ? ` (${c.runs} Runs)` : ''}</option>`).join('');
-  if (character && !list.some(c => c.name === character)) character = '';
+  if (character && !list.some(c => c.name === character)) {character = '';if(tab==='stats'){task(loadStats());task(loadBossHistory());}}
   sel.value = character;
   sel.style.display = list.length ? '' : 'none';
 }
@@ -409,7 +409,7 @@ $('#charSel').onchange = (e) => {
   character = e.target.value;
   try { localStorage.setItem('a2m-character', character); } catch (err) {}
   if (tab === 'runs') { $('#dungeonFilter').value = ''; loadRuns(true); if(window.loadFights) task(loadFights(true)); }
-  if (tab === 'stats') { loadStats(); loadBossHistory(); }
+  if (tab === 'stats') { task(loadStats()); task(loadBossHistory()); }
 };
 loadCharacters(); setInterval(loadCharacters, 60000);
 
@@ -534,26 +534,50 @@ async function loadStats() {
 // Attempts are equally spaced, including fights without an observed kill.
 let bossHistory = [], bossSelectedKey = '', bossSelectedAttempt = 0;
 const activityLabels={field_boss:'Feldbosse',open_world:'Open World',expedition:'Expeditionen',secret_dungeon:'Secret Dungeons',nightmare:'Nightmare',transcendence:'Transzendenz',sanctuary:'Sanctuary / Raids',daily:'Tägliche Dungeons',unclassified:'Nicht zugeordnet'};
-const bossKey=b=>b.scope==='run'?'run:'+b.dungeon_id:JSON.stringify([b.boss,b.dungeon_id??b.difficulty??'',b.mob_code??'']);
+const bossKey=b=>b.scope==='run'?'run:'+b.dungeon_id:JSON.stringify([b.boss,b.dungeon_id??'unknown',b.mob_code??'']);
 const contentKey=b=>String(b.dungeon_id??'unknown');
-const mappingKey=b=>Number(b.dungeon_id)>0?'area:'+b.dungeon_id:Number(b.mob_code)>0?'mob:'+b.mob_code:null;
+const mappingKey=b=>Number(b.dungeon_id)>0?'area:'+b.dungeon_id:b.dungeon_id===0&&Number(b.mob_code)>0?'mob:'+b.mob_code:null;
 let activityOverrides={};
 try {const saved=JSON.parse(localStorage.getItem('a2m-activity-overrides')||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))activityOverrides=Object.fromEntries(Object.entries(saved).slice(0,1000).filter(([k,v])=>/^(area|mob):[1-9][0-9]*$/.test(k)&&Object.hasOwn(activityLabels,v)&&v!=='unclassified'));} catch {}
 const activityOf=b=>activityOverrides[mappingKey(b)]||(Object.hasOwn(activityLabels,b.activity)?b.activity:'unclassified');
-const contentLabel=b=>(b.dungeon_name||(Number(b.dungeon_id)>0?'Instanz '+b.dungeon_id:Number(b.dungeon_id)===0?'Offene Welt':'Gebiet unbekannt'))+(b.difficulty?' · '+b.difficulty:'');
+const contentLabel=b=>(b.dungeon_name||(Number(b.dungeon_id)>0?'Instanz '+b.dungeon_id:b.dungeon_id===0?'Offene Welt':'Gebiet unbekannt'))+(b.difficulty?' · '+b.difficulty:Number(b.dungeon_id)>0?' · Schwierigkeit unbekannt':'');
+let activitySelection=null;
+try {const saved=JSON.parse(localStorage.getItem('a2m-activity-selection')||'null');if(saved&&typeof saved==='object'&&(saved.category==='all'||Object.hasOwn(activityLabels,saved.category)))activitySelection=saved;} catch {}
+function saveActivitySelection() {
+  try {localStorage.setItem('a2m-activity-selection',JSON.stringify({category:$('#activitySel').value,content:$('#contentSel').value,boss:$('#bossSel').value}));} catch {}
+}
 async function loadBossHistory() {
-  const request=++bossRequest;
-  const [bosses,runs]=await Promise.all([api('/api/stats/boss-history?'+charQ()),api('/api/stats/run-history?'+charQ())]);
-  if(request!==bossRequest)return;
-  bossHistory=[...bosses,...runs];refreshActivityFilters();
+  const request=++bossRequest,query=charQ();
+  // Keep the selected keys, but remove old character data and report handlers immediately.
+  bossHistory=[];drawBoss();$('#bossChart').innerHTML='<div class="empty">Verlauf wird geladen …</div>';
+  $('#activitySel').disabled=$('#contentSel').disabled=$('#bossSel').disabled=true;
+  try {
+    const [bosses,runs]=await Promise.all([api('/api/stats/boss-history?'+query),api('/api/stats/run-history?'+query)]);
+    if(request!==bossRequest||query!==charQ())return;
+    bossHistory=[...bosses,...runs];
+    if(activitySelection){
+      $('#activitySel').value=bossHistory.length&&!bossHistory.some(b=>activitySelection.category==='all'||activityOf(b)===activitySelection.category)?'all':activitySelection.category;
+      // Options must exist before their saved values can be restored.
+      refreshActivityFilters();
+      if([...$('#contentSel').options].some(o=>o.value===activitySelection.content))$('#contentSel').value=activitySelection.content;
+      refreshBossOptions();
+      if([...$('#bossSel').options].some(o=>o.value===activitySelection.boss))$('#bossSel').value=activitySelection.boss;
+      activitySelection=null;drawBoss();saveActivitySelection();
+    } else refreshActivityFilters();
+  } catch(e) {
+    if(request===bossRequest){$('#bossChart').innerHTML='<div class="empty">Verlauf konnte nicht geladen werden. Öffne die Statistik erneut, um es noch einmal zu versuchen.</div>';throw e;}
+  } finally {if(request===bossRequest)$('#activitySel').disabled=false;}
 }
 function refreshActivityFilters() {
   const category=$('#activitySel').value,content=$('#contentSel'),previous=content.value;
   const entries=bossHistory.filter(b=>category==='all'||activityOf(b)===category),areas=new Map();
   for(const b of entries)areas.set(contentKey(b),contentLabel(b));
-  $('#contentFilterLabel').textContent=category==='expedition'?'Expedition':'Expedition / Gebiet';
-  content.innerHTML='<option value="">'+(category==='expedition'?'Alle Expeditionen':'Alle Gebiete')+'</option>'+[...areas].sort((a,b)=>a[1].localeCompare(b[1],'de')).map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join('');
+  const needsArea=!['field_boss','open_world'].includes(category)||[...areas.keys()].some(k=>k!=='0');
+  $('#contentFilter').hidden=!needsArea;
+  $('#contentFilterLabel').textContent=category==='expedition'?'Expedition':'Gebiet';
+  content.innerHTML=(category==='expedition'&&areas.size?'':'<option value="">Alle Gebiete</option>')+[...areas].sort((a,b)=>a[1].localeCompare(b[1],'de')).map(([key,label])=>`<option value="${esc(key)}">${esc(label)}${[...areas.values()].filter(v=>v===label).length>1?' · #'+esc(key):''}</option>`).join('');
   if(areas.has(previous))content.value=previous;
+  if(!needsArea)content.value='';
   content.disabled=!areas.size;refreshBossOptions();
 }
 function refreshBossOptions() {
@@ -564,13 +588,13 @@ function refreshBossOptions() {
   const duplicated=b=>entries.some(other=>other!==b&&other.scope!=='run'&&b.scope!=='run'&&other.boss===b.boss&&contentKey(other)===contentKey(b));
   sel.innerHTML=entries.map(b=>`<option value="${esc(bossKey(b))}">${esc(b.scope==='run'?(activityOf(b)==='expedition'?'Gesamte Expedition':'Gesamter Run'):b.boss)}${duplicated(b)?' · #'+Number(b.mob_code||0):''}${!area?' · '+esc(contentLabel(b)):''} (${b.attempts.length} ${b.scope==='run'?(b.attempts.length===1?'Run':'Runs'):(b.attempts.length===1?'Versuch':'Versuche')})</option>`).join('');
   if(entries.some(b=>bossKey(b)===previous))sel.value=previous;
-  sel.disabled=!entries.length;drawBoss();
+  sel.disabled=!entries.length;drawBoss();saveActivitySelection();
 }
 function renderActivityMapping(b) {
   const key=b&&mappingKey(b),show=!!key;
   $('#activityMapping').hidden=!show;
   if(!show)return;
-  $('#activityMappingNote').textContent=(key.startsWith('area:')?'Gebiet '+b.dungeon_id:'Ziel-ID '+b.mob_code)+' · Eigene Zuordnung gilt nur in diesem Browser. Gespeicherte Messwerte werden nicht verändert.';
+  $('#activityMappingNote').textContent=(key.startsWith('area:')?'Gebiet '+b.dungeon_id+' · Ziel-ID '+(b.mob_code??'unbekannt'):'Gebiet 0 · Ziel-ID '+b.mob_code)+' · Eigene Zuordnung gilt nur in diesem Browser. Gespeicherte Messwerte werden nicht verändert.';
   $('#activityOverride').innerHTML='<option value="">Automatisch / nicht zugeordnet</option>'+Object.entries(activityLabels).filter(([k])=>k!=='unclassified').map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('');
   $('#activityOverride').value=activityOverrides[key]||'';
   $('#activityOverride').onchange=()=>{
@@ -579,7 +603,7 @@ function renderActivityMapping(b) {
     catch {toast('Bereichszuordnung konnte nicht gespeichert werden.',true);}
   };
 }
-$('#activitySel').onchange=()=>{$('#contentSel').value='';refreshActivityFilters();};
+$('#activitySel').onchange=()=>{$('#contentSel').value='';$('#bossSel').value='';refreshActivityFilters();};
 $('#contentSel').onchange=()=>{$('#bossSel').value='';refreshBossOptions();};
 
 function drawBoss() {
@@ -624,7 +648,8 @@ function drawBoss() {
   select(bossSelectedKey===bossKey(b)&&bossSelectedAttempt>=offset&&bossSelectedAttempt<offset+k.length?bossSelectedAttempt-offset:k.length-1);range.oninput=()=>select(Number(range.value));
   $('#bossHit').onpointermove=$('#bossHit').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();select(k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((e.clientX-r.left)/r.width*(k.length-1)))));};
 }
-$('#bossSel').onchange = $('#bossLimit').onchange = drawBoss;
+$('#bossSel').onchange = ()=>{drawBoss();saveActivitySelection();};
+$('#bossLimit').onchange = drawBoss;
 
 // Settings
 let settings = null, settingsTimer, settingsSaving = false, settingsDirty = false;

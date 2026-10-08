@@ -301,3 +301,6 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 
 /* Activity hierarchy belongs to the existing performance center. */
 .activity-filters label{min-width:0;flex:1 1 190px}.activity-filters select{width:100%;min-width:0;max-width:100%}#activityMapping{margin:12px 0;border-left:2px solid var(--gold);padding:6px 12px}#activityMapping select{max-width:100%}
+
+.activity-filters [hidden]{display:none}.activity-filters .attempt-limit{flex:0 1 130px}
+@media(max-width:600px){.activity-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.activity-filters label{font-size:12px}.activity-filters .attempt-limit{grid-row:1;grid-column:2}.activity-filters #contentFilter{grid-column:1 / -1}.activity-filters label:has(#bossSel){grid-column:1 / -1;grid-row:3}.activity-filters:has(#contentFilter[hidden]) label:has(#bossSel){grid-row:2}#activityMapping{font-size:12px;margin:8px 0;padding:4px 8px}}

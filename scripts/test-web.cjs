@@ -585,9 +585,10 @@ const server = http.createServer((req,res) => {
         {boss:'Weltgegner',dungeon_id:0,activity:'open_world',mob_code:400,attempts:[attempt(10000)]},
         {boss:'Unbekannter Boss',dungeon_id:900001,activity:'unclassified',mob_code:500,attempts:[attempt(60000)]}
       ];
+      let historyDelay=0;
       const runs=[{boss:'Gesamter Run',scope:'run',dungeon_id:600093,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Schwer',attempts:[{...attempt(42000),fight_id:undefined,run_id:1,fight_count:3}]}];
-      await isolated.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(groups)}));
-      await isolated.route('**/api/stats/run-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(runs)}));
+      await isolated.route('**/api/stats/boss-history**',async route=>{const body=JSON.stringify(new URL(route.request().url()).searchParams.get('character')==='Empty'?[]:groups);const wait=historyDelay;if(wait)await delay(wait);await route.fulfill({status:200,contentType:'application/json',body});});
+      await isolated.route('**/api/stats/run-history**',async route=>{const body=JSON.stringify(new URL(route.request().url()).searchParams.get('character')==='Empty'?[]:runs);const wait=historyDelay;if(wait)await delay(wait);await route.fulfill({status:200,contentType:'application/json',body});});
       try {
         await isolated.goto(base+'/#stats');await isolated.locator('#bossChart svg').waitFor();
         await isolated.selectOption('#activitySel','expedition');await isolated.selectOption('#contentSel','600093');
@@ -597,9 +598,15 @@ const server = http.createServer((req,res) => {
         await isolated.locator('#bossOpen').click();await isolated.locator('#runDetail #backBtn').waitFor();assert.match(await isolated.locator('#runDetail').textContent(),/Ferocious/);assert.equal(await isolated.locator('#runs').evaluate(e=>e.classList.contains('active')),true);await isolated.locator('nav [data-tab="stats"]').click();await isolated.locator('#bossChart svg').waitFor();
         await isolated.selectOption('#bossSel',{label:'Kargos · #100 (1 Versuch)'});assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);
         groups.reverse();await isolated.evaluate(()=>loadBossHistory());assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);assert.equal(await isolated.locator('#contentSel').inputValue(),'600093');
-        for(const width of [1440,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-'+width+'.png'),fullPage:true});}
+        for(const width of [1440,768,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));if(width===320){const area=await isolated.locator('#activitySel').boundingBox(),limit=await isolated.locator('#bossLimit').boundingBox();assert.ok(Math.abs(area.y-limit.y)<2,'mobile area and limit share one row');assert.ok((await isolated.locator('.activity-filters').boundingBox()).height<215,'mobile hierarchy stays compact: '+JSON.stringify(await isolated.evaluate(()=>{const e=document.querySelector('.activity-filters');return {height:e.getBoundingClientRect().height,rows:getComputedStyle(e).gridTemplateRows,children:[...e.children].map(x=>({height:x.getBoundingClientRect().height,row:getComputedStyle(x).gridRow}))};})));}assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-'+width+'.png'),fullPage:true});}
+        await check('activity selection persists exact boss and area and falls back when removed',async()=>{
+          await isolated.reload();await isolated.locator('#bossChart svg').waitFor();assert.equal(await isolated.locator('#activitySel').inputValue(),'expedition');assert.equal(await isolated.locator('#contentSel').inputValue(),'600093');assert.match(await isolated.locator('#bossSel option:checked').textContent(),/Kargos · #100/);
+          const removed=groups.splice(groups.findIndex(g=>g.mob_code===100&&g.dungeon_id===600093),1)[0];
+          await isolated.reload();await isolated.locator('#bossChart svg').waitFor();assert.match(await isolated.locator('#bossSel option:checked').textContent(),/Gesamte Expedition/);groups.push(removed);
+        });
         await isolated.selectOption('#contentSel','600092');assert.match(await isolated.locator('#bossSummary').textContent(),/90,0K/);
         await isolated.selectOption('#activitySel','field_boss');assert.equal(await isolated.locator('#bossSel option').count(),1);assert.match(await isolated.locator('#bossSummary').textContent(),/70,0K/);
+        assert.equal(await isolated.locator('#contentSel').isVisible(),false);
         await isolated.selectOption('#activitySel','open_world');assert.equal(await isolated.locator('#bossSel option').count(),1);assert.match(await isolated.locator('#bossSummary').textContent(),/10,0K/);
         await isolated.selectOption('#activitySel','nightmare');assert.equal(await isolated.locator('#bossChart svg').count(),0);assert.equal(await isolated.locator('#bossOpen').isDisabled(),true);
         await isolated.selectOption('#activitySel','unclassified');if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','nightmare');
@@ -608,7 +615,36 @@ const server = http.createServer((req,res) => {
         assert.equal(groups.find(g=>g.dungeon_id===900001).activity,'unclassified','browser mapping must not alter records');
         if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','secret_dungeon');await isolated.selectOption('#activitySel','secret_dungeon');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
         if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','');assert.equal(await isolated.locator('#activitySel').inputValue(),'unclassified');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
-      } finally {await isolated.close();await page.evaluate(()=>localStorage.removeItem('a2m-activity-overrides'));}
+              await check('missing area and explicit zero remain different and unmappable without known area',async()=>{
+          const unknown={...groups.find(g=>g.mob_code===300),dungeon_id:null,activity:'unclassified'};groups.push(unknown);
+          await isolated.evaluate(()=>loadBossHistory());await isolated.selectOption('#activitySel','unclassified');await isolated.selectOption('#contentSel','unknown');
+          assert.match(await isolated.locator('#bossSel option:checked').textContent(),/Feldboss/);assert.equal(await isolated.locator('#activityMapping').isVisible(),false);
+          assert.equal(await isolated.evaluate(()=>contentLabel(bossHistory.find(b=>b.dungeon_id===null))),'Gebiet unbekannt');groups.pop();
+        });
+        await check('character reload removes stale reports and ignores late answers',async()=>{
+          historyDelay=300;
+          await isolated.evaluate(()=>{character='Me';loadBossHistory().catch(()=>{});});
+          assert.equal(await isolated.locator('#bossOpen').isDisabled(),true);assert.equal(await isolated.locator('#bossSel').isDisabled(),true);
+          await delay(50);historyDelay=0;
+          await isolated.evaluate(()=>{character='Empty';return loadBossHistory();});await delay(400);
+          assert.equal(await isolated.locator('#bossChart svg').count(),0);assert.equal(await isolated.locator('#bossOpen').isDisabled(),true);
+          await isolated.evaluate(()=>{character='';return loadBossHistory();});
+        });
+        await check('same named areas expose IDs and unknown difficulty without merging',async()=>{
+          const duplicate={...groups.find(g=>g.dungeon_id===600093),dungeon_id:800001};groups.push(duplicate);
+          await isolated.evaluate(()=>loadBossHistory());await isolated.selectOption('#activitySel','expedition');
+          assert.match(await isolated.locator('#contentSel option[value="600093"]').textContent(),/#600093/);assert.match(await isolated.locator('#contentSel option[value="800001"]').textContent(),/#800001/);
+          await isolated.selectOption('#contentSel','800001');assert.equal(await isolated.locator('#bossSel option').count(),1);
+          assert.match(await isolated.evaluate(()=>contentLabel({dungeon_id:900001})),/Schwierigkeit unbekannt/);groups.pop();
+        });
+        await check('corrupt local settings recover and blocked storage never changes mappings',async()=>{
+          await isolated.evaluate(()=>{localStorage.setItem('a2m-activity-overrides','{broken');localStorage.setItem('a2m-activity-selection','null');});
+          await isolated.reload();await isolated.locator('#bossChart svg').waitFor();await isolated.selectOption('#activitySel','unclassified');
+          if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();
+          await isolated.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException('blocked','SecurityError');};});
+          await isolated.selectOption('#activityOverride','nightmare');assert.equal(await isolated.locator('#activitySel').inputValue(),'unclassified');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        });
+      } finally {await isolated.close();await page.evaluate(()=>{localStorage.removeItem('a2m-activity-overrides');localStorage.removeItem('a2m-activity-selection');});}
     });
     await check('trimmed history does not invent a first-interval damage spike',async()=>{
       const html=await page.evaluate(()=>{

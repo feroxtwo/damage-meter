@@ -1160,14 +1160,14 @@ impl Db {
                     activity_kind(f.dungeon_id, f.mob_code) AS activity
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
-             ORDER BY f.started_at",
+             ORDER BY f.started_at, f.id",
         )?;
         let rows = rows_to_json(&mut stmt, params![character])?;
-        let mut bosses: HashMap<(String, i32, i32, String), Vec<Value>> = HashMap::new();
+        let mut bosses: HashMap<(String, Option<i32>, i32, String), Vec<Value>> = HashMap::new();
         for mut row in rows {
             let boss = row["boss"].as_str().unwrap_or_default().to_string();
-            let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
-            row["difficulty"] = json!(names::dungeon_difficulty(id));
+            let id = row["dungeon_id"].as_i64().map(|id| id as i32);
+            row["difficulty"] = json!(id.and_then(names::dungeon_difficulty));
             let mob = row["mob_code"].as_i64().unwrap_or(0) as i32;
             let activity = row["activity"]
                 .as_str()
@@ -1185,8 +1185,8 @@ impl Db {
                 .into_iter()
                 .map(|((boss, id, mob, activity), attempts)| {
                     json!({ "boss": boss, "dungeon_id": id, "mob_code": mob,
-                        "dungeon_name": names::dungeon_name(id), "activity": activity,
-                        "scope": "boss", "difficulty": names::dungeon_difficulty(id),
+                        "dungeon_name": id.and_then(names::dungeon_name), "activity": activity,
+                        "scope": "boss", "difficulty": id.and_then(names::dungeon_difficulty),
                         "attempts": attempts })
                 })
                 .collect(),
@@ -1560,6 +1560,88 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn legacy_missing_area_never_collapses_into_explicit_open_world() {
+        let db = Db::in_memory().unwrap();
+        db.set_activity_check(|id, _| {
+            if id == 0 {
+                "field_boss"
+            } else {
+                "unclassified"
+            }
+            .into()
+        });
+        let mut world = record("world", 1000, 1000);
+        world.dungeon_id = 0;
+        world.mob_code = 100;
+        let mut legacy = world.clone();
+        legacy.id = "legacy".into();
+        db.save_fights(&[world, legacy], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        db.conn
+            .lock()
+            .execute("UPDATE fights SET dungeon_id=NULL WHERE id='legacy'", [])
+            .unwrap();
+        let history = db.boss_history("Me").unwrap();
+        let groups = history.as_array().unwrap();
+        assert_eq!(groups.len(), 2);
+        let legacy = groups.iter().find(|g| g["dungeon_id"].is_null()).unwrap();
+        assert_eq!(legacy["activity"], "unclassified");
+        assert_eq!(legacy["attempts"][0]["fight_id"], "legacy");
+        assert_eq!(
+            groups.iter().find(|g| g["dungeon_id"] == 0).unwrap()["activity"],
+            "field_boss"
+        );
+    }
+
+    #[test]
+    fn run_history_keeps_tiers_repeated_attempts_and_zero_damage() {
+        let db = Db::in_memory().unwrap();
+        for (n, area) in [600092, 600093, 900001].into_iter().enumerate() {
+            let start = n as i64 * 100_000;
+            let run = db.start_run(area, start, Some("Me"), 0).unwrap();
+            let mut first = record(&format!("{n}-first"), start + 1000, 0);
+            first.dungeon_id = area;
+            first.duration_ms = 0;
+            first.mob_code = 100;
+            let mut retry = record(&format!("{n}-retry"), start + 2000, 2000);
+            retry.dungeon_id = area;
+            retry.duration_ms = 200;
+            retry.mob_code = 100;
+            let mut absent = record(&format!("{n}-absent"), start + 3000, 9000);
+            absent.dungeon_id = area;
+            absent.actors[0].nickname = "Other".into();
+            // Saving order is not boss progression, and repeated targets are separate attempts.
+            db.save_fights(
+                &[absent, retry, first],
+                0,
+                &["Me".into()],
+                None,
+                &HashSet::new(),
+            )
+            .unwrap();
+            db.end_run(run, start + 20_000).unwrap();
+        }
+        let history = db.run_history("Me").unwrap();
+        assert_eq!(history.as_array().unwrap().len(), 3);
+        for group in history.as_array().unwrap() {
+            let point = &group["attempts"][0];
+            assert_eq!(point["fight_count"], 3);
+            assert_eq!(point["damage"], 2000);
+            assert_eq!(point["duration_ms"], 12000);
+            assert!((point["dps"].as_f64().unwrap() - 2000.0 / 12.0).abs() < 0.001);
+        }
+        assert_eq!(history[0]["difficulty"], "Normal");
+        assert_eq!(history[1]["difficulty"], "Schwer");
+        assert!(history[2]["difficulty"].is_null());
+        assert_eq!(history[2]["activity"], "unclassified");
+        let bosses = db.boss_history("Me").unwrap();
+        for group in bosses.as_array().unwrap() {
+            assert_eq!(group["attempts"].as_array().unwrap().len(), 2);
+            assert_eq!(group["attempts"][0]["dps"], 0.0);
+        }
     }
 
     #[test]
