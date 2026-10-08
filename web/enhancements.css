@@ -117,14 +117,15 @@ th {letter-spacing:.5px} td {font-variant-numeric:tabular-nums} tbody tr:hover {
 .live-workspace>.card>.row {font-size:12px}.training-panel .eyebrow {margin-bottom:8px}.training-panel h2 {font-size:18px;letter-spacing:-.3px;text-transform:none}
 .training-panel .muted {font-size:12px}.training-panel #startTraining {border-color:var(--edge);color:var(--accent)}
 #liveRows .bar {border-radius:6px;background:color-mix(in srgb,var(--panel2) 55%,var(--panel));transition:background 140ms}
-#liveRows .bar:hover {background:var(--panel2)}#liveRows .bar .fill {opacity:.25;border-right:0;inset:auto auto 0 0;height:2px}
+#liveRows .bar:hover {background:var(--panel2)}/* Proportions must stay readable at a glance; the tint stays behind the text shadow. */
+#liveRows .bar .fill {opacity:.3;border-right:2px solid currentColor}
 #liveRows .bar.me {outline-color:var(--edge);background:var(--ambient);box-shadow:inset 2px 0 var(--accent)}
 #liveRows .bar .lbl>span:last-child {font-size:14px;font-weight:600}
 .performance-story {display:grid;grid-template-columns:1.25fr repeat(3,minmax(0,1fr));gap:20px;margin:18px 0;padding:20px 0;border-block:1px solid var(--edge)}
 .performance-story>div {min-width:0;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
 .performance-story strong {font-size:21px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.5px}.performance-story span,.performance-story small {font-size:12px;color:var(--muted);line-height:1.6}
 .performance-story .eyebrow {font-size:10px;color:var(--accent)}.performance-story .story-intro strong {font-size:16px;color:var(--text)}.performance-story .story-intro small {font-size:11px}
-.fight-story {grid-template-columns:1fr 1.25fr 1.25fr}.fight-story .skill-label {font-size:16px;color:var(--text)}
+.fight-story {grid-template-columns:1fr 1.25fr 1.25fr}.fight-story .story-intro strong {font-size:21px;color:var(--text)}.fight-story .skill-label {font-size:16px;color:var(--text)}
 .damage-chart {background:color-mix(in srgb,var(--bg) 40%,var(--panel));padding:18px;border:1px solid var(--line);border-radius:12px;margin:20px 0}
 #fightContent .damage-chart h3 {margin-top:0;font-size:16px}.curve-grid {stroke-opacity:.55}.curve-chart path {filter:none}
 [data-curve-highlight] {fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-opacity:.45;pointer-events:none}
@@ -132,6 +133,7 @@ th {letter-spacing:.5px} td {font-variant-numeric:tabular-nums} tbody tr:hover {
 .curve-detail:not(:empty) {margin-top:14px;padding:12px;border-left:2px solid var(--accent);background:var(--panel2);font-size:13px}
 .window-hits {padding:0;list-style:none;margin:0}.window-hits li {display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center}.window-hits li>span {min-width:0;overflow-wrap:anywhere}.window-hits small {display:block;color:var(--muted)}.window-hits strong {font-size:12px;white-space:nowrap}
 .trend-summary>div {background:transparent;border-left:2px solid var(--line);border-radius:0;padding:4px 12px}.trend-summary strong {font-size:18px;color:var(--text)}
+.trend-summary .trend-lead {border-left-color:var(--accent)}.trend-summary .trend-lead strong {font-size:22px;color:var(--accent)}
 #stats #kpis {grid-column:1/-1}#stats #kpis .kpi::before {display:none}#stats #kpis .v {font-size:24px;color:var(--text)}
 .settings-group {min-width:0;padding:14px 0 20px;margin:18px 0 0;border:0;border-top:1px solid var(--line)}.settings-group legend {font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);padding-right:12px}.settings-group .set {border-color:color-mix(in srgb,var(--line) 50%,transparent)}
 @media(max-width:1000px) {.live-workspace{grid-template-columns:1fr}.performance-story{grid-template-columns:repeat(2,minmax(0,1fr))}.fight-story{grid-template-columns:1fr 1fr}.fight-story .story-intro{grid-column:1/-1}}

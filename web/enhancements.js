@@ -40,23 +40,32 @@ function bossPerformance(attempts,characterSelected) {
   const previous=attempts.slice(0,-1),mean=previous.reduce((n,p)=>n+p.dps,0)/previous.length;
   const allMean=attempts.reduce((n,p)=>n+p.dps,0)/attempts.length,best=Math.max(...attempts.map(p=>p.dps));
   const rank=1+attempts.filter(p=>p.dps>last.dps).length;
-  return {count:attempts.length,rank,gap:best>0?(best-last.dps)*100/best:null,change:mean>0?(last.dps-mean)*100/mean:null,
+  return {count:attempts.length,rank,previousMean:mean,gap:best>0?(best-last.dps)*100/best:null,change:mean>0?(last.dps-mean)*100/mean:null,
     deviation:allMean>0?attempts.reduce((n,p)=>n+Math.abs(p.dps-allMean),0)/attempts.length/allMean*100:null};
 }
+// One summary row: the plain values, and the comparison only when it is reliable.
 function bossStory(attempts,characterSelected) {
   const v=bossPerformance(attempts,characterSelected),percent=n=>Math.abs(n).toFixed(1).replace('.',',')+' %';
-  if(v.hint)return `<p class="analysis-note">${esc(v.hint)}</p>`;
-  return `<div class="performance-story" aria-label="Persönliche Leistungseinordnung"><div class="story-intro"><span class="eyebrow">Deine Entwicklung</span><strong>Letzter Versuch · Rang ${v.rank} von ${v.count}</strong><small>Gleicher Charakter und gleiche Klasse · gewählter Ausschnitt</small></div><div>${v.change==null?'Keine positive Vergleichsbasis':`<strong class="${v.change>=0?'compare-positive':'compare-negative'}">${v.change>=0?'+':'−'}${percent(v.change)}</strong><span>zum Ø der ${v.count-1} vorherigen Versuche</span>`}</div><div><strong>${v.gap==null?'—':percent(v.gap)}</strong><span>Abstand zum Bestwert im Ausschnitt</span></div><div><strong>${v.deviation==null?'—':percent(v.deviation)}</strong><span>Ø Abweichung vom Mittel · kleiner = konstanter</span></div></div>`;
+  const last=attempts.at(-1),best=Math.max(...attempts.map(p=>p.dps)),mean=attempts.reduce((n,p)=>n+p.dps,0)/attempts.length;
+  const cell=(value,label,cls='')=>`<div${cls?` class="${cls}"`:''}><strong>${value}</strong><span>${label}</span></div>`;
+  if(v.hint)return {hint:v.hint,summary:cell(num(last.dps)+' DPS','Letzter Versuch')+cell(num(best)+' DPS','Bestwert im Ausschnitt')+cell(num(mean)+' DPS','Ø pro Versuch')+cell(attempts.length,'Versuche im Ausschnitt')};
+  return {hint:'',summary:cell(num(last.dps)+' DPS',`Letzter Versuch · Rang ${v.rank} von ${v.count}`,'trend-lead')
+    +cell(v.change==null?'—':`<b class="${v.change>=0?'compare-positive':'compare-negative'}">${v.change>=0?'+':'−'}${percent(v.change)}</b>`,`zum Ø der ${v.count-1} vorherigen Versuche (${num(v.previousMean)} DPS)`)
+    +cell(num(best)+' DPS','Bestwert im Ausschnitt · '+(v.gap?`letzter ${percent(v.gap)} darunter`:'letzter Versuch'))
+    +cell(num(mean)+' DPS',`Ø aller ${v.count} Versuche · Schwankung ±${v.deviation==null?'—':percent(v.deviation)}`)};
 }
 function fightStory(f) {
   if(f.numeric_limited)return '';
   const me=f.players.find(p=>p.is_self),actor=me?.actor_id??null,peak=observedPeak(f,actor);
   const top=me?.skills?.reduce((a,b)=>Number(b.damage)>Number(a?.damage||0)?b:a,null);
+  const rank=me?1+f.players.filter(p=>Number(p.damage)>Number(me.damage)).length:0;
   const parts=[];
   if(peak)parts.push(`<div><strong><button type="button" class="story-link" data-story-peak title="Dieses Fenster im Schadensverlauf anzeigen">${num(peak.dps)} DPS ↗</button></strong><span>Stärkstes beobachtetes 5s-Fenster${peak.partial?' im Ausschnitt':''} · ${dur(peak.start)}–${dur(peak.end)}</span></div>`);
   if(top&&me.damage>0&&top.damage>0&&top.damage<=me.damage)parts.push(`<div><strong>${skillLabel(top)}</strong><span>${pct(top.damage*100/me.damage)} deines Schadens${top.is_dot?' · DoT':''}</span></div>`);
   if(!parts.length)return '';
-  return `<div class="performance-story fight-story" aria-label="Kampfzusammenfassung"><div class="story-intro"><span class="eyebrow">Kampf im Fokus</span><strong>${me?'Deine Leistung':'Gruppenleistung'}</strong><small>Aus erfassten Daten</small></div>${parts.join('')}</div>`;
+  // The lead cell carries your own result, so the story starts with data instead of a label.
+  const lead=me?`<strong>${num(me.dps)} DPS</strong><small>Deine DPS · Rang ${rank} von ${f.players.length}${me.share!=null?' · '+pct(me.share)+' Anteil':''}</small>`:`<strong>Gruppenleistung</strong><small>Kein eigener Charakter in diesem Kampf erfasst</small>`;
+  return `<div class="performance-story fight-story" aria-label="Kampfzusammenfassung"><div class="story-intro"><span class="eyebrow">Kampf im Fokus</span>${lead}</div>${parts.join('')}</div>`;
 }
 
 const FIGHT_PAGE = 10;
@@ -337,7 +346,7 @@ function fightChartControls(f) {
 function bindFightChart(f) {
   const root=$('#fightDamageChart');if(!root)return;
   const scope=$('#fightChartScope'),metric=$('#fightChartMetric'),smooth=$('#fightChartWindow'),hidden=new Set();
-  let selected=-1;
+  let selected=-1,peakActive=false;
   function render() {
     const unit=metric.value==='total'?'Schaden':'DPS',windowMs=Number(smooth.value),all=scope.value==='players';
     smooth.disabled=metric.value==='total';
@@ -367,11 +376,11 @@ function bindFightChart(f) {
       const svg=plot.querySelector('svg'),line=plot.querySelector('.curve-cross');
       if(line){const W=svg.viewBox.baseVal.width,end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),x=58+point.ms/end*(W-76);line.setAttribute('x1',x);line.setAttribute('x2',x);}
     };
-    const clearInterval=()=>{interval=null;plot.querySelector('[data-curve-highlight]')?.remove();detail.replaceChildren();};
+    const clearInterval=()=>{interval=null;peakActive=false;plot.querySelector('[data-curve-highlight]')?.remove();detail.replaceChildren();};
     show(selected<0?points.length-1:selected);range.oninput=()=>{clearInterval();show(Number(range.value));};
     peakButton.textContent=all||scope.value==='group'?'Stärkstes Gruppen-5s-Fenster':'Stärkstes 5s-Fenster';
     peakButton.onclick=()=>{
-      if(!peak)return;clearInterval();interval=peak;
+      if(!peak)return;clearInterval();interval=peak;peakActive=true;
       show(points.reduce((best,p,i)=>Math.abs(p.ms-peak.end)<Math.abs(points[best].ms-peak.end)?i:best,0));
       const svg=plot.querySelector('svg');
       if(svg){const W=svg.viewBox.baseVal.width,end=Math.max(1000,f.duration_ms||0,points.at(-1).ms),band=document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -383,13 +392,16 @@ function bindFightChart(f) {
       detail.innerHTML=`<h4>Beobachtete Treffer · ${(start/1000).toLocaleString('de-DE')}–${(end/1000).toLocaleString('de-DE')} s</h4><p class="analysis-note">Treffer/Ticks, keine Casts oder Schadenszuordnung. DoT und Multihit können mehrere Ereignisse erzeugen. Fehlende oder gekürzte Zeitpunkte werden nicht ergänzt.</p>`+(v.available?(v.hits.length?`<ol class="window-hits">${v.hits.slice(0,8).map(h=>`<li><span>${skillLabel(h.skill)}${h.skill.is_dot?' · DoT':''}<small>${esc(h.player)}</small></span><strong>${h.count} Treffer/Ticks</strong></li>`).join('')}</ol>${v.hits.length>8?`<p class="analysis-note">Die 8 häufigsten Skills von ${v.hits.length} im Fenster.</p>`:''}`:'<p class="analysis-note">Keine gespeicherten Treffer in diesem Fenster. Die Aufzeichnung kann unvollständig sein.</p>'):'<p class="analysis-note">Keine Trefferzeitpunkte gespeichert.</p>');
     };
     const hit=plot.querySelector('.curve-hit');
-    if(hit)hit.onpointermove=hit.onpointerdown=e=>{
-      clearInterval();const r=hit.getBoundingClientRect(),end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),ms=(e.clientX-r.left)/r.width*end;
+    // Hover only moves the crosshair; a click selects a new point and drops the marked window.
+    if(hit){hit.onpointermove=e=>{
+      const r=hit.getBoundingClientRect(),end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),ms=(e.clientX-r.left)/r.width*end;
       let lo=0,hi=points.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(points[mid].ms<ms)lo=mid+1;else hi=mid;}
       if(lo>0&&ms-points[lo-1].ms<points[lo].ms-ms)lo--;show(lo);
-    };
+    };hit.onpointerdown=e=>{clearInterval();hit.onpointermove(e);};}
+    if(peakActive)peakButton.onclick();
   }
-  scope.onchange=metric.onchange=smooth.onchange=render;
+  // A resize redraw keeps the marked window; changing the view starts fresh.
+  scope.onchange=metric.onchange=smooth.onchange=()=>{peakActive=false;render();};
   root.renderCurve=render;render();
   const storyButton=$('[data-story-peak]');
   if(storyButton)storyButton.onclick=()=>{
@@ -435,9 +447,10 @@ async function openFight(id) {
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
+    ${fightStory(f)}
     <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
-    ${fightStory(f)}${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
+    ${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
     <details><summary>Verbindung · Ping-Verlauf</summary>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}</details>
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);

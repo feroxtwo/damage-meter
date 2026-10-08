@@ -31,7 +31,7 @@ pub fn check_x11_dependencies() -> anyhow::Result<()> {
 pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
-const ROW: f32 = 30.0;
+const ROW: f32 = 32.0;
 fn row_height(compact: bool) -> f32 {
     if compact { 22.0 } else { ROW }
 }
@@ -107,6 +107,27 @@ fn shadow_text(
     p.text(pos, align, text, font, color);
 }
 
+/// Single-line text that ends in "…" instead of being cut mid-glyph.
+fn shadow_text_elided(
+    p: &egui::Painter,
+    left_center: Pos2,
+    text: String,
+    font: FontId,
+    color: Color32,
+    max_width: f32,
+) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_width.max(0.0));
+    let galley = p.layout_job(job);
+    let pos = left_center - Vec2::new(0.0, galley.size().y / 2.0);
+    p.galley_with_override_text_color(
+        pos + Vec2::new(0.0, 1.0),
+        galley.clone(),
+        Color32::from_black_alpha(240),
+    );
+    p.galley(pos, galley, color);
+}
+
 // Debug-only visual QA input; no packet/API injection and absent from release builds.
 #[cfg(debug_assertions)]
 fn native_fixture() -> Option<Live> {
@@ -119,6 +140,7 @@ fn native_fixture() -> Option<Live> {
     let mut live = Live {
         target_name: "SYNTHETISCH · Kargos".into(),
         target_hp: Some(0.38),
+        dungeon: "Synthetischer Hornbau".into(),
         battle_time_ms: 90_000,
         ping_ms: Some(42),
         ..Default::default()
@@ -260,9 +282,9 @@ impl Overlay {
                 rect.right_top() + Vec2::new(-8.0, 19.0),
                 Align2::RIGHT_TOP,
                 format!(
-                    "{}{:0.1}% HP",
+                    "{}{} % HP",
                     if live.hp_estimated { "~" } else { "" },
-                    hp * 100.0
+                    format!("{:.1}", hp * 100.0).replace('.', ",")
                 ),
                 FontId::proportional(10.0),
                 Color32::from_gray(220),
@@ -401,11 +423,23 @@ impl Overlay {
                 with_alpha(row.color, if row.dead { 100 } else { 220 }),
             );
             if row.is_self {
+                // Own row: accent edge plus outline, independent of the class colour.
+                let accent = with_alpha(palette(&settings.theme).2, 235);
                 p.rect_stroke(
                     inner,
                     3,
-                    Stroke::new(0.7_f32, with_alpha(palette(&settings.theme).2, 140)),
+                    Stroke::new(1.0_f32, with_alpha(palette(&settings.theme).2, 190)),
                     StrokeKind::Inside,
+                );
+                p.rect_filled(
+                    Rect::from_min_size(inner.left_top(), Vec2::new(3.0, inner.height())),
+                    CornerRadius {
+                        nw: 3,
+                        sw: 3,
+                        ne: 0,
+                        se: 0,
+                    },
+                    accent,
                 );
             }
             let name = if hide_names && !row.is_self {
@@ -434,17 +468,32 @@ impl Overlay {
                 .size()
                 .x;
             let primary_x = inner.right() - if settings.compact { 35.0 } else { 6.0 };
-            let mut name_rect = inner;
-            name_rect.set_right((primary_x - primary_width - 8.0).max(inner.left()));
+            let secondary = if settings.compact {
+                share.clone()
+            } else if show_dps {
+                format!("{}  ·  {share}", short_number(value))
+            } else {
+                share.clone()
+            };
+            let secondary_font = FontId::proportional(9.0);
+            let secondary_width = p
+                .layout_no_wrap(secondary.clone(), secondary_font.clone(), Color32::WHITE)
+                .size()
+                .x;
+            // Numbers own the right side; the name ends with "…" before the wider of them.
+            let numbers_left = if settings.compact {
+                primary_x - primary_width
+            } else {
+                (primary_x - primary_width).min(inner.right() - 6.0 - secondary_width)
+            };
             let color = if row.dead {
                 Color32::from_gray(155)
             } else {
                 Color32::WHITE
             };
-            let name_painter = p.with_clip_rect(name_rect);
             shadow_text(
-                &name_painter,
-                inner.left_center() + Vec2::new(5.0, -1.0),
+                p,
+                inner.left_center() + Vec2::new(6.0, -1.0),
                 Align2::LEFT_CENTER,
                 (i + 1).to_string(),
                 FontId::monospace(10.0),
@@ -453,28 +502,29 @@ impl Overlay {
             let icon = self.class_icons.get(row.class_key);
             if let Some(texture) = icon {
                 let icon_rect = Rect::from_center_size(
-                    inner.left_center() + Vec2::new(29.0, -1.0),
+                    inner.left_center() + Vec2::new(30.0, -1.0),
                     Vec2::splat(if settings.compact { 16.0 } else { 18.0 }),
                 );
-                name_painter.image(
+                p.image(
                     texture.id(),
                     icon_rect,
                     Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
                     color,
                 );
             }
-            shadow_text(
-                &name_painter,
-                inner.left_center() + Vec2::new(if icon.is_some() { 41.0 } else { 22.0 }, -1.0),
-                Align2::LEFT_CENTER,
+            let name_x = inner.left() + if icon.is_some() { 42.0 } else { 23.0 };
+            shadow_text_elided(
+                p,
+                Pos2::new(name_x, inner.center().y - 1.0),
                 format!("{}{}", if row.dead { "† " } else { "" }, name),
                 FontId::proportional(12.0),
                 color,
+                numbers_left - 8.0 - name_x,
             );
             let y = if settings.compact {
                 inner.center().y - 1.0
             } else {
-                inner.top() + 7.0
+                inner.top() + 9.0
             };
             shadow_text(
                 p,
@@ -489,22 +539,17 @@ impl Overlay {
                     p,
                     inner.right_center() + Vec2::new(-5.0, -1.0),
                     Align2::RIGHT_CENTER,
-                    share,
-                    FontId::proportional(9.0),
+                    secondary,
+                    secondary_font,
                     Color32::from_gray(185),
                 );
             } else {
-                let secondary = if show_dps {
-                    format!("{}  ·  {share}", short_number(value))
-                } else {
-                    share
-                };
                 shadow_text(
                     p,
-                    inner.right_bottom() + Vec2::new(-6.0, -3.0),
+                    inner.right_bottom() + Vec2::new(-6.0, -4.0),
                     Align2::RIGHT_BOTTOM,
                     secondary,
-                    FontId::proportional(9.0),
+                    secondary_font,
                     Color32::from_gray(185),
                 );
             }
@@ -544,7 +589,7 @@ impl Overlay {
         } else if c.locked_port.is_some() {
             (
                 Color32::from_rgb(80, 200, 100),
-                if live.overlay.compact || live.dungeon.is_empty() {
+                if live.dungeon.is_empty() {
                     "Verbunden".to_string()
                 } else {
                     live.dungeon.clone()
@@ -820,7 +865,7 @@ mod tests {
         );
         assert_eq!(
             super::overlay_size(false, 5),
-            eframe::egui::vec2(360.0, 216.0)
+            eframe::egui::vec2(360.0, 226.0)
         );
     }
 

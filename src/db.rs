@@ -125,7 +125,20 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ),
     ("fight_players", "died", "INTEGER NOT NULL DEFAULT 0"),
     ("runs", "favorite", "INTEGER NOT NULL DEFAULT 0"),
+    // NULL: no verifiable record. Stored so history never re-parses record_json.
+    ("fights", "numeric_limited", "INTEGER"),
 ];
+
+/// Derives `fights.numeric_limited` from a saved record. `instr` skips the JSON
+/// parse for the common case without any capped skill value.
+const NUMERIC_LIMITED_SQL: &str = "CASE WHEN record_json IS NULL THEN NULL
+      WHEN instr(record_json, '2147483647') = 0 THEN 0
+      WHEN json_valid(record_json) THEN
+        EXISTS(SELECT 1 FROM json_each(record_json, '$.details.skills')
+               WHERE json_extract(value, '$.dmg') = 2147483647)
+        OR EXISTS(SELECT 1 FROM json_each(record_json, '$.details.healSkills')
+                  WHERE json_extract(value, '$.dmg') = 2147483647)
+      ELSE NULL END";
 
 /// SQLite's `lower()` folds ASCII only, so a search for "kälte" would miss
 /// "Kälte"; `fold()` lowercases with Rust's Unicode rules instead.
@@ -201,6 +214,14 @@ fn migrate(conn: &Connection) -> Result<()> {
             conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
         }
     }
+    // Fights saved before the column existed; each is derived once.
+    conn.execute(
+        &format!(
+            "UPDATE fights SET numeric_limited = {NUMERIC_LIMITED_SQL}
+             WHERE numeric_limited IS NULL AND record_json IS NOT NULL"
+        ),
+        [],
+    )?;
     repair_masked_names_once(conn)
 }
 
@@ -594,13 +615,14 @@ impl Db {
 
             tx.execute(
                 "INSERT INTO fights(id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at,
-                                               duration_ms, total_damage, max_hp, is_train, record_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                                               duration_ms, total_damage, max_hp, is_train, record_json, numeric_limited)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(id) DO UPDATE SET run_id=COALESCE(excluded.run_id, fights.run_id), boss_name=excluded.boss_name,
                   mob_code=excluded.mob_code, target_id=excluded.target_id,
                   dungeon_id=CASE WHEN excluded.dungeon_id > 0 THEN excluded.dungeon_id ELSE fights.dungeon_id END,
                   max_hp=excluded.max_hp,is_train=excluded.is_train,
-                  duration_ms=excluded.duration_ms, total_damage=excluded.total_damage, record_json=excluded.record_json",
+                  duration_ms=excluded.duration_ms, total_damage=excluded.total_damage, record_json=excluded.record_json,
+                  numeric_limited=excluded.numeric_limited",
                 params![
                     record.id,
                     run_id,
@@ -613,7 +635,13 @@ impl Db {
                     total,
                     record.details.max_hp,
                     record.is_train,
-                    serde_json::to_string(record)?
+                    serde_json::to_string(record)?,
+                    record
+                        .details
+                        .skills
+                        .iter()
+                        .chain(&record.details.heal_skills)
+                        .any(|s| s.dmg == i32::MAX)
                 ],
             )?;
             tx.execute(
@@ -1100,13 +1128,7 @@ impl Db {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
-                    fp.dps, fp.share, fp.died, fp.job,
-                    CASE WHEN json_valid(f.record_json) THEN
-                      EXISTS(SELECT 1 FROM json_each(f.record_json, '$.details.skills')
-                             WHERE json_extract(value, '$.dmg') = 2147483647)
-                      OR EXISTS(SELECT 1 FROM json_each(f.record_json, '$.details.healSkills')
-                                WHERE json_extract(value, '$.dmg') = 2147483647)
-                    ELSE NULL END AS numeric_limited
+                    fp.dps, fp.share, fp.died, fp.job, f.numeric_limited
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
              ORDER BY f.started_at",
@@ -1513,15 +1535,29 @@ mod tests {
         assert_eq!(attempts[0]["numeric_limited"], 0);
         assert_eq!(attempts[1]["numeric_limited"], 1);
         assert_eq!(attempts[2]["numeric_limited"], 1);
+        // History reads the stored flag instead of parsing every record again.
         db.conn
             .lock()
-            .execute(
-                "UPDATE fights SET record_json = NULL WHERE id = 'normal'",
-                [],
-            )
+            .execute("UPDATE fights SET record_json = '{}'", [])
             .unwrap();
         let history = db.boss_history("Me").unwrap();
-        assert!(history[0]["attempts"][0]["numeric_limited"].is_null());
+        assert_eq!(history[0]["attempts"][1]["numeric_limited"], 1);
+        // Databases from before the column: derived once, unverifiable stays NULL.
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "UPDATE fights SET numeric_limited = NULL;
+             UPDATE fights SET record_json = NULL WHERE id = 'normal';
+             UPDATE fights SET record_json = '{\"details\":{\"skills\":[{\"dmg\":2147483647}]}}' WHERE id = 'limited';
+             UPDATE fights SET record_json = '{\"details\":{\"skills\":[{\"dmg\":5}]}}' WHERE id = 'healing';",
+        )
+        .unwrap();
+        super::migrate(&conn).unwrap();
+        drop(conn);
+        let history = db.boss_history("Me").unwrap();
+        let attempts = history[0]["attempts"].as_array().unwrap();
+        assert!(attempts[0]["numeric_limited"].is_null());
+        assert_eq!(attempts[1]["numeric_limited"], 1);
+        assert_eq!(attempts[2]["numeric_limited"], 0);
     }
 
     #[test]

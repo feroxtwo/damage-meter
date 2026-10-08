@@ -554,10 +554,11 @@ function drawBoss() {
   range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossInsights').innerHTML='';$('#bossNote').textContent='';
   if(!b?.attempts.length){box.innerHTML='<div class="empty">Noch keine gespeicherten Bossversuche mit dir. Wähle bei Bedarf einen anderen Charakter.</div>';return;}
   const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
-  if(typeof window.bossStory==='function')$('#bossInsights').innerHTML=bossStory(k,!!character);
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
-  $('#bossSummary').innerHTML=summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
+  const story=typeof window.bossStory==='function'?bossStory(k,!!character):null;
+  if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(story.hint)}</p>`;
+  $('#bossSummary').innerHTML=story?story.summary:summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
   box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,max=Math.max(1,best)*1.1;
   const x=i=>k.length===1?(L+W-R)/2:L+i*(W-L-R)/(k.length-1),y=v=>T+(1-v/max)*(H-T-B);
   const step=Math.max(1,Math.ceil(k.length/600)),visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
@@ -575,7 +576,7 @@ function drawBoss() {
   range.disabled=false;range.max=k.length-1;
   const select=i=>{
     range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&typeof knownClassJob==='function'&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
-    const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':''}${change.toFixed(1)}% zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
+    const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':'−'}${Math.abs(change).toFixed(1).replace('.',',')} % zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);
     const cross=$('#bossCross');cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));

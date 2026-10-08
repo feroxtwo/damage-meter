@@ -675,7 +675,15 @@ const server = http.createServer((req,res) => {
       await page.route('**/api/fights/insight',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(focused)}));
       await page.evaluate(()=>openFight('insight'));await page.locator('[data-curve-peak]').waitFor();
       assert.match(await page.locator('.fight-story').textContent(),/200.*5s-Fenster.*100,0%/);
+      assert.match(await page.locator('.fight-story .story-intro').textContent(),/200 DPS.*Rang 2 von 2.*47,6%/);
+      assert.ok(await page.evaluate(()=>document.querySelector('.fight-story').compareDocumentPosition(document.querySelector('.fight-tools'))&Node.DOCUMENT_POSITION_FOLLOWING),'story leads the report before export tools');
       await page.locator('[data-story-peak]').click();assert.equal(await page.locator('#fightChartScope').inputValue(),'1');assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      // Moving the pointer over the chart or resizing must not silently drop the marked window.
+      await page.locator('[data-curve-plot] .curve-hit').hover({position:{x:40,y:40}});assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      await page.setViewportSize({width:1000,height:1000});await page.waitForFunction(()=>Math.abs(document.querySelector('#fightDamageChart').drawnWidth-document.querySelector('#fightDamageChart').clientWidth)<1);
+      assert.equal(await page.locator('[data-curve-highlight]').count(),1);await page.setViewportSize({width:1440,height:1000});
+      await page.locator('[data-curve-plot] .curve-hit').click({position:{x:40,y:40}});assert.equal(await page.locator('[data-curve-highlight]').count(),0);
+      await page.locator('[data-curve-peak]').click();
       assert.match(await page.locator('[data-curve-readout]').textContent(),/5 s/);
       await page.locator('[data-curve-hits]').click();assert.equal(await page.locator('.window-hits li').count(),1);
       assert.match(await page.locator('.curve-detail').textContent(),/3 Treffer\/Ticks/);
@@ -695,8 +703,12 @@ const server = http.createServer((req,res) => {
       const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',numeric_limited:0,started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
       await page.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
       await page.selectOption('#charSel','FeroxTOO');await page.getByRole('button',{name:'Statistik',exact:true}).click();
-      await page.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('+100,0 %'));
-      assert.match(await page.locator('#bossInsights').textContent(),/Rang 1 von 3/);
+      await page.waitForFunction(()=>document.querySelector('#bossSummary').textContent.includes('+100,0 %'));
+      const summary=await page.locator('#bossSummary').textContent();
+      assert.match(summary,/Rang 1 von 3/);assert.match(summary,/Ø der 2 vorherigen Versuche \(10,0K DPS\)/);assert.match(summary,/Ø aller 3 Versuche/);
+      assert.equal(await page.locator('#bossSummary > div').count(),4,'one summary row, no duplicated insight cards');
+      assert.equal(await page.locator('#bossInsights').textContent(),'');
+      await page.locator('#bossAttempt').fill('2');assert.match(await page.locator('#bossReadout').textContent(),/\+100,0 % zum vorherigen Versuch/);
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-progression.png'),fullPage:true});
       await page.selectOption('#charSel','');await page.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('Charakter wählen'));
       await page.unroute('**/api/stats/boss-history**');
@@ -714,6 +726,9 @@ const server = http.createServer((req,res) => {
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
       await page.waitForFunction(()=>document.querySelector('#selfRank').textContent==='#1');assert.match(await page.locator('#selfContext').textContent(),/47,6%.*3 Spieler/);
+      // Group proportions stay visible as a tinted bar, not a hairline.
+      const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,row:r.getBoundingClientRect().height,opacity:Number(getComputedStyle(f).opacity)};}));
+      assert.ok(bars.length>=3&&bars.every(b=>b.height>=b.row-1&&b.opacity>=.25),JSON.stringify(bars));
       await page.selectOption('#liveMetric','heal');assert.equal(await page.locator('#selfBurst').isVisible(),false);assert.match(await page.locator('#selfDpsLabel').textContent(),/HPS/);
       await page.selectOption('#liveMetric','damage');await page.emulateMedia({reducedMotion:'reduce'});
       for(const theme of ['midnight','aether','ember']){

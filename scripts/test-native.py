@@ -62,10 +62,14 @@ try:
                 return g
             time.sleep(.1)
         raise AssertionError(f'Expected {width}x{height} at {position}, observed {g}')
+    def settle():
+        # The X11 geometry changes before the first frame at the new size is
+        # painted; a screenshot taken right away can show the previous frame.
+        time.sleep(1)
     print('Native start:',geometry(),flush=True)
     for scale in [1,1.5,2,2.5,.6,1]:
         s=get();s.update(scale=scale,compact=True,theme='aether',max_rows=5);post(s)
-        g=wait_geometry(312*scale,compact_height*scale);print('Scale',scale,g,flush=True)
+        g=wait_geometry(312*scale,compact_height*scale);settle();print('Scale',scale,g,flush=True)
         assert abs(int(g['WIDTH'])-round(312*scale)) <= 1,g
         assert abs(int(g['HEIGHT'])-round(compact_height*scale)) <= 1,g
         assert (int(g['X']),int(g['Y']))==(40,40),g
@@ -78,16 +82,20 @@ try:
                     subprocess.run(['hsetroot','-solid',color],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
-                    height=compact_height if compact else 40+22+30*row_count+4
-                    g=wait_geometry(width,height);time.sleep(.35)
+                    height=compact_height if compact else 40+22+32*row_count+4
+                    g=wait_geometry(width,height);settle()
                     frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
                     backdrop_pixels.append(frame.getpixel((int(g['X'])+6,int(g['Y'])+height//2)))
                     frame.crop((0,0,width+90,height+90)).save(output/f'native-{theme}-{compact}-{scene}.png')
                 assert backdrop_pixels[0]!=backdrop_pixels[1],'Underlying scene did not composite through the native overlay'
         for scale in [.6,1,2.5]:
             s=get();s.update(compact=True,scale=scale,max_rows=24);post(s)
-            g=wait_geometry(312*scale,(36+20+22*24+4)*scale)
-            ImageGrab.grab(xdisplay=env['DISPLAY']).crop((0,0,int(g['WIDTH'])+90,int(g['HEIGHT'])+90)).save(output/f'native-24-rows-{scale}.png')
+            g=wait_geometry(312*scale,(36+20+22*24+4)*scale);settle()
+            frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
+            # The footer must be painted at the bottom of the resized window, not a stale smaller frame.
+            footer=frame.getpixel((int(g['X'])+int(g['WIDTH'])//2,int(g['Y'])+int(g['HEIGHT'])-4))
+            assert footer[:3]!=(0xe8,0xdd,0xbf),f'Scale {scale}: window bottom shows the backdrop, not the footer'
+            frame.crop((0,0,int(g['WIDTH'])+90,int(g['HEIGHT'])+90)).save(output/f'native-24-rows-{scale}.png')
         s=get();s.update(compact=True,scale=1,max_rows=5);post(s);wait_geometry(312,compact_height)
         subprocess.run(['hsetroot','-solid','black'],env=env,check=True)
     s=get();s.update(visible=False,locked=True);post(s);time.sleep(.5)
