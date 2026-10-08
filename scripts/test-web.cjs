@@ -359,7 +359,7 @@ const server = http.createServer((req,res) => {
       const original=live.rows[0].damage;live.rows[0].damage=1;
       const overlay=await context.newPage();overlay.on('pageerror',e=>errors.push(e.message));
       await overlay.goto(base+'/overlay');await overlay.locator('#rows .row').waitFor();
-      assert.match(await overlay.locator('#rows').textContent(),/3. FeroxTOO/);
+      assert.equal(await overlay.locator('#rows .row.me .rk').textContent(),'03');assert.match(await overlay.locator('#rows .row.me').textContent(),/FeroxTOO/);
       live.rows[0].damage=original;await overlay.close();
     });
     await check('appearance, idle reset and update controls persist with settings',async()=>{
