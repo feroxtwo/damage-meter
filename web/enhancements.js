@@ -161,8 +161,29 @@ function renderLiveSignal(l) {
   root.innerHTML=`<svg viewBox="0 0 600 130" aria-hidden="true" preserveAspectRatio="none"><path class="signal-grid" d="M0 20H600 M0 64H600 M0 108H600"/>${paths.map(d=>`<path class="signal-line" d="${d}"/>`).join('')}</svg><div class="signal-scale"><span>${dur(start)}</span><span>${num(max)}/s beobachtet</span><span>${dur(end)}</span></div>`;
 }
 
+let previousEncounter=null,postFightRequest=0;
+function updateSavedMoment(l) {
+  const me=l.rows.find(r=>r.is_self),next={id:l.target_id,start:l.target_started_at,name:l.target_name,actor:me?.id,character:me?.name??l.character,ms:l.battle_time_ms};
+  const old=previousEncounter;previousEncounter=next;
+  if(!old||JSON.stringify([old.id,old.start,old.character])===JSON.stringify([next.id,next.start,next.character]))return;
+  const request=++postFightRequest,root=$('#postFight');
+  if(old.character!==next.character&&next.character){root.hidden=true;root.replaceChildren();return;}
+  if(!old.start||!old.actor||old.ms<=0)return;
+  const id='auto_'+old.id+'_'+old.start;
+  api('/api/fights/'+encodeURIComponent(id)).then(f=>{
+    if(request!==postFightRequest||!f||f.id!==id||f.started_at!==old.start||f.boss_name!==old.name)return;
+    const player=f.players?.find(p=>p.is_self&&p.actor_id===old.actor&&p.name===old.character);if(!player)return;
+    // Stored attempt, not inferred victory or combat-end notification.
+    root.innerHTML=`<div class="saved-moment-head"><div><span class="eyebrow">LETZTER GESPEICHERTER VERSUCH</span><strong>${esc(f.boss_name)} · ${dur(f.duration_ms)}</strong></div><button class="btn" data-open-saved>Bericht öffnen</button><button class="btn" data-dismiss-saved aria-label="Zusammenfassung ausblenden">×</button></div>${fightStory(f)}`;
+    root.hidden=false;
+    root.querySelector('[data-open-saved]').onclick=()=>task(openFight(id));
+    root.querySelector('[data-dismiss-saved]').onclick=()=>{root.hidden=true;};
+    const peak=root.querySelector('[data-story-peak]');if(peak)peak.onclick=()=>task(openFight(id).then(()=>$('#fightContent [data-story-peak]')?.click()));
+  }).catch(()=>{});
+}
+
 function renderEnhancedLive(l) {
-  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);
+  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);updateSavedMoment(l);
   $('#numericWarning').hidden=!l.numeric_limited;
   $(".ranking-head span").textContent=metricKey()==="heal"?"Heilung · HPS · Anteil":metricKey()==="damage_received"?"Erlittener Schaden · pro Sekunde · Anteil":"Schaden · DPS · Anteil";
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";
@@ -437,7 +458,7 @@ function bindFightChart(f) {
   // A resize redraw keeps the marked window; changing the view starts fresh.
   scope.onchange=metric.onchange=smooth.onchange=()=>{peakActive=false;render();};
   root.renderCurve=render;render();
-  const storyButton=$('[data-story-peak]');
+  const storyButton=$('#fightContent [data-story-peak]');
   if(storyButton)storyButton.onclick=()=>{
     scope.value=String(f.players.find(p=>p.is_self)?.actor_id??'group');metric.value='dps';smooth.value='5000';
     render();root.querySelector('[data-curve-peak]').click();root.scrollIntoView({block:'nearest'});

@@ -723,6 +723,22 @@ const server = http.createServer((req,res) => {
         assert.equal(await isolated.locator('#toast.error').isVisible(),false);
       } finally {await isolated.close();}
     });
+    await check('saved attempt moment requires the exact stored encounter and clears on character change',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      const stored={...fight,id:'auto_9_1000',started_at:1000,duration_ms:10000,analytics:{resolution_ms:500,points:Array.from({length:20},(_,i)=>({ms:(i+1)*500,damage:{1:(i+1)*100,2:(i+1)*200}}))}};
+      await isolated.route('**/api/fights/auto_9_1000',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(stored)}));
+      try {
+        await isolated.goto(base);await isolated.waitForFunction(()=>typeof renderEnhancedLive==='function');
+        await isolated.evaluate(()=>{renderEnhancedLive({...latestLive,target_started_at:1000});renderEnhancedLive({...latestLive,target_started_at:2000,battle_time_ms:1000});});
+        await isolated.locator('#postFight').waitFor();assert.match(await isolated.locator('#postFight').textContent(),/LETZTER GESPEICHERTER VERSUCH/);
+        assert.doesNotMatch(await isolated.locator('#postFight').textContent(),/Sieg|Kampf beendet/);
+        await isolated.locator('#postFight [data-story-peak]').click();await isolated.locator('#fightDialog').waitFor();assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
+        await isolated.locator('#closeDialog').click();
+        if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-saved-moment.png'),fullPage:true});
+        await isolated.evaluate(()=>renderEnhancedLive({...latestLive,character:'Alt',rows:latestLive.rows.map(r=>r.is_self?{...r,id:8,name:'Alt'}:r)}));
+        assert.equal(await isolated.locator('#postFight').isVisible(),false);
+      } finally {await isolated.close();}
+    });
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
       await page.waitForFunction(()=>document.querySelector('#selfRank').textContent==='#1');assert.match(await page.locator('#selfContext').textContent(),/47,6%.*3 Spieler/);

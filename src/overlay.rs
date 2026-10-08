@@ -9,8 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Vec2,
-    ViewportCommand,
+    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Vec2, ViewportCommand,
 };
 
 use crate::engine::{Engine, Live, metric_value, overlay_rows};
@@ -228,8 +227,18 @@ impl Overlay {
             Sense::click_and_drag(),
         );
         let p = ui.painter();
-        p.rect_filled(rect, 0, with_alpha(palette(&settings.theme).1, bg.saturating_add(25)));
-        p.line_segment([rect.left_top()+Vec2::new(8.0,1.0),rect.left_top()+Vec2::new(50.0,1.0)], Stroke::new(1.5_f32, Color32::from_rgb(91,213,222)));
+        p.rect_filled(
+            rect,
+            0,
+            with_alpha(palette(&settings.theme).1, bg.saturating_add(25)),
+        );
+        p.line_segment(
+            [
+                rect.left_top() + Vec2::new(8.0, 1.0),
+                rect.left_top() + Vec2::new(50.0, 1.0),
+            ],
+            Stroke::new(1.5_f32, Color32::from_rgb(91, 213, 222)),
+        );
         let title = if live.target_name.is_empty() {
             "Kein Ziel"
         } else {
@@ -402,16 +411,36 @@ impl Overlay {
             }
             let p = ui.painter();
             let inner = rect.shrink2(Vec2::new(4.0, 1.0));
-            let accent=with_alpha(palette(&settings.theme).2,235);
+            let accent = with_alpha(palette(&settings.theme).2, 235);
             if row.is_self {
-                p.rect_filled(inner,0,with_alpha(palette(&settings.theme).1,120));
-                p.line_segment([inner.left_top()+Vec2::new(0.0,3.0),inner.left_bottom()-Vec2::new(0.0,3.0)],Stroke::new(2.0_f32,accent));
-                p.line_segment([inner.left_top()+Vec2::new(0.0,3.0),inner.left_top()+Vec2::new(9.0,3.0)],Stroke::new(1.0_f32,accent));
+                p.rect_filled(inner, 0, with_alpha(palette(&settings.theme).1, 120));
+                p.line_segment(
+                    [
+                        inner.left_top() + Vec2::new(0.0, 3.0),
+                        inner.left_bottom() - Vec2::new(0.0, 3.0),
+                    ],
+                    Stroke::new(2.0_f32, accent),
+                );
+                p.line_segment(
+                    [
+                        inner.left_top() + Vec2::new(0.0, 3.0),
+                        inner.left_top() + Vec2::new(9.0, 3.0),
+                    ],
+                    Stroke::new(1.0_f32, accent),
+                );
             }
-            let track=Rect::from_min_size(inner.left_bottom()+Vec2::new(49.0,-3.0),Vec2::new((inner.width()-55.0).max(1.0),2.0));
-            p.rect_filled(track,0,Color32::from_white_alpha(12));
-            let mut fill=track;fill.set_width(track.width()*(value/top).clamp(0.0,1.0) as f32);
-            p.rect_filled(fill,0,with_alpha(row.color,if row.dead{90}else{210}));
+            let track = Rect::from_min_size(
+                inner.left_bottom() + Vec2::new(49.0, -3.0),
+                Vec2::new((inner.width() - 55.0).max(1.0), 2.0),
+            );
+            p.rect_filled(track, 0, Color32::from_white_alpha(12));
+            let mut fill = track;
+            fill.set_width(track.width() * (value / top).clamp(0.0, 1.0) as f32);
+            p.rect_filled(
+                fill,
+                0,
+                with_alpha(row.color, if row.dead { 90 } else { 210 }),
+            );
             let name = if hide_names && !row.is_self {
                 masked(&row.name)
             } else {
@@ -451,7 +480,8 @@ impl Overlay {
                 .size()
                 .x;
             // Numbers own the right side; the name ends with "…" before the wider of them.
-            let numbers_left=(primary_x-primary_width).min(inner.right()-6.0-secondary_width);
+            let numbers_left =
+                (primary_x - primary_width).min(inner.right() - 6.0 - secondary_width);
             let color = if row.dead {
                 Color32::from_gray(155)
             } else {
@@ -463,7 +493,11 @@ impl Overlay {
                 Align2::LEFT_CENTER,
                 format!("{:02}", i + 1),
                 FontId::monospace(11.0),
-                if row.is_self {accent} else {Color32::from_gray(160)},
+                if row.is_self {
+                    accent
+                } else {
+                    Color32::from_gray(160)
+                },
             );
             let icon = self.class_icons.get(row.class_key);
             if let Some(texture) = icon {
@@ -487,7 +521,9 @@ impl Overlay {
                 color,
                 numbers_left - 8.0 - name_x,
             );
-            let y = inner.top() + 9.0;
+            let y = if settings.compact { inner.center().y - 3.0 } else { inner.top() + 10.0 };
+            let plate=Rect::from_min_max(Pos2::new(numbers_left-4.0,inner.top()+1.0),Pos2::new(inner.right()-2.0,if settings.compact {inner.bottom()-5.0}else{inner.bottom()-7.0}));
+            p.rect_filled(plate,2,Color32::from_black_alpha(70));
             shadow_text(
                 p,
                 Pos2::new(primary_x, y),
@@ -496,8 +532,14 @@ impl Overlay {
                 primary_font,
                 color,
             );
-            shadow_text(p,inner.right_bottom()+Vec2::new(-6.0,-4.0),Align2::RIGHT_BOTTOM,secondary,secondary_font,Color32::from_gray(180));
-
+            if !settings.compact { shadow_text(
+                p,
+                inner.right_bottom() + Vec2::new(-6.0, -7.0),
+                Align2::RIGHT_BOTTOM,
+                secondary,
+                secondary_font,
+                Color32::from_gray(180),
+            ); }
         }
     }
 
@@ -551,7 +593,14 @@ impl Overlay {
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
         let controls = !live.overlay.locked && ui.rect_contains_pointer(rect);
         let mut state_rect = rect;
-        state_rect.set_right(rect.right() - if controls {4.0 * (ICON + 3.0) + 52.0} else {70.0});
+        state_rect.set_right(
+            rect.right()
+                - if controls {
+                    4.0 * (ICON + 3.0) + 52.0
+                } else {
+                    70.0
+                },
+        );
         p.with_clip_rect(state_rect).text(
             rect.left_center() + Vec2::new(18.0, 0.0),
             Align2::LEFT_CENTER,
@@ -562,57 +611,63 @@ impl Overlay {
         // Buttons remain available on hover; combat has no permanent icon rail.
         let mut x = rect.right() - 4.0;
         if controls {
-        let mut button = |icon: Icon, tip: &str| {
-            let r = Rect::from_center_size(
-                Pos2::new(x - ICON / 2.0, rect.center().y),
-                Vec2::splat(ICON),
-            );
-            x -= ICON + 3.0;
-            let resp = ui
-                .interact(r, ui.id().with(tip), Sense::click())
-                .on_hover_text(tip);
-            let color = if resp.hovered() {
-                ui.painter()
-                    .rect_filled(r, 4, Color32::from_white_alpha(28));
-                Color32::WHITE
-            } else {
-                Color32::from_gray(185)
+            let mut button = |icon: Icon, tip: &str| {
+                let r = Rect::from_center_size(
+                    Pos2::new(x - ICON / 2.0, rect.center().y),
+                    Vec2::splat(ICON),
+                );
+                x -= ICON + 3.0;
+                let resp = ui
+                    .interact(r, ui.id().with(tip), Sense::click())
+                    .on_hover_text(tip);
+                let color = if resp.hovered() {
+                    ui.painter()
+                        .rect_filled(r, 4, Color32::from_white_alpha(28));
+                    Color32::WHITE
+                } else {
+                    Color32::from_gray(185)
+                };
+                paint_icon(ui.painter(), r.shrink(3.5), icon, color);
+                resp.clicked()
             };
-            paint_icon(ui.painter(), r.shrink(3.5), icon, color);
-            resp.clicked()
-        };
-        let recording = self.engine.recording_wanted();
-        if button(
-            Icon::Lock,
-            "Sperren: Klicks gehen ans Spiel (Strg+Umschalt+F9 entsperrt)",
-        ) {
-            let _ = self.engine.modify_overlay(|s| s.locked = true);
-        }
-        if button(
-            Icon::Hide,
-            "Ausblenden (Strg+Umschalt+F10 blendet wieder ein)",
-        ) {
-            let _ = self.engine.modify_overlay(|s| s.visible = false);
-        }
-        if button(Icon::Reset, "Meter zurücksetzen (Strg+Umschalt+F11)") {
-            self.engine.request_reset();
-        }
-        if button(
-            Icon::Record(recording),
-            if recording {
-                "Mitschnitt läuft: klicken zum Ausschalten"
-            } else {
-                "Pakete mitschneiden"
-            },
-        ) {
-            self.engine.set_recording(!recording);
-        }
-
+            let recording = self.engine.recording_wanted();
+            if button(
+                Icon::Lock,
+                "Sperren: Klicks gehen ans Spiel (Strg+Umschalt+F9 entsperrt)",
+            ) {
+                let _ = self.engine.modify_overlay(|s| s.locked = true);
+            }
+            if button(
+                Icon::Hide,
+                "Ausblenden (Strg+Umschalt+F10 blendet wieder ein)",
+            ) {
+                let _ = self.engine.modify_overlay(|s| s.visible = false);
+            }
+            if button(Icon::Reset, "Meter zurücksetzen (Strg+Umschalt+F11)") {
+                self.engine.request_reset();
+            }
+            if button(
+                Icon::Record(recording),
+                if recording {
+                    "Mitschnitt läuft: klicken zum Ausschalten"
+                } else {
+                    "Pakete mitschneiden"
+                },
+            ) {
+                self.engine.set_recording(!recording);
+            }
         }
         let ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
         let p = ui.painter();
         p.text(
-            Pos2::new(if controls {x-2.0}else{rect.right()-8.0}, rect.center().y),
+            Pos2::new(
+                if controls {
+                    x - 2.0
+                } else {
+                    rect.right() - 8.0
+                },
+                rect.center().y,
+            ),
             Align2::RIGHT_CENTER,
             ping,
             FontId::monospace(10.5),

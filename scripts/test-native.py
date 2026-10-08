@@ -10,7 +10,7 @@ workspace=tempfile.TemporaryDirectory(prefix='a2m-native-')
 output=Path(os.environ.get('SCREENSHOT_DIR',workspace.name));output.mkdir(parents=True,exist_ok=True)
 env={**os.environ,'DISPLAY':'127.0.0.1:91','LIBGL_ALWAYS_SOFTWARE':'1','LD_LIBRARY_PATH':os.environ.get('LD_LIBRARY_PATH','')}
 xlog=open(Path(workspace.name)/'xvfb.log','w'); log=open(Path(workspace.name)/'native.log','w')
-x=subprocess.Popen([os.environ.get('XVFB_BINARY',shutil.which('Xvfb') or 'Xvfb'),':91','-screen','0','1800x1800x24','-fp',str(root/'share/fonts/X11/misc'),'-nolisten','unix','-nolisten','local','-listen','tcp','-ac'],env=env,stdout=xlog,stderr=xlog)
+x=subprocess.Popen([os.environ.get('XVFB_BINARY',shutil.which('Xvfb') or 'Xvfb'),':91','-screen','0','1800x2400x24','-fp',str(root/'share/fonts/X11/misc'),'-nolisten','unix','-nolisten','local','-listen','tcp','-ac'],env=env,stdout=xlog,stderr=xlog)
 fixture_mode=os.environ.get('NATIVE_FIXTURE')=='1'
 row_count=5 if fixture_mode else 1
 if fixture_mode:
@@ -78,8 +78,15 @@ try:
         for theme in ['midnight','aether','ember']:
             for compact in [True,False]:
                 backdrop_pixels=[]
-                for scene,color in [('dark','#101820'),('bright','#e8ddbf')]:
-                    subprocess.run(['hsetroot','-solid',color],env=env,check=True)
+                for scene,color in [('dark','#101820'),('bright','#e8ddbf'),('white','#ffffff'),('effects',None)]:
+                    if color: subprocess.run(['hsetroot','-solid',color],env=env,check=True)
+                    else:
+                        from PIL import Image,ImageDraw
+                        backdrop=Image.new('RGB',(1800,2400));draw=ImageDraw.Draw(backdrop)
+                        for y in range(0,2400,32):
+                            draw.rectangle((0,y,1800,y+31),fill=['#0b1020','#ec58a5','#45dce2','#ffefd1'][(y//32)%4])
+                        pattern=Path(workspace.name)/'effects.png';backdrop.save(pattern)
+                        subprocess.run(['hsetroot','-fill',str(pattern)],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
                     height=compact_height if compact else 40+22+40*row_count+4
@@ -88,6 +95,7 @@ try:
                     backdrop_pixels.append(frame.getpixel((int(g['X'])+6,int(g['Y'])+height//2)))
                     frame.crop((0,0,width+90,height+90)).save(output/f'native-{theme}-{compact}-{scene}.png')
                 assert backdrop_pixels[0]!=backdrop_pixels[1],'Underlying scene did not composite through the native overlay'
+        subprocess.run(['hsetroot','-solid','#e8ddbf'],env=env,check=True)
         for scale in [.6,1,2.5]:
             s=get();s.update(compact=True,scale=scale,max_rows=24);post(s)
             g=wait_geometry(312*scale,(36+18+28*24+4)*scale);settle()
