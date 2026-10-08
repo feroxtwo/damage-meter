@@ -28,4 +28,4 @@ assert.ok(run('bossPerformance(attempts.map(p=>({...p,numeric_limited:null})),tr
 context.attempts.push({dps:200,job:'cleric',numeric_limited:false});assert.equal(run('bossPerformance(attempts,true).rank'),1,'equal best values tie');
 assert.equal(run('bossPerformance(attempts.map(p=>({...p,dps:0})),true).change'),null);
 delete context.f.analytics.partial;assert.equal(JSON.stringify(context.f),original,'analysis preserves saved measurements');
-console.log('PASS insights: complete windows, partial baseline, gaps/resets/numeric limits, actor IDs, DoT/tick counts, comparable cohorts, previous-only average and tied ranking (23 assertions)');
+console.log('PASS insights: complete windows, partial baseline, gaps/resets/numeric limits, actor IDs, DoT/tick counts, comparable cohorts, previous-only average and tied ranking (28 assertions)');

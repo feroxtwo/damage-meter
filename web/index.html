@@ -211,7 +211,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <div class="card" style="grid-column:1 / -1"><h2>Wie entwickelt sich meine DPS?</h2>
         <div class="chart-tools"><label>Boss <select id="bossSel" aria-label="Boss für DPS-Verlauf"></select></label>
         <label>Versuche <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
-        <div id="bossStory"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
+        <div id="bossInsights"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
         <label class="curve-scrubber">Versuch <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
         <p class="analysis-note" id="bossNote"></p></div>
@@ -551,10 +551,10 @@ async function loadBossHistory() {
 function drawBoss() {
   const box=$('#bossChart'),range=$('#bossAttempt'),readout=$('#bossReadout'),open=$('#bossOpen');
   const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);
-  range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossStory').innerHTML='';$('#bossNote').textContent='';
+  range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossInsights').innerHTML='';$('#bossNote').textContent='';
   if(!b?.attempts.length){box.innerHTML='<div class="empty">Noch keine gespeicherten Bossversuche mit dir. Wähle bei Bedarf einen anderen Charakter.</div>';return;}
   const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
-  if(window.bossStory)$('#bossStory').innerHTML=bossStory(k,!!character);
+  if(typeof window.bossStory==='function')$('#bossInsights').innerHTML=bossStory(k,!!character);
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   $('#bossSummary').innerHTML=summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
@@ -574,7 +574,7 @@ function drawBoss() {
   $('#bossNote').textContent=`Chronologische Versuche mit gleichen Abständen; Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
   range.disabled=false;range.max=k.length-1;
   const select=i=>{
-    range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
+    range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&typeof knownClassJob==='function'&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
     const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':''}${change.toFixed(1)}% zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);

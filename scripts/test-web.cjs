@@ -695,11 +695,21 @@ const server = http.createServer((req,res) => {
       const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',numeric_limited:0,started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
       await page.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
       await page.selectOption('#charSel','FeroxTOO');await page.getByRole('button',{name:'Statistik',exact:true}).click();
-      await page.waitForFunction(()=>document.querySelector('#bossStory').textContent.includes('+100,0 %'));
-      assert.match(await page.locator('#bossStory').textContent(),/Rang 1 von 3/);
+      await page.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('+100,0 %'));
+      assert.match(await page.locator('#bossInsights').textContent(),/Rang 1 von 3/);
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-progression.png'),fullPage:true});
-      await page.selectOption('#charSel','');await page.waitForFunction(()=>document.querySelector('#bossStory').textContent.includes('Charakter wählen'));
+      await page.selectOption('#charSel','');await page.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('Charakter wählen'));
       await page.unroute('**/api/stats/boss-history**');
+    });
+    await check('direct statistics reload tolerates delayed enhancement scripts',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.addInitScript(()=>localStorage.setItem('a2m-character','FeroxTOO'));
+        await isolated.route('**/enhancements.js',async route=>{await delay(600);await route.continue();});
+        await isolated.goto(base+'/#stats');await isolated.waitForFunction(()=>document.querySelector('#bossInsights').textContent.includes('Mindestens drei'));
+        assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);
+        assert.equal(await isolated.locator('#toast.error').isVisible(),false);
+      } finally {await isolated.close();}
     });
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');

@@ -480,6 +480,7 @@ $('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',
 $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
 $('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());
+if(tab==='stats')drawBoss();
 
 // One redraw per frame and only when the chart width changed; keeps hover targets stable.
 let fightChartFrame=0;
