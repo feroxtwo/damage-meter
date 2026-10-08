@@ -25,6 +25,8 @@ Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKI
 
 [Premium Combat Experience und technische Abnahmematrix](docs/PREMIUM-UX-ACCEPTANCE.md): eigene Leistung/Rang zuerst, anklickbare beobachtete 5s-Peaks, Treffer/Ticks im gewählten Fenster, persönliche Boss-Einordnung und das bestehende native Overlay mit 312-Pixel-Kompaktmodus. Dashboard und natives Fenster laufen weiterhin parallel.
 
+[Combat Telemetry: Abschluss, Vorher/Nachher und Abnahmematrix](docs/COMBAT-TELEMETRY-ACCEPTANCE.md): offene Live-Komposition mit eigener Rate/Rang, lokal beobachtetem Burst-Signal, passendem gespeichertem Versuch und Training mit tatsächlichem Fortschritt. Das bestehende native Fenster erhält offene Zeilen, Zahlenkontrast und Hover-Aktionen; alle drei Themes bleiben verfügbar.
+
 **Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
 ## Neu in 0.3.0

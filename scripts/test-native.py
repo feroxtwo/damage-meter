@@ -10,7 +10,7 @@ workspace=tempfile.TemporaryDirectory(prefix='a2m-native-')
 output=Path(os.environ.get('SCREENSHOT_DIR',workspace.name));output.mkdir(parents=True,exist_ok=True)
 env={**os.environ,'DISPLAY':'127.0.0.1:91','LIBGL_ALWAYS_SOFTWARE':'1','LD_LIBRARY_PATH':os.environ.get('LD_LIBRARY_PATH','')}
 xlog=open(Path(workspace.name)/'xvfb.log','w'); log=open(Path(workspace.name)/'native.log','w')
-x=subprocess.Popen([os.environ.get('XVFB_BINARY',shutil.which('Xvfb') or 'Xvfb'),':91','-screen','0','1800x1800x24','-fp',str(root/'share/fonts/X11/misc'),'-nolisten','unix','-nolisten','local','-listen','tcp','-ac'],env=env,stdout=xlog,stderr=xlog)
+x=subprocess.Popen([os.environ.get('XVFB_BINARY',shutil.which('Xvfb') or 'Xvfb'),':91','-screen','0','1800x2400x24','-fp',str(root/'share/fonts/X11/misc'),'-nolisten','unix','-nolisten','local','-listen','tcp','-ac'],env=env,stdout=xlog,stderr=xlog)
 fixture_mode=os.environ.get('NATIVE_FIXTURE')=='1'
 row_count=5 if fixture_mode else 1
 if fixture_mode:
@@ -22,7 +22,7 @@ if fixture_mode:
         {'name':'Nyaria · tot','job':'마도성','damage':120000000},
         {'name':'Zephyros','job':'호법성','damage':90000000}]+[{'name':f'Zusätzlicher Spieler {i+6}','job':'궁성','damage':80000000-i*1000000} for i in range(19)]}),encoding='utf-8')
     env['A2M_NATIVE_FIXTURE']=str(fixture)
-compact_height=36+20+22*row_count+4
+compact_height=36+18+28*row_count+4
 p=None;compositor=None
 try:
     for _ in range(30):
@@ -78,25 +78,37 @@ try:
         for theme in ['midnight','aether','ember']:
             for compact in [True,False]:
                 backdrop_pixels=[]
-                for scene,color in [('dark','#101820'),('bright','#e8ddbf')]:
-                    subprocess.run(['hsetroot','-solid',color],env=env,check=True)
+                for scene,color in [('dark','#101820'),('bright','#e8ddbf'),('white','#ffffff'),('effects',None)]:
+                    if color: subprocess.run(['hsetroot','-solid',color],env=env,check=True)
+                    else:
+                        from PIL import Image,ImageDraw
+                        backdrop=Image.new('RGB',(1800,2400));draw=ImageDraw.Draw(backdrop)
+                        for y in range(0,2400,32):
+                            draw.rectangle((0,y,1800,y+31),fill=['#0b1020','#ec58a5','#45dce2','#ffefd1'][(y//32)%4])
+                        pattern=Path(workspace.name)/'effects.png';backdrop.save(pattern)
+                        subprocess.run(['hsetroot','-fill',str(pattern)],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
-                    height=compact_height if compact else 40+22+32*row_count+4
+                    height=compact_height if compact else 40+22+40*row_count+4
                     g=wait_geometry(width,height);settle()
                     frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
                     backdrop_pixels.append(frame.getpixel((int(g['X'])+6,int(g['Y'])+height//2)))
                     frame.crop((0,0,width+90,height+90)).save(output/f'native-{theme}-{compact}-{scene}.png')
                 assert backdrop_pixels[0]!=backdrop_pixels[1],'Underlying scene did not composite through the native overlay'
+        subprocess.run(['hsetroot','-solid','#e8ddbf'],env=env,check=True)
         for scale in [.6,1,2.5]:
             s=get();s.update(compact=True,scale=scale,max_rows=24);post(s)
-            g=wait_geometry(312*scale,(36+20+22*24+4)*scale);settle()
+            g=wait_geometry(312*scale,(36+18+28*24+4)*scale);settle()
             frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
             # The footer must be painted at the bottom of the resized window, not a stale smaller frame.
             footer=frame.getpixel((int(g['X'])+int(g['WIDTH'])//2,int(g['Y'])+int(g['HEIGHT'])-4))
             assert footer[:3]!=(0xe8,0xdd,0xbf),f'Scale {scale}: window bottom shows the backdrop, not the footer'
             frame.crop((0,0,int(g['WIDTH'])+90,int(g['HEIGHT'])+90)).save(output/f'native-24-rows-{scale}.png')
         s=get();s.update(compact=True,scale=1,max_rows=5);post(s);wait_geometry(312,compact_height)
+        # Locked combat mode with a healthy capture paints no footer; unlocking brings it back.
+        s=get();s.update(locked=True);post(s);g=wait_geometry(312,compact_height-18);settle()
+        ImageGrab.grab(xdisplay=env['DISPLAY']).crop((0,0,312+90,compact_height+90)).save(output/'native-locked-combat.png')
+        s=get();s.update(locked=False);post(s);wait_geometry(312,compact_height)
         subprocess.run(['hsetroot','-solid','black'],env=env,check=True)
     s=get();s.update(visible=False,locked=True);post(s);time.sleep(.5)
     g=geometry(); hidden=ImageGrab.grab(xdisplay=env['DISPLAY']).crop((int(g['X']),int(g['Y']),int(g['X'])+int(g['WIDTH']),int(g['Y'])+int(g['HEIGHT'])))
