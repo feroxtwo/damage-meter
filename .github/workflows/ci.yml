@@ -14,15 +14,51 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
+      - run: cargo fmt --all
+        if: failure()
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: formatted-native-source
+          path: src/overlay.rs
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
       - run: cargo build --release --locked
       - run: python3 scripts/test-headless.py
       - run: python3 scripts/test-validation.py
-      - run: sudo apt-get update && sudo apt-get install -y rpm xvfb xdotool python3-pil desktop-file-utils xfonts-base libegl1-mesa libgl1-mesa-dri libxkbcommon0 libxkbcommon-x11-0
+      - run: sudo apt-get update && sudo apt-get install -y rpm xvfb xdotool python3-pil desktop-file-utils xfonts-base x11-xserver-utils libegl1-mesa libgl1-mesa-dri libxkbcommon0 libxkbcommon-x11-0
       - run: python3 scripts/test-native-dependencies.py
       - run: python3 scripts/test-installer.py
       - run: python3 scripts/test-native.py
+        env:
+          SCREENSHOT_DIR: test-artifacts/native-empty
+      - run: cargo build --locked
+      - run: python3 scripts/test-native.py
+        env:
+          METER_BINARY: target/debug/aion2-meter
+          NATIVE_FIXTURE: '1'
+          SCREENSHOT_DIR: test-artifacts/native-filled
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-screenshots
+          path: test-artifacts/native-*/
+          if-no-files-found: ignore
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/test-real-web.cjs
+        env:
+          SCREENSHOT_DIR: test-artifacts/actual
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-browser-screenshots
+          path: test-artifacts/actual/
+          if-no-files-found: ignore
       - run: ./scripts/package-linux.sh
       - run: python3 scripts/test-packages.py
       - uses: actions/upload-artifact@v4

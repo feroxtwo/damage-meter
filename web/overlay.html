@@ -21,10 +21,19 @@ html, body { margin: 0; background: transparent; color: #edf3fb; font: 13px syst
 .empty { padding: 10px; text-align: center; font-size: 12px; color: #a0afc3; }
 .foot { padding: 6px 10px; display: flex; justify-content: space-between; color: #a0afc3; font-size: 10px; background: var(--header,#101c2c80); }
 .compact .row {min-height:22px;margin:2px 6px} .compact .row .t {padding:2px 7px}
+/* Same hierarchy as the existing native window; OBS remains its own surface. */
+.box {border-radius:7px;border-color:#ffffff20;box-shadow:0 2px 8px #0003}
+.head {padding:5px 10px 0;gap:8px}.head #t{font-weight:600;font-size:12px}.head #time{color:#edf3fb}
+.group-line {padding:0 10px 5px;font-size:10px;color:#c4cedb;background:var(--header,#101c2c80)}
+.row {min-height:30px;border-radius:3px;margin:2px 4px;background:#0007}.row.me{outline:1px solid color-mix(in srgb,var(--title) 55%,transparent);background:#0009}
+.row .f {inset:auto auto 0 0;height:2px;opacity:.85}.row .t{align-items:center;padding:2px 6px;gap:6px}.row .name{min-width:0;flex:1}
+.row .n {display:flex;flex-direction:column;text-align:right;font-family:system-ui;font-variant-numeric:tabular-nums;line-height:1.2}.row .n strong{font-size:13px;font-weight:700}.row .n small{font-size:9px;color:#bdc8d7}
+.row.dead{color:#a6aebb}.row.dead .f{opacity:.4}.foot{padding:3px 10px}.foot #state{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.compact .box{width:312px}.compact .row{margin:2px 4px;min-height:22px}.compact .row .t{padding:1px 6px}.compact .row .n{flex-direction:row;align-items:baseline;gap:8px}.compact .row img{width:16px!important;height:16px!important}
 </style>
 </head>
 <body>
-<div class="box" id="box"><div class="head"><span id="t">Kein Ziel</span><span class="n" id="time">0:00</span></div>
+<div class="box" id="box"><div class="head"><span id="t">Kein Ziel</span><span class="n" id="time">0:00</span></div><div class="group-line" id="groupRate"></div>
 <div class="hp" id="hpTrack" hidden><div id="hp" style="width:0"></div></div><div id="rows"></div>
 <div class="foot"><span id="state">Warte auf Meter …</span><span id="ping" class="n"></span></div></div>
 <script>
@@ -60,19 +69,21 @@ async function tick() {
     const me=ranked.find(r=>r.is_self);
     if(s.pin_self!==false && me && !selected.some(r=>r.is_self)) {selected.pop();selected.push(me);}
     const top = Math.max(1, ...ranked.map(r => r.value)), sum=ranked.reduce((n,r)=>n+r.value,0)||1;
+    el('groupRate').textContent='Gruppe · '+num(ranked.reduce((n,r)=>n+r.value,0)*1000/Math.max(l.battle_time_ms,1000))+' '+(metric==='heal'?'HPS':metric==='damage_received'?'erlitten/s':'DPS');
     el('rows').innerHTML = selected.map((r, i) => {
       const key = /^[a-z]+$/.test(r.class_key) ? r.class_key : 'unknown';
       const name = s.hide_names && !r.is_self ? masked(r.name) : r.name;
-      return `<div class="row ${r.is_self ? 'me' : ''}">
+      const rate=metric==='heal'?r.hps:metric==='damage_received'?r.value*1000/Math.max(l.battle_time_ms,1000):r.dps;
+      return `<div class="row ${r.is_self ? 'me' : ''} ${r.dead?'dead':''}">
       <div class="f" style="width:${clamp(r.value / top * 100, 0, 100)}%;background:var(--${key})"></div>
-      <div class="t"><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n">${num(r.value)} ${s.show_dps ? num(metric === 'heal' ? r.hps : metric === 'damage_received' ? r.value*1000/Math.max(l.battle_time_ms,1000) : r.dps) + '/s ' : ''}${(r.value*100/sum).toFixed(0)}%</span></div></div>`;
+      <div class="t"><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n"><strong>${s.show_dps?num(rate)+'/s':num(r.value)}</strong><small>${!s.compact&&s.show_dps?num(r.value)+' · ':''}${(r.value*100/sum).toFixed(0)}%</small></span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
     const c = l.capture;
     el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
     el('ping').textContent = [c.recording ? '● REC' : '', l.ping_ms != null ? l.ping_ms + ' ms' : ''].filter(Boolean).join(' · ');
   } catch (e) {
     el('state').textContent = 'Meter nicht erreichbar';
-    el('rows').replaceChildren(); el('ping').textContent = ''; el('hpTrack').hidden = true;
+    el('rows').replaceChildren(); el('groupRate').textContent=''; el('ping').textContent = ''; el('hpTrack').hidden = true;
   } finally { setTimeout(tick, 500); }
 }
 tick();

@@ -153,7 +153,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
 <main id="main">
   <section id="live" class="active">
     <div class="page-title"><div><div class="eyebrow">Kampfübersicht</div><h2>Live-Übersicht</h2><p>Schaden, DPS und deine Gruppe auf einen Blick.</p></div><span class="tag">AION 2 · LINUX</span></div>
-    <div class="card">
+    <div class="card live-console">
       <div class="row" style="justify-content:space-between">
         <div>
           <div style="font-size:20px;font-weight:700" id="liveTarget">Kein Ziel</div>
@@ -173,15 +173,17 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
         </div>
       </div>
       <div class="hp" id="liveHp" style="display:none"><div></div></div>
+
+      <div class="live-metrics" aria-label="Live-Kennzahlen">
+        <div class="kpi personal-rate"><div class="l" id="selfDpsLabel">Ich · DPS</div><div class="v" id="selfDps">0</div><div class="self-context"><strong id="selfRank">—</strong><span id="selfContext">Warte auf eigene Kampfdaten</span></div><div class="burst-pill" id="selfBurst">5s Burst: 0/s</div></div>
+        <div class="kpi group-rate"><div class="l" id="groupDpsLabel">Gruppe · DPS</div><div class="v" id="groupDps">0</div><p class="muted">Erfasste Gruppenleistung</p></div>
+        <div class="kpi combat-context"><div><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div><div><div class="l" id="totalDamageLabel">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div></div>
+      </div>
     </div>
-    <div class="grid live-metrics" aria-label="Live-Kennzahlen">
-      <div class="card kpi"><div class="l" id="groupDpsLabel">Gruppen-DPS</div><div class="v" id="groupDps">0</div></div>
-      <div class="card kpi"><div class="l" id="selfDpsLabel">Meine DPS</div><div class="v" id="selfDps">0</div><div class="muted" id="selfBurst">5s Burst: 0/s</div></div>
-      <div class="card kpi"><div class="l" id="totalDamageLabel">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div>
-      <div class="card kpi"><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div>
-    </div>
+    <div class="live-workspace">
     <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><button class="btn" id="copyDiagnostics">Diagnose kopieren</button><label><input type="checkbox" id="anonymousExport" checked> Andere Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div id="livePlayer"></div></div>
-    <div class="card"><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
+    <div class="card training-panel"><div class="eyebrow">Dein Trainingslabor</div><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
+    </div>
   </section>
 
   <section id="runs">
@@ -204,15 +206,15 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
 
   <section id="stats">
     <div class="page-title"><div><div class="eyebrow">Performance</div><h2>Deine Statistik</h2><p>Vergleiche Kämpfe und entdecke deine besten Runs.</p></div><span class="tag">AION 2 · LINUX</span></div>
-    <div class="grid" id="kpis"></div>
     <div class="grid stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-top:16px">
       <div class="card" style="grid-column:1 / -1"><h2>Wie entwickelt sich meine DPS?</h2>
         <div class="chart-tools"><label>Boss <select id="bossSel" aria-label="Boss für DPS-Verlauf"></select></label>
         <label>Versuche <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
-        <div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
+        <div id="bossStory"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
         <label class="curve-scrubber">Versuch <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
         <p class="analysis-note" id="bossNote"></p></div>
+      <div class="grid" id="kpis"></div>
       <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
       <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
       <div class="card"><h2>Meine beste DPS pro Boss</h2><div id="myBest"></div></div>
@@ -230,14 +232,9 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   <section id="settings">
     <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Overlay anpassen</h2><p>So kompakt und dezent, wie du es im Spiel brauchst.</p></div><span class="tag">AION 2 · LINUX</span></div>
     <div class="card">
-      <h2>Overlay</h2>
+      <h2>Natives Ingame-Overlay</h2><p class="analysis-note">Das Linux-Fenster läuft parallel zum Dashboard. Die Browser-/OBS-Ansicht ist separat unter <a href="/overlay">/overlay</a> erreichbar.</p><fieldset class="settings-group"><legend>Design und Lesbarkeit</legend>
       <label class="set">Design <select data-k="theme"><option value="midnight">Midnight</option><option value="aether">Aether</option><option value="ember">Ember</option></select></label>
       <label class="set">Kompakte Zeilen <input type="checkbox" data-k="compact"></label>
-      <label class="set">Reset nach Leerlauf <select data-k="idle_reset_seconds"><option value="0">Aus</option><option value="15">15 Sekunden</option><option value="30">30 Sekunden</option><option value="60">60 Sekunden</option><option value="120">2 Minuten</option></select></label>
-      <label class="set">Wipe automatisch zurücksetzen <input type="checkbox" data-k="wipe_reset"></label>
-      <label class="set">Open World: andere Spieler anzeigen <input type="checkbox" data-k="open_world_others"></label>
-      <p class="analysis-note">Aus: In der Open World zeigt der Meter nur dich und deine Gruppe. In Expeditionen und Dungeons erscheint immer die ganze Gruppe.</p>
-      <p class="analysis-note">Vor jedem Reset wird der Versuch gespeichert. Wipe-Erkennung braucht mindestens zwei erfasste Spieler einschließlich dir, alle als tot erfasst, fünf Sekunden ohne Treffer und einen gemeldeten Boss-HP-Reset. Geschätzte HP lösen keinen Wipe aus. Während Training bleibt Auto-Reset aus.</p>
       <label class="set">Sichtbar <input type="checkbox" data-k="visible"></label>
       <label class="set">Gesperrt (Klicks gehen durch ans Spiel) <input type="checkbox" data-k="locked"></label>
       <label class="set">Hintergrund-Deckkraft <input type="range" min="0" max="1" step="0.05" data-k="opacity"><output class="setting-value" data-for="opacity"></output></label>
@@ -248,6 +245,14 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set">DPS-Spalte anzeigen <input type="checkbox" data-k="show_dps"></label>
       <label class="set">Fähigkeits- und Klassennamen <select data-k="skill_language"><option value="de">Deutsch</option><option value="en">English</option></select></label>
       <label class="set">Namen anderer verbergen (Streaming) <input type="checkbox" data-k="hide_names"></label>
+      </fieldset>
+      <fieldset class="settings-group"><legend>Messung und automatische Resets</legend>
+      <label class="set">Reset nach Leerlauf <select data-k="idle_reset_seconds"><option value="0">Aus</option><option value="15">15 Sekunden</option><option value="30">30 Sekunden</option><option value="60">60 Sekunden</option><option value="120">2 Minuten</option></select></label>
+      <label class="set">Wipe automatisch zurücksetzen <input type="checkbox" data-k="wipe_reset"></label>
+      <label class="set">Open World: andere Spieler anzeigen <input type="checkbox" data-k="open_world_others"></label>
+      <p class="analysis-note">Aus: In der Open World zeigt der Meter nur dich und deine Gruppe. In Expeditionen und Dungeons erscheint immer die ganze Gruppe.</p>
+      <p class="analysis-note">Vor jedem Reset wird der Versuch gespeichert. Wipe-Erkennung braucht mindestens zwei erfasste Spieler einschließlich dir, alle als tot erfasst, fünf Sekunden ohne Treffer und einen gemeldeten Boss-HP-Reset. Geschätzte HP lösen keinen Wipe aus. Während Training bleibt Auto-Reset aus.</p>
+      </fieldset>
       <div class="row"><p id="settingsStatus" class="save-status" role="status">Änderungen werden automatisch gespeichert.</p><button class="btn" id="retrySettings" hidden>Erneut speichern</button></div>
       <label class="set">Pakete mitschneiden (bleibt nach Neustart an) <input type="checkbox" id="recAuto"></label>
       <p class="muted">Der Mitschnitt hilft, Ausweichen und nDPS zu entschlüsseln. Die Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
@@ -545,9 +550,10 @@ async function loadBossHistory() {
 function drawBoss() {
   const box=$('#bossChart'),range=$('#bossAttempt'),readout=$('#bossReadout'),open=$('#bossOpen');
   const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);
-  range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossNote').textContent='';
+  range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossStory').innerHTML='';$('#bossNote').textContent='';
   if(!b?.attempts.length){box.innerHTML='<div class="empty">Noch keine gespeicherten Bossversuche mit dir. Wähle bei Bedarf einen anderen Charakter.</div>';return;}
   const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
+  if(window.bossStory)$('#bossStory').innerHTML=bossStory(k,!!character);
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   $('#bossSummary').innerHTML=summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
