@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2,
+    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Vec2,
     ViewportCommand,
 };
 
@@ -31,9 +31,9 @@ pub fn check_x11_dependencies() -> anyhow::Result<()> {
 pub const APP_ID: &str = "aion2-meter";
 const WIDTH: f32 = 360.0;
 const HEADER: f32 = 40.0;
-const ROW: f32 = 32.0;
+const ROW: f32 = 40.0;
 fn row_height(compact: bool) -> f32 {
-    if compact { 22.0 } else { ROW }
+    if compact { 28.0 } else { ROW }
 }
 fn overlay_width(compact: bool) -> f32 {
     if compact { 312.0 } else { WIDTH }
@@ -42,7 +42,7 @@ fn header_height(compact: bool) -> f32 {
     if compact { 36.0 } else { HEADER }
 }
 fn footer_height(compact: bool) -> f32 {
-    if compact { 20.0 } else { FOOTER }
+    if compact { 18.0 } else { FOOTER }
 }
 fn overlay_size(compact: bool, rows: usize) -> Vec2 {
     Vec2::new(
@@ -228,11 +228,8 @@ impl Overlay {
             Sense::click_and_drag(),
         );
         let p = ui.painter();
-        p.rect_filled(
-            rect,
-            6,
-            with_alpha(palette(&settings.theme).1, bg.saturating_add(40)),
-        );
+        p.rect_filled(rect, 0, with_alpha(palette(&settings.theme).1, bg.saturating_add(25)));
+        p.line_segment([rect.left_top()+Vec2::new(8.0,1.0),rect.left_top()+Vec2::new(50.0,1.0)], Stroke::new(1.5_f32, Color32::from_rgb(91,213,222)));
         let title = if live.target_name.is_empty() {
             "Kein Ziel"
         } else {
@@ -246,7 +243,7 @@ impl Overlay {
             rect.left_top() + Vec2::new(8.0, 3.0),
             Align2::LEFT_TOP,
             title,
-            FontId::proportional(12.5),
+            FontId::proportional(13.0),
             with_alpha(palette(&settings.theme).2, 255),
         );
         shadow_text(
@@ -405,43 +402,16 @@ impl Overlay {
             }
             let p = ui.painter();
             let inner = rect.shrink2(Vec2::new(4.0, 1.0));
-            p.rect_filled(
-                inner,
-                3,
-                Color32::from_black_alpha(if row.is_self { 155 } else { 110 }),
-            );
-            let track = Rect::from_min_size(
-                inner.left_bottom() - Vec2::new(0.0, 2.0),
-                Vec2::new(inner.width(), 2.0),
-            );
-            p.rect_filled(track, 1, Color32::from_black_alpha(160));
-            let mut fill = track;
-            fill.set_width(track.width() * (value / top).clamp(0.0, 1.0) as f32);
-            p.rect_filled(
-                fill,
-                1,
-                with_alpha(row.color, if row.dead { 100 } else { 220 }),
-            );
+            let accent=with_alpha(palette(&settings.theme).2,235);
             if row.is_self {
-                // Own row: accent edge plus outline, independent of the class colour.
-                let accent = with_alpha(palette(&settings.theme).2, 235);
-                p.rect_stroke(
-                    inner,
-                    3,
-                    Stroke::new(1.0_f32, with_alpha(palette(&settings.theme).2, 190)),
-                    StrokeKind::Inside,
-                );
-                p.rect_filled(
-                    Rect::from_min_size(inner.left_top(), Vec2::new(3.0, inner.height())),
-                    CornerRadius {
-                        nw: 3,
-                        sw: 3,
-                        ne: 0,
-                        se: 0,
-                    },
-                    accent,
-                );
+                p.rect_filled(inner,0,with_alpha(palette(&settings.theme).1,120));
+                p.line_segment([inner.left_top()+Vec2::new(0.0,3.0),inner.left_bottom()-Vec2::new(0.0,3.0)],Stroke::new(2.0_f32,accent));
+                p.line_segment([inner.left_top()+Vec2::new(0.0,3.0),inner.left_top()+Vec2::new(9.0,3.0)],Stroke::new(1.0_f32,accent));
             }
+            let track=Rect::from_min_size(inner.left_bottom()+Vec2::new(49.0,-3.0),Vec2::new((inner.width()-55.0).max(1.0),2.0));
+            p.rect_filled(track,0,Color32::from_white_alpha(12));
+            let mut fill=track;fill.set_width(track.width()*(value/top).clamp(0.0,1.0) as f32);
+            p.rect_filled(fill,0,with_alpha(row.color,if row.dead{90}else{210}));
             let name = if hide_names && !row.is_self {
                 masked(&row.name)
             } else {
@@ -462,12 +432,12 @@ impl Overlay {
                 short_number(value)
             };
             let share = format!("{:0.0}%", value * 100.0 / total);
-            let primary_font = FontId::proportional(14.0);
+            let primary_font = FontId::monospace(15.0);
             let primary_width = p
                 .layout_no_wrap(primary.clone(), primary_font.clone(), Color32::WHITE)
                 .size()
                 .x;
-            let primary_x = inner.right() - if settings.compact { 35.0 } else { 6.0 };
+            let primary_x = inner.right() - 6.0;
             let secondary = if settings.compact {
                 share.clone()
             } else if show_dps {
@@ -481,11 +451,7 @@ impl Overlay {
                 .size()
                 .x;
             // Numbers own the right side; the name ends with "…" before the wider of them.
-            let numbers_left = if settings.compact {
-                primary_x - primary_width
-            } else {
-                (primary_x - primary_width).min(inner.right() - 6.0 - secondary_width)
-            };
+            let numbers_left=(primary_x-primary_width).min(inner.right()-6.0-secondary_width);
             let color = if row.dead {
                 Color32::from_gray(155)
             } else {
@@ -493,17 +459,17 @@ impl Overlay {
             };
             shadow_text(
                 p,
-                inner.left_center() + Vec2::new(6.0, -1.0),
+                inner.left_center() + Vec2::new(7.0, -3.0),
                 Align2::LEFT_CENTER,
-                (i + 1).to_string(),
-                FontId::monospace(10.0),
-                Color32::from_gray(190),
+                format!("{:02}", i + 1),
+                FontId::monospace(11.0),
+                if row.is_self {accent} else {Color32::from_gray(160)},
             );
             let icon = self.class_icons.get(row.class_key);
             if let Some(texture) = icon {
                 let icon_rect = Rect::from_center_size(
-                    inner.left_center() + Vec2::new(30.0, -1.0),
-                    Vec2::splat(if settings.compact { 16.0 } else { 18.0 }),
+                    inner.left_center() + Vec2::new(34.0, -3.0),
+                    Vec2::splat(if settings.compact { 17.0 } else { 20.0 }),
                 );
                 p.image(
                     texture.id(),
@@ -512,20 +478,16 @@ impl Overlay {
                     color,
                 );
             }
-            let name_x = inner.left() + if icon.is_some() { 42.0 } else { 23.0 };
+            let name_x = inner.left() + if icon.is_some() { 49.0 } else { 30.0 };
             shadow_text_elided(
                 p,
-                Pos2::new(name_x, inner.center().y - 1.0),
+                Pos2::new(name_x, inner.center().y - 3.0),
                 format!("{}{}", if row.dead { "† " } else { "" }, name),
                 FontId::proportional(12.0),
                 color,
                 numbers_left - 8.0 - name_x,
             );
-            let y = if settings.compact {
-                inner.center().y - 1.0
-            } else {
-                inner.top() + 9.0
-            };
+            let y = inner.top() + 9.0;
             shadow_text(
                 p,
                 Pos2::new(primary_x, y),
@@ -534,25 +496,8 @@ impl Overlay {
                 primary_font,
                 color,
             );
-            if settings.compact {
-                shadow_text(
-                    p,
-                    inner.right_center() + Vec2::new(-5.0, -1.0),
-                    Align2::RIGHT_CENTER,
-                    secondary,
-                    secondary_font,
-                    Color32::from_gray(185),
-                );
-            } else {
-                shadow_text(
-                    p,
-                    inner.right_bottom() + Vec2::new(-6.0, -4.0),
-                    Align2::RIGHT_BOTTOM,
-                    secondary,
-                    secondary_font,
-                    Color32::from_gray(185),
-                );
-            }
+            shadow_text(p,inner.right_bottom()+Vec2::new(-6.0,-4.0),Align2::RIGHT_BOTTOM,secondary,secondary_font,Color32::from_gray(180));
+
         }
     }
 
@@ -604,8 +549,9 @@ impl Overlay {
             (Color32::from_gray(140), "AION2 nicht gestartet".to_string())
         };
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
+        let controls = !live.overlay.locked && ui.rect_contains_pointer(rect);
         let mut state_rect = rect;
-        state_rect.set_right(rect.right() - 4.0 * (ICON + 3.0) - 52.0);
+        state_rect.set_right(rect.right() - if controls {4.0 * (ICON + 3.0) + 52.0} else {70.0});
         p.with_clip_rect(state_rect).text(
             rect.left_center() + Vec2::new(18.0, 0.0),
             Align2::LEFT_CENTER,
@@ -613,8 +559,9 @@ impl Overlay {
             FontId::proportional(10.5),
             Color32::from_gray(200),
         );
-        // Buttons for what the KDE shortcuts do, right to left.
+        // Buttons remain available on hover; combat has no permanent icon rail.
         let mut x = rect.right() - 4.0;
+        if controls {
         let mut button = |icon: Icon, tip: &str| {
             let r = Rect::from_center_size(
                 Pos2::new(x - ICON / 2.0, rect.center().y),
@@ -661,10 +608,11 @@ impl Overlay {
             self.engine.set_recording(!recording);
         }
 
+        }
         let ping = live.ping_ms.map(|p| format!("{p} ms")).unwrap_or_default();
         let p = ui.painter();
         p.text(
-            Pos2::new(x - 2.0, rect.center().y),
+            Pos2::new(if controls {x-2.0}else{rect.right()-8.0}, rect.center().y),
             Align2::RIGHT_CENTER,
             ping,
             FontId::monospace(10.5),
@@ -857,15 +805,15 @@ mod tests {
     fn compact_geometry_keeps_a_single_window_small() {
         assert_eq!(
             super::overlay_size(true, 0),
-            eframe::egui::vec2(312.0, 82.0)
+            eframe::egui::vec2(312.0, 86.0)
         );
         assert_eq!(
             super::overlay_size(true, 5),
-            eframe::egui::vec2(312.0, 170.0)
+            eframe::egui::vec2(312.0, 198.0)
         );
         assert_eq!(
             super::overlay_size(false, 5),
-            eframe::egui::vec2(360.0, 226.0)
+            eframe::egui::vec2(360.0, 266.0)
         );
     }
 

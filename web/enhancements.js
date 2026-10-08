@@ -68,6 +68,18 @@ function fightStory(f) {
   return `<div class="performance-story fight-story" aria-label="Kampfzusammenfassung"><div class="story-intro"><span class="eyebrow">Kampf im Fokus</span>${lead}</div>${parts.join('')}</div>`;
 }
 
+// Browser-local signal only: bounded, keyed to actor AND encounter, no inferred fight end.
+function appendLiveSignal(state,l) {
+  const me=l.rows.find(r=>r.is_self),key=JSON.stringify([l.target_id,l.target_started_at,me?.id]),ms=Number(l.battle_time_ms);
+  if(state.key!==key||ms<(state.points.at(-1)?.ms??0)){state.key=key;state.points=[];}
+  if(!me||l.numeric_limited||!Number.isFinite(ms)||ms<=0){state.points=[];return state.points;}
+  const value=Number(me.burst_dps),last=state.points.at(-1);
+  if(!Number.isFinite(value)||value<0)return state.points;
+  if(!last||ms>last.ms)state.points.push({ms,value});
+  state.points=state.points.filter(p=>p.ms>=ms-60000).slice(-120);
+  return state.points;
+}
+
 const FIGHT_PAGE = 10;
 let detailRequest = 0;
 let currentFight = null, lastTraining = null, comparisonRequest = 0, overlayActionBusy = false;
@@ -107,7 +119,13 @@ function renderLiveMetrics(l) {
 }
 function updateLiveRows(l) {
   const box=$('#liveRows'),focused=document.activeElement?.closest('#liveRows [data-player-id]')?.dataset.playerId;
-  const html=bars(metricRows(l.rows),{empty:'<svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><b>Bereit für den nächsten Kampf</b><p>Deine Gruppe erscheint, sobald Kampfdaten ankommen. Nutze „Höchster Schaden“ für normale Gegner oder „Trainingspuppe“ für einen Test.</p>'});
+  const rows=metricRows(l.rows),top=Math.max(1,...rows.map(r=>r.damage));
+  const unit=metricKey()==='heal'?'HPS':metricKey()==='damage_received'?'erlitten/s':'DPS';
+  const html=rows.length?rows.map((r,i)=>`<div class="bar telemetry-row ${r.is_self?'me':''}" style="--class-color:${color(r.class_key)}">
+    <span class="rank-badge">${String(i+1).padStart(2,'0')}</span><div class="ranking-identity">${classIcon(r)}<div><b>${deathMark(r)}${esc(r.name)}</b><small>${esc(localizedClass(r))}${r.is_self?' · DU':''}</small></div></div>
+    <div class="ranking-value"><strong>${num(r.dps)}<small> ${unit}</small></strong><span>${num(r.damage)} gesamt · ${pct(r.share)}</span></div>
+    <div class="ranking-track"><div class="fill" style="width:${(r.damage/top*100).toFixed(1)}%;background:${color(r.class_key)}"></div></div></div>`).join(''):
+    '<div class="empty"><b>Bereit für den nächsten Kampf</b><p>Deine Gruppe erscheint mit Kampfdaten. Für normale Gegner „Höchster Schaden“, zum Üben „Trainingspuppe“ wählen.</p></div>';
   if(box.innerHTML!==html) {
     box.innerHTML=html;bindLiveRows(l);
     if(focused)box.querySelector('[data-player-id="'+CSS.escape(focused)+'"]')?.focus({preventScroll:true});
@@ -127,8 +145,24 @@ $('#copyDiagnostics').onclick=()=>task((async()=>{
   const v=await api('/api/version'),c=latestLive?.capture||{};
   await copyText(JSON.stringify({version:v.version,parser:v.parser_version,permission:!!c.permission,game_running:!!c.game_running,connected:!!c.locked_port,packets:c.packets||0,packet_age_seconds:c.last_packet_ms==null?null:Math.max(0,Math.round((Date.now()-c.last_packet_ms)/1000)),stream_gaps:c.stream_gaps||0,capture_error:!!c.error,recording_error:!!c.recording_error},null,2));
 })());
+const liveSignalState={key:null,points:[]};
+function renderLiveSignal(l) {
+  const points=appendLiveSignal(liveSignalState,l),root=$('#liveSignal');
+  $('#livePhase').textContent=l.numeric_limited?'Zahlengrenze erkannt':l.rows.length?'Erfasste Kampfdaten':'Warte auf Daten';
+  $('#liveHpValue').textContent=l.target_hp==null?'HP unbekannt':(l.hp_estimated?'~':'')+pct(l.target_hp*100)+' HP';
+  const damage=metricKey()==='damage';root.parentElement.hidden=!damage;
+  if(!damage)return;
+  if(points.length<2){root.innerHTML='<span class="signal-empty">Verlauf entsteht mit neuen Live-Beobachtungen.</span>';return;}
+  const end=points.at(-1).ms,start=Math.max(0,end-60000),max=Math.max(1,...points.map(p=>p.value));
+  // A missing polling interval is a visible break, never a connecting fabricated trend.
+  const segments=[];let segment=[];
+  for(const p of points){if(segment.length&&p.ms-segment.at(-1).ms>3000){segments.push(segment);segment=[];}segment.push(p);}segments.push(segment);
+  const paths=segments.filter(v=>v.length>1).map(v=>'M'+v.map(p=>`${((p.ms-start)/Math.max(1,end-start)*600).toFixed(1)},${(108-p.value/max*88).toFixed(1)}`).join(' L'));
+  root.innerHTML=`<svg viewBox="0 0 600 130" aria-hidden="true" preserveAspectRatio="none"><path class="signal-grid" d="M0 20H600 M0 64H600 M0 108H600"/>${paths.map(d=>`<path class="signal-line" d="${d}"/>`).join('')}</svg><div class="signal-scale"><span>${dur(start)}</span><span>${num(max)}/s beobachtet</span><span>${dur(end)}</span></div>`;
+}
+
 function renderEnhancedLive(l) {
-  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);
+  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);
   $('#numericWarning').hidden=!l.numeric_limited;
   $(".ranking-head span").textContent=metricKey()==="heal"?"Heilung · HPS · Anteil":metricKey()==="damage_received"?"Erlittener Schaden · pro Sekunde · Anteil":"Schaden · DPS · Anteil";
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";

@@ -726,9 +726,9 @@ const server = http.createServer((req,res) => {
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
       await page.waitForFunction(()=>document.querySelector('#selfRank').textContent==='#1');assert.match(await page.locator('#selfContext').textContent(),/47,6%.*3 Spieler/);
-      // Group proportions stay visible as a tinted bar, not a hairline.
-      const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,row:r.getBoundingClientRect().height,opacity:Number(getComputedStyle(f).opacity)};}));
-      assert.ok(bars.length>=3&&bars.every(b=>b.height>=b.row-1&&b.opacity>=.25),JSON.stringify(bars));
+      // Dedicated tracks retain real proportions independently of row surfaces.
+      const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,width:f.getBoundingClientRect().width,opacity:Number(getComputedStyle(f).opacity)};}));
+      assert.ok(bars.length>=3&&bars.every(b=>b.height>=4&&b.opacity>=.7)&&Math.abs(bars[1].width/bars[0].width-2/3)<.02,JSON.stringify(bars));
       await page.selectOption('#liveMetric','heal');assert.equal(await page.locator('#selfBurst').isVisible(),false);assert.match(await page.locator('#selfDpsLabel').textContent(),/HPS/);
       await page.selectOption('#liveMetric','damage');await page.emulateMedia({reducedMotion:'reduce'});
       for(const theme of ['midnight','aether','ember']){
@@ -737,6 +737,7 @@ const server = http.createServer((req,res) => {
           await page.setViewportSize({width,height:1000});await page.evaluate(()=>{document.querySelector('#toast').hidden=true;scrollTo(0,0);});
           assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
           assert.equal(await page.locator('#selfDps').evaluate(e=>getComputedStyle(e).fontVariantNumeric),'tabular-nums');
+          await page.evaluate(()=>{for(let i=0;i<45;i++)renderLiveSignal({...latestLive,target_started_at:1000,battle_time_ms:45000+i*1000,rows:latestLive.rows.map(r=>({...r,burst_dps:r.is_self?50000+Math.sin(i*.5)*12000+Math.cos(i*.18)*8000:r.burst_dps}))});});
           if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,`premium-live-${theme}-${width}.png`),fullPage:true});
         }
       }

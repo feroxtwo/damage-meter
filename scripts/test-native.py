@@ -22,7 +22,7 @@ if fixture_mode:
         {'name':'Nyaria · tot','job':'마도성','damage':120000000},
         {'name':'Zephyros','job':'호법성','damage':90000000}]+[{'name':f'Zusätzlicher Spieler {i+6}','job':'궁성','damage':80000000-i*1000000} for i in range(19)]}),encoding='utf-8')
     env['A2M_NATIVE_FIXTURE']=str(fixture)
-compact_height=36+20+22*row_count+4
+compact_height=36+18+28*row_count+4
 p=None;compositor=None
 try:
     for _ in range(30):
@@ -82,7 +82,7 @@ try:
                     subprocess.run(['hsetroot','-solid',color],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
-                    height=compact_height if compact else 40+22+32*row_count+4
+                    height=compact_height if compact else 40+22+40*row_count+4
                     g=wait_geometry(width,height);settle()
                     frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
                     backdrop_pixels.append(frame.getpixel((int(g['X'])+6,int(g['Y'])+height//2)))
@@ -90,7 +90,7 @@ try:
                 assert backdrop_pixels[0]!=backdrop_pixels[1],'Underlying scene did not composite through the native overlay'
         for scale in [.6,1,2.5]:
             s=get();s.update(compact=True,scale=scale,max_rows=24);post(s)
-            g=wait_geometry(312*scale,(36+20+22*24+4)*scale);settle()
+            g=wait_geometry(312*scale,(36+18+28*24+4)*scale);settle()
             frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
             # The footer must be painted at the bottom of the resized window, not a stale smaller frame.
             footer=frame.getpixel((int(g['X'])+int(g['WIDTH'])//2,int(g['Y'])+int(g['HEIGHT'])-4))

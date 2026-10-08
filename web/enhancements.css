@@ -148,3 +148,47 @@ th {letter-spacing:.5px} td {font-variant-numeric:tabular-nums} tbody tr:hover {
 
 .story-link {all:unset;cursor:pointer;color:var(--accent);border-bottom:1px dotted var(--edge)}
 .story-link:hover {color:var(--text)}.story-link:focus-visible {outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}
+
+/* Combat Telemetry, structural pass: an instrument surface instead of equal cards. */
+#live {padding-top:8px}
+.telemetry-heading {display:flex;justify-content:space-between;gap:12px;margin:8px 0 22px;color:var(--muted);font-size:10px;letter-spacing:2px}
+.telemetry-heading .eyebrow {margin:0}
+.live-console {display:block;border:0;border-radius:0;background:none;box-shadow:none;padding:0;overflow:visible}
+.live-console::before {display:none}
+.combat-strip {display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid var(--edge);padding:18px 0 14px}
+.instrument-label {color:var(--muted);font-size:10px;letter-spacing:1.6px;text-transform:uppercase;display:block}
+#liveTarget {font-size:29px;line-height:1.2;letter-spacing:-.8px;margin:6px 0 5px}
+#liveSub {max-width:800px;line-height:1.5}
+.combat-clock {text-align:right;flex-shrink:0}.combat-clock strong {font-size:26px;letter-spacing:-1px;display:block;margin-top:8px;font-variant-numeric:tabular-nums}
+.hp-readout {display:flex;gap:14px;align-items:center}.live-console .hp {margin:0;flex:1;height:3px;border-radius:0;background:#ffffff09}
+#liveHpValue {color:var(--muted);font-size:10px;min-width:75px;text-align:right;font-variant-numeric:tabular-nums}
+.live-metrics.performance-hero {position:relative;display:grid;grid-template-columns:1fr 1.35fr .7fr;gap:34px;align-items:center;margin:0;border:0;padding:32px 0 28px;background:radial-gradient(ellipse at 15% 50%,var(--ambient),transparent 60%)}
+.live-metrics .personal-rate .v {font-size:clamp(58px,6.7vw,96px);font-weight:800;letter-spacing:-5px;line-height:1.06;color:var(--text);font-variant-numeric:tabular-nums}
+.personal-rate .instrument-label {color:var(--accent)}
+.self-context {margin-top:12px;gap:12px}.self-context strong {display:grid;place-items:center;min-width:42px;height:30px;border:1px solid color-mix(in srgb,var(--gold) 50%,transparent);font-size:20px;background:color-mix(in srgb,var(--gold) 7%,transparent)}
+.burst-pill {padding:0;border-radius:0;background:none;color:var(--accent);font-size:12px;margin:14px 0 0}
+.live-signal {min-width:0;margin:28px 0 0}.live-signal figcaption {display:flex;justify-content:space-between;gap:12px;font-size:9px;letter-spacing:1px;color:var(--muted)}
+.live-signal figcaption span:first-child {color:var(--accent)}
+#liveSignal {position:relative;height:150px;display:flex;align-items:center;font-size:11px;color:var(--muted);border-bottom:1px solid var(--edge)}
+#liveSignal svg {width:100%;height:130px;display:block;overflow:visible}.signal-line{stroke:var(--accent);stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.signal-grid{stroke:var(--line);stroke-width:1;stroke-dasharray:2 8;opacity:.5}
+.signal-scale {position:absolute;bottom:-20px;inset-inline:0;display:flex;justify-content:space-between;font-size:9px;font-variant-numeric:tabular-nums}
+.signal-empty {line-height:1.6;max-width:240px}
+.live-metrics .group-rate {border-left:1px solid var(--line);padding-left:28px}.live-metrics .group-rate .v {font-size:33px;letter-spacing:-1px;line-height:1.4;color:var(--accent);font-variant-numeric:tabular-nums}
+.live-metrics .group-rate .total-value {font-size:24px;color:var(--text)}.group-rate #totalDamageLabel {margin-top:18px}
+.live-console>.live-controls {display:flex;justify-content:flex-end;margin:8px 0 24px;padding:12px 0;border-block:1px solid var(--line);font-size:11px}
+.live-controls .btn,.ranking-tools .btn {background:transparent;font-size:11px;padding:6px 10px;border-color:transparent}.live-controls select,.ranking-tools select {font-size:11px;padding:6px 10px}
+.live-workspace {grid-template-columns:minmax(0,2.8fr) minmax(240px,1fr);gap:40px}
+.ranking-panel {min-width:0}.ranking-head {margin:0 0 10px;align-items:center}.ranking-head h2 {font-size:11px;letter-spacing:1.8px;color:var(--muted)}.ranking-head span {font-size:10px;color:var(--muted)}
+#metricHint {font-size:11px;line-height:1.6;margin:6px 0 14px}
+#liveRows .bar.telemetry-row {display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:6px 14px;align-items:center;min-height:82px;padding:14px 16px;margin:0;border-radius:0;border-bottom:1px solid var(--line);background:none;outline:none;text-shadow:none}
+#liveRows .bar.telemetry-row.me {background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 8%,transparent),transparent 75%);box-shadow:inset 2px 0 var(--gold)}
+.rank-badge {font-size:19px;font-weight:600;letter-spacing:-1px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}.me .rank-badge {color:var(--gold)}
+.ranking-identity {display:flex;align-items:center;gap:12px;min-width:0}.ranking-identity>div {min-width:0}.ranking-identity b {font-size:15px;font-weight:650;overflow-wrap:anywhere;display:block}.ranking-identity small {display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+.ranking-identity img {width:26px;height:26px;flex-shrink:0}.ranking-value{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.ranking-value strong{font-size:24px;font-weight:700;letter-spacing:-.7px}.ranking-value strong small {font-size:9px;font-weight:400;color:var(--muted);letter-spacing:0}.ranking-value>span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.ranking-track {grid-column:2/-1;position:relative;height:5px;background:#ffffff06;margin-top:3px;overflow:hidden}
+#liveRows .bar .ranking-track .fill {position:static;height:5px;opacity:.85;border:0;max-width:100%}
+.ranking-tools {padding:14px 0;margin-top:10px;font-size:10px;color:var(--muted)}
+.training-panel {border-left:1px solid var(--line);padding-left:28px;min-width:0;margin:0}.training-panel h2{font-size:23px}.training-panel .row {gap:8px}.training-panel .btn{font-size:11px}.training-panel .muted{line-height:1.6}
+@media(max-width:1050px){.live-metrics.performance-hero{grid-template-columns:1.4fr 1fr;gap:24px}.live-signal{grid-column:1/-1;grid-row:2;margin:8px 0 24px}.live-workspace{grid-template-columns:minmax(0,1fr) 260px;gap:24px}.live-metrics .personal-rate .v{font-size:76px}}
+@media(max-width:750px){.live-workspace{grid-template-columns:1fr}.training-panel{border-left:0;border-top:1px solid var(--line);padding:24px 0}.live-metrics.performance-hero{gap:20px}.live-metrics .group-rate{padding-left:20px}.combat-strip{gap:16px}.ranking-value strong{font-size:21px}}
+@media(max-width:450px){.telemetry-heading{font-size:8px;letter-spacing:1px}.telemetry-heading>span:last-child{display:none}#liveTarget{font-size:24px}.combat-clock strong{font-size:22px}.combat-clock .instrument-label{max-width:80px;font-size:8px}.live-metrics.performance-hero{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;padding-top:26px}.live-metrics .personal-rate .v{font-size:54px;letter-spacing:-3px}.live-metrics .group-rate{padding-left:14px}.live-metrics .group-rate .v{font-size:25px}.live-metrics .group-rate .total-value{font-size:21px}.instrument-label{font-size:8px;letter-spacing:1px}.self-context{font-size:10px}.self-context strong{font-size:16px;min-width:32px;height:26px}.live-signal figcaption{font-size:8px;letter-spacing:0}.live-console>.live-controls{justify-content:flex-start;margin-top:0}.ranking-head{flex-wrap:wrap;gap:4px}#liveRows .bar.telemetry-row{grid-template-columns:24px minmax(0,1fr);gap:6px 10px;padding:12px 8px}.ranking-identity{gap:8px}.ranking-value{grid-column:2;grid-row:2;text-align:left;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;white-space:normal}.ranking-value>span{font-size:9px}.ranking-track{grid-row:3;grid-column:2}.rank-badge{align-self:start;font-size:16px}.ranking-value strong{font-size:22px}.ranking-identity b{font-size:14px}.ranking-identity img{width:22px;height:22px}#liveSub{font-size:10px}.hp-readout{gap:8px}.ranking-tools .row{gap:6px}}

@@ -152,21 +152,14 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
 </header>
 <main id="main">
   <section id="live" class="active">
-    <div class="page-title"><div><div class="eyebrow">Kampfübersicht</div><h2>Live-Übersicht</h2><p>Schaden, DPS und deine Gruppe auf einen Blick.</p></div><span class="tag">AION 2 · LINUX</span></div>
-    <div class="card live-console">
-      <div class="row" style="justify-content:space-between">
-        <div>
-          <div style="font-size:20px;font-weight:700" id="liveTarget">Kein Ziel</div>
-          <div class="muted" id="liveSub"></div>
-        </div>
-
-      </div>
-      <div class="hp" id="liveHp" style="display:none"><div></div></div>
-
-      <div class="live-metrics" aria-label="Live-Kennzahlen">
-        <div class="kpi personal-rate"><div class="l" id="selfDpsLabel">Ich · DPS</div><div class="v" id="selfDps">0</div><div class="self-context"><strong id="selfRank">—</strong><span id="selfContext">Warte auf eigene Kampfdaten</span></div><div class="burst-pill" id="selfBurst">5s Burst: 0/s</div></div>
-        <div class="kpi group-rate"><div class="l" id="groupDpsLabel">Gruppe · DPS</div><div class="v" id="groupDps">0</div><p class="muted">Erfasste Gruppenleistung</p></div>
-        <div class="kpi combat-context"><div><div class="l">Kampfdauer</div><div class="v" id="battleDuration">0:00</div></div><div><div class="l" id="totalDamageLabel">Gesamtschaden</div><div class="v" id="totalDamage">0</div></div></div>
+    <div class="telemetry-heading"><span class="eyebrow">AION 2 / COMBAT TELEMETRY</span><span>LIVE ANALYSE</span></div>
+    <div class="live-console">
+      <div class="combat-strip"><div><span class="instrument-label">ZIEL / ERFASSUNG</span><h2 id="liveTarget">Kein Ziel</h2><div class="muted" id="liveSub"></div></div><div class="combat-clock"><span class="instrument-label" id="livePhase">Warte auf Daten</span><strong id="battleDuration">0:00</strong></div></div>
+      <div class="hp-readout"><div class="hp" id="liveHp" style="display:none"><div></div></div><span id="liveHpValue"></span></div>
+      <div class="live-metrics performance-hero" aria-label="Live-Kennzahlen">
+        <div class="personal-rate"><div class="instrument-label" id="selfDpsLabel">Ich · DPS</div><div class="v" id="selfDps">0</div><div class="self-context"><strong id="selfRank">—</strong><span id="selfContext">Warte auf eigene Kampfdaten</span></div><div class="burst-pill" id="selfBurst">5s Burst: 0/s</div></div>
+        <figure class="live-signal"><figcaption><span>DEIN BURST-SIGNAL</span><span>LETZTE 60 s · LIVE BEOBACHTET</span></figcaption><div id="liveSignal" role="img" aria-label="Beobachteter eigener Burst-Verlauf"><span class="signal-empty">Verlauf entsteht mit neuen Live-Beobachtungen.</span></div></figure>
+        <div class="group-rate"><div class="instrument-label" id="groupDpsLabel">Gruppe · DPS</div><div class="v" id="groupDps">0</div><div class="instrument-label" id="totalDamageLabel">Gesamtschaden</div><div class="v total-value" id="totalDamage">0</div></div>
       </div>
         <div class="row live-controls">
           <select id="targetMode" aria-label="Zielauswahl">
@@ -181,9 +174,10 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
           <button class="btn" id="recBtn" title="Schneidet die Spielverbindung mit, um weitere Pakete (Ausweichen, nDPS) zu entschlüsseln">Pakete mitschneiden</button>
         </div>
     </div>
+    <div id="postFight" hidden></div>
     <div class="live-workspace">
-    <div class="card"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><button class="btn" id="copyDiagnostics">Diagnose kopieren</button><label><input type="checkbox" id="anonymousExport" checked> Andere Namen anonymisieren</label></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div id="livePlayer"></div></div>
-    <div class="card training-panel"><div class="eyebrow">Dein Trainingslabor</div><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
+    <div class="ranking-panel"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div class="ranking-tools"><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><button class="btn" id="copyDiagnostics">Diagnose kopieren</button><label><input type="checkbox" id="anonymousExport" checked> Andere Namen anonymisieren</label></div></div><div id="livePlayer"></div></div>
+    <div class="training-panel"><div class="eyebrow">Dein Trainingslabor</div><h2>Training</h2><div class="row"><select id="trainingDuration" aria-label="Trainingsdauer"><option value="60">1 Minute</option><option value="180">3 Minuten</option><option value="300">5 Minuten</option></select><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
     </div>
   </section>
 
