@@ -592,7 +592,7 @@ const server = http.createServer((req,res) => {
         await isolated.goto(base+'/#stats');await isolated.locator('#bossChart svg').waitFor();
         await isolated.selectOption('#activitySel','expedition');await isolated.selectOption('#contentSel','600093');
         assert.deepEqual(await isolated.locator('#bossSel option').allTextContents(),['Gesamte Expedition (1 Run)','Kargos · #100 (1 Versuch)','Kargos · #102 (1 Versuch)','Wachposten (1 Versuch)']);
-        assert.match(await isolated.locator('#bossSummary').textContent(),/42,0K/);assert.match(await isolated.locator('#bossNote').textContent(),/gemeinsame erfasste Kampfzeit/);
+        assert.match(await isolated.locator('#bossSummary').textContent(),/42,0K/);assert.match(await isolated.locator('#bossNote').textContent(),/gemeinsame erfasste Kampfzeit/);assert.match(await isolated.locator('#bossNote').textContent(),/Run-DPS/);assert.equal(await isolated.locator('#bossAttemptLabel').textContent(),'Run');assert.match(await isolated.locator('#bossInsights').textContent(),/vergleichbare Runs/);
         if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-total.png'),fullPage:true});
         await isolated.locator('#bossOpen').click();await isolated.locator('#runDetail #backBtn').waitFor();assert.match(await isolated.locator('#runDetail').textContent(),/Ferocious/);assert.equal(await isolated.locator('#runs').evaluate(e=>e.classList.contains('active')),true);await isolated.locator('nav [data-tab="stats"]').click();await isolated.locator('#bossChart svg').waitFor();
         await isolated.selectOption('#bossSel',{label:'Kargos · #100 (1 Versuch)'});assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);

@@ -208,7 +208,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
         <label>Versuche / Runs <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
         <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details>
         <div id="bossInsights"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
-        <label class="curve-scrubber">Versuch <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
+        <label class="curve-scrubber"><span id="bossAttemptLabel">Versuch</span> <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
         <p class="analysis-note" id="bossNote"></p></div>
       <div class="grid" id="kpis"></div>
@@ -584,16 +584,16 @@ $('#contentSel').onchange=()=>{$('#bossSel').value='';refreshBossOptions();};
 
 function drawBoss() {
   const box=$('#bossChart'),range=$('#bossAttempt'),readout=$('#bossReadout'),open=$('#bossOpen');
-  const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);renderActivityMapping(b);const isRun=b?.scope==='run',noun=isRun?'Run':'Versuch';open.textContent=isRun?'Run öffnen':'Kampfbericht öffnen';
+  const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);renderActivityMapping(b);const isRun=b?.scope==='run',noun=isRun?'Run':'Versuch';open.textContent=isRun?'Run öffnen':'Kampfbericht öffnen';$('#bossAttemptLabel').textContent=noun;range.setAttribute('aria-label',noun+' auswählen');
   range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossInsights').innerHTML='';$('#bossNote').textContent='';
   if(!b?.attempts.length){box.innerHTML='<div class="empty">Keine gespeicherten Versuche in diesem Bereich. Wähle einen anderen Bereich oder Charakter. Unbekannte Gebiete findest du unter „Nicht zugeordnet“.</div>';return;}
   const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   const story=typeof window.bossStory==='function'?bossStory(k,!!character):null;
-  if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(story.hint)}</p>`;
+  if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(isRun?story.hint.replace(/Versuch/g,'Run'):story.hint)}</p>`;
   else if(story?.verdict)$('#bossInsights').innerHTML=isRun?story.verdict.replace(/Versuch/g,'Run'):story.verdict;
-  $('#bossSummary').innerHTML=story?(isRun?story.summary.replace(/Versuch/g,'Run'):story.summary):summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
+  $('#bossSummary').innerHTML=story?(isRun?story.summary.replace(/Versuch/g,'Run'):story.summary):summary(num(last.dps)+' DPS','Letzter '+noun)+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro '+noun)+summary(k.length,isRun?'Runs im Ausschnitt':'Versuche im Ausschnitt');
   box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,low=k.reduce((n,p)=>Math.min(n,p.dps),best),spread=Math.max(best-low,best*.05);
   // A line chart may start above zero: the range of your own attempts decides the scale, so change stays visible.
   const min=Math.max(0,low-spread*.6),max=Math.max(min+1,best+spread*.25);
@@ -611,11 +611,11 @@ function drawBoss() {
     <line id="bossCross" y1="${T}" y2="${H-B}" class="curve-cross"/>
     <rect id="bossHit" class="curve-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
   </svg>`;
-  $('#bossNote').textContent=(isRun?'Beendete Runs: eigener erfasster Schaden / gemeinsame erfasste Kampfzeit, mindestens 1 Sekunde je Kampf, ohne Training. Fehlende Teilnahme zählt als 0 Schaden. Wege/Pausen zählen nicht zur DPS. Unterschiedliche aufgezeichnete Kampfzusammenstellungen können Runs beeinflussen. ':'')+`Chronologische ${isRun?'Runs':'Versuche'} mit gleichen Abständen; Skala beginnt beim Bereich der Daten, nicht bei 0. Breite Linie: gleitender Ø über 3 ${isRun?'Runs':'Versuche'}. Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
+  $('#bossNote').textContent=(isRun?'Beendete Runs: eigener erfasster Schaden / gemeinsame erfasste Kampfzeit, mindestens 1 Sekunde je Kampf, ohne Training. Fehlende Teilnahme zählt als 0 Schaden. Wege/Pausen zählen nicht zur DPS. Unterschiedliche aufgezeichnete Kampfzusammenstellungen können Runs beeinflussen. ':'')+`Chronologische ${isRun?'Runs':'Versuche'} mit gleichen Abständen; Skala beginnt beim Bereich der Daten, nicht bei 0. Breite Linie: gleitender Ø über 3 ${isRun?'Runs':'Versuche'}. Ø ist der arithmetische Mittelwert der ${noun}-DPS. Rote Punkte: eigener Tod erfasst. ${isRun?'Ein beendeter Run belegt keine vollständige Bossabdeckung.':'Ein Versuch ist kein Kill-Nachweis.'}${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
   range.disabled=false;range.max=k.length-1;
   const select=i=>{
     range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&typeof knownClassJob==='function'&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
-    const parts=[`${noun} ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':'−'}${Math.abs(change).toFixed(1).replace('.',',')} % zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
+    const parts=[`${noun} ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':'−'}${Math.abs(change).toFixed(1).replace('.',',')} % zum vorherigen ${noun}`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);
     const cross=$('#bossCross');cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));
