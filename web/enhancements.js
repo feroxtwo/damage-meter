@@ -29,11 +29,14 @@ function windowHits(f,actor,start,end) {
   }
   return {available,hits:hits.sort((a,b)=>b.count-a.count)};
 }
+function knownClassJob(job) {
+  return ['검성','수호성','궁성','살성','마도성','치유성','정령성','호법성','권성','gladiator','templar','ranger','assassin','sorcerer','cleric','elementalist','chanter','fighter'].includes(job);
+}
 function bossPerformance(attempts,characterSelected) {
   if(!characterSelected)return {hint:'Für persönliche Einordnung oben einen Charakter wählen.'};
   if(attempts.length<3)return {hint:'Mindestens drei vergleichbare Versuche für eine persönliche Einordnung nötig.'};
   const last=attempts.at(-1);
-  if(!last.job||attempts.some(p=>p.job!==last.job||!Number.isFinite(p.dps)||p.dps<0))return {hint:'Die Einordnung braucht verlässliche Werte derselben Klasse im ausgewählten Ausschnitt.'};
+  if(!knownClassJob(last.job)||attempts.some(p=>p.job!==last.job||!Number.isFinite(p.dps)||p.dps<0||![false,0].includes(p.numeric_limited)))return {hint:'Die Einordnung braucht verlässliche Werte derselben Klasse im ausgewählten Ausschnitt.'};
   const previous=attempts.slice(0,-1),mean=previous.reduce((n,p)=>n+p.dps,0)/previous.length;
   const allMean=attempts.reduce((n,p)=>n+p.dps,0)/attempts.length,best=Math.max(...attempts.map(p=>p.dps));
   const rank=1+attempts.filter(p=>p.dps>last.dps).length;

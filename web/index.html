@@ -574,7 +574,7 @@ function drawBoss() {
   $('#bossNote').textContent=`Chronologische Versuche mit gleichen Abständen; Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
   range.disabled=false;range.max=k.length-1;
   const select=i=>{
-    range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=prev&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
+    range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
     const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':''}${change.toFixed(1)}% zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);

@@ -16,9 +16,9 @@ Spitzenfenster werden nur ab fünf vollständig beobachteten Sekunden angezeigt.
 
 Die Trefferliste zählt gespeicherte Zeitpunkte in `(Start, Ende]` je Spieler-ID und Skillobjekt. DoT und Multihit sind Treffer/Ticks, keine Casts. Aus Zeitpunkten wird weder Skill-Schaden im Fenster noch eine Rotation abgeleitet. Fehlende Zeitpunkte bedeuten keine bestätigte Inaktivität.
 
-Persönliche Boss-Einordnung benötigt einen ausgewählten Charakter, mindestens drei Versuche derselben Klasse und endliche DPS-Werte. Der Vergleichs-Durchschnitt enthält nur vorherige Versuche. Bestwert und Rang gelten für den gewählten Ausschnitt und keine bestätigten Kills. Gleiche Bestwerte teilen Rang 1. Die mittlere absolute Abweichung ist eine deskriptive Konstanzzahl, keine Signifikanz oder Spielbewertung.
+Persönliche Boss-Einordnung benötigt einen ausgewählten Charakter, mindestens drei Versuche derselben bekannten Klasse, endliche DPS-Werte und überprüfbare Records ohne erkannte Parser-Zahlengrenze. Der Vergleichs-Durchschnitt enthält nur vorherige Versuche. Bestwert und Rang gelten für den gewählten Ausschnitt und keine bestätigten Kills. Gleiche Bestwerte teilen Rang 1. Die mittlere absolute Abweichung ist eine deskriptive Konstanzzahl, keine Signifikanz oder Spielbewertung.
 
-Keine Aussagen über Overheal, Shields, rDPS, Dispel, nicht beobachtete Buffentfernung oder reale Protokollvollständigkeit. Messwerte und Datenbankschema bleiben unverändert. Lokale Icons, IDs, Sprachwahl und anonymisierte Exporte verwenden die bestehenden Pfade.
+Keine Aussagen über Overheal, Shields, rDPS, Dispel, nicht beobachtete Buffentfernung oder reale Protokollvollständigkeit. Messwerte und Datenbankschema bleiben unverändert. Die bestehende Boss-History-API liefert zusätzlich einen aus vorhandenen Record-JSONs berechneten Zahlengrenzenhinweis; fehlende Records sperren die Einordnung. Lokale Icons, IDs, Sprachwahl und anonymisierte Exporte verwenden die bestehenden Pfade.
 
 ## Prüfungen und Evidenz
 

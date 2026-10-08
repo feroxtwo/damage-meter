@@ -17,12 +17,15 @@ context.g.analytics.points[5].damage[1]=NaN;assert.equal(run('observedPeak(g)'),
 const hits=plain(run('windowHits(f,1,0,5000)'));assert.equal(hits.hits.length,2);assert.deepEqual(hits.hits.map(h=>h.count),[2,2]);assert.ok(hits.hits.some(h=>h.skill.is_dot));
 assert.equal(run('windowHits({players:[{skills:[{code:1}]}]},null,0,5000).available'),false);
 assert.equal(run('windowHits(f,2,0,5000).available'),false,'actor ID controls selection');
-context.attempts=[100,100,200].map(dps=>({dps,job:'cleric'}));
+context.attempts=[100,100,200].map(dps=>({dps,job:'cleric',numeric_limited:false}));
 const perf=plain(run('bossPerformance(attempts,true)'));assert.equal(perf.change,100,'comparison excludes the current attempt');assert.equal(perf.rank,1);assert.equal(perf.gap,0);
 assert.ok(run('bossPerformance(attempts,false).hint'));assert.ok(run('bossPerformance([{dps:1},{dps:2}],true).hint'));
 assert.ok(run('bossPerformance([...attempts,{dps:300,job:"ranger"}],true).hint'));
 assert.ok(run('bossPerformance(attempts.map(p=>({...p,job:null})),true).hint'));
-context.attempts.push({dps:200,job:'cleric'});assert.equal(run('bossPerformance(attempts,true).rank'),1,'equal best values tie');
+assert.ok(run('bossPerformance(attempts.map(p=>({...p,job:"???"})),true).hint'));
+assert.ok(run('bossPerformance(attempts.map(p=>({...p,numeric_limited:true})),true).hint'));
+assert.ok(run('bossPerformance(attempts.map(p=>({...p,numeric_limited:null})),true).hint'));
+context.attempts.push({dps:200,job:'cleric',numeric_limited:false});assert.equal(run('bossPerformance(attempts,true).rank'),1,'equal best values tie');
 assert.equal(run('bossPerformance(attempts.map(p=>({...p,dps:0})),true).change'),null);
 delete context.f.analytics.partial;assert.equal(JSON.stringify(context.f),original,'analysis preserves saved measurements');
-console.log('PASS insights: complete windows, partial baseline, gaps/resets/numeric limits, actor IDs, DoT/tick counts, comparable cohorts, previous-only average and tied ranking (20 assertions)');
+console.log('PASS insights: complete windows, partial baseline, gaps/resets/numeric limits, actor IDs, DoT/tick counts, comparable cohorts, previous-only average and tied ranking (23 assertions)');

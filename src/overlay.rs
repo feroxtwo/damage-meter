@@ -404,7 +404,7 @@ impl Overlay {
                 p.rect_stroke(
                     inner,
                     3,
-                    Stroke::new(0.7, with_alpha(palette(&settings.theme).2, 140)),
+                    Stroke::new(0.7_f32, with_alpha(palette(&settings.theme).2, 140)),
                     StrokeKind::Inside,
                 );
             }

@@ -1100,7 +1100,13 @@ impl Db {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
-                    fp.dps, fp.share, fp.died, fp.job
+                    fp.dps, fp.share, fp.died, fp.job,
+                    CASE WHEN json_valid(f.record_json) THEN
+                      EXISTS(SELECT 1 FROM json_each(f.record_json, '$.details.skills')
+                             WHERE json_extract(value, '$.dmg') = 2147483647)
+                      OR EXISTS(SELECT 1 FROM json_each(f.record_json, '$.details.healSkills')
+                                WHERE json_extract(value, '$.dmg') = 2147483647)
+                    ELSE NULL END AS numeric_limited
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
              ORDER BY f.started_at",
@@ -1482,6 +1488,40 @@ mod tests {
         assert_eq!(kills[1]["dps"], 300.0);
         assert_eq!(kills[0]["difficulty"], "Schwer");
         assert_eq!(db.summary("").unwrap()["my_deaths"], 1);
+    }
+
+    #[test]
+    fn boss_history_marks_capped_or_unverifiable_measurements() {
+        let db = Db::in_memory().unwrap();
+        let normal = record("normal", 1000, 100);
+        let mut limited = record("limited", 2000, 100);
+        limited.details.skills[0].dmg = i32::MAX;
+        let mut healing = record("healing", 3000, 100);
+        let mut heal_skill = healing.details.skills[0].clone();
+        heal_skill.dmg = i32::MAX;
+        healing.details.heal_skills.push(heal_skill);
+        db.save_fights(
+            &[normal, limited, healing],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        let history = db.boss_history("Me").unwrap();
+        let attempts = history[0]["attempts"].as_array().unwrap();
+        assert_eq!(attempts[0]["numeric_limited"], 0);
+        assert_eq!(attempts[1]["numeric_limited"], 1);
+        assert_eq!(attempts[2]["numeric_limited"], 1);
+        db.conn
+            .lock()
+            .execute(
+                "UPDATE fights SET record_json = NULL WHERE id = 'normal'",
+                [],
+            )
+            .unwrap();
+        let history = db.boss_history("Me").unwrap();
+        assert!(history[0]["attempts"][0]["numeric_limited"].is_null());
     }
 
     #[test]

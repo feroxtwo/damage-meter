@@ -692,7 +692,7 @@ const server = http.createServer((req,res) => {
       await page.locator('#closeDialog').click();await page.unroute('**/api/fights/insight');
     });
     await check('personal progression requires a character and a comparable class',async()=>{
-      const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
+      const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',numeric_limited:0,started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
       await page.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
       await page.selectOption('#charSel','FeroxTOO');await page.getByRole('button',{name:'Statistik',exact:true}).click();
       await page.waitForFunction(()=>document.querySelector('#bossStory').textContent.includes('+100,0 %'));
