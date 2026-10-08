@@ -591,9 +591,9 @@ function drawBoss() {
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   const story=typeof window.bossStory==='function'?bossStory(k,!!character):null;
-  if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(isRun?story.hint.replace(/Versuch/g,'Run'):story.hint)}</p>`;
-  else if(story?.verdict)$('#bossInsights').innerHTML=isRun?story.verdict.replace(/Versuch/g,'Run'):story.verdict;
-  $('#bossSummary').innerHTML=story?(isRun?story.summary.replace(/Versuch/g,'Run'):story.summary):summary(num(last.dps)+' DPS','Letzter '+noun)+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro '+noun)+summary(k.length,isRun?'Runs im Ausschnitt':'Versuche im Ausschnitt');
+  if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(isRun?story.hint.replace(/Versuchen?/g,'Runs').replace(/Versuch/g,'Run'):story.hint)}</p>`;
+  else if(story?.verdict)$('#bossInsights').innerHTML=isRun?story.verdict.replace(/Versuchen?/g,'Runs').replace(/Versuch/g,'Run'):story.verdict;
+  $('#bossSummary').innerHTML=story?(isRun?story.summary.replace(/Versuchen?/g,'Runs').replace(/Versuch/g,'Run'):story.summary):summary(num(last.dps)+' DPS','Letzter '+noun)+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro '+noun)+summary(k.length,isRun?'Runs im Ausschnitt':'Versuche im Ausschnitt');
   box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,low=k.reduce((n,p)=>Math.min(n,p.dps),best),spread=Math.max(best-low,best*.05);
   // A line chart may start above zero: the range of your own attempts decides the scale, so change stays visible.
   const min=Math.max(0,low-spread*.6),max=Math.max(min+1,best+spread*.25);
