@@ -288,7 +288,7 @@ function bindFightChart(f) {
     const legend=root.querySelector('[data-curve-legend]');
     legend.innerHTML=all?series.map((s,i)=>`<button type="button" class="legend-toggle" data-series="${i}" aria-pressed="${!hidden.has(i)}" title="Linie ein- oder ausblenden"><i style="background:${s.color}"></i><span>${esc(s.name)}</span></button>`).join(''):'';
     legend.querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.series);hidden.has(i)?hidden.delete(i):hidden.add(i);render();legend.querySelector(`[data-series="${i}"]`)?.focus();});
-    const plot=root.querySelector('[data-curve-plot]');
+    const plot=root.querySelector('[data-curve-plot]');root.drawnWidth=root.clientWidth;
     plot.innerHTML=visible.length?curveMarkup(points,visible,{unit,label:all?unit+'-Verlauf aller Spieler':unit+' · '+actors[0]?.name,width:Math.min(900,root.clientWidth||900),end:f.duration_ms}):'<p class="analysis-note">Alle Linien ausgeblendet. Wähle einen Spieler in der Legende.</p>';
     const range=root.querySelector('[data-curve-range]'),readout=root.querySelector('[data-curve-readout]');
     range.max=Math.max(0,points.length-1);range.disabled=!points.length;
@@ -401,4 +401,8 @@ $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',
 $('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());
 
-window.addEventListener('resize',()=>{if($('#fightDialog').open)$('#fightDamageChart')?.renderCurve?.();});
+// One redraw per frame and only when the chart width changed; keeps hover targets stable.
+let fightChartFrame=0;
+window.addEventListener('resize',()=>{cancelAnimationFrame(fightChartFrame);fightChartFrame=requestAnimationFrame(()=>{
+  const root=$('#fightDamageChart');if($('#fightDialog').open&&root?.renderCurve&&root.clientWidth!==root.drawnWidth)root.renderCurve();
+});});
