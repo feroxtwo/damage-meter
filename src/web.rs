@@ -243,6 +243,16 @@ async fn boss_history(
         .map_err(db_error)
 }
 
+async fn run_history(
+    State(engine): State<AppState>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| e.db.run_history(&q.character))
+        .await?
+        .map(Json)
+        .map_err(db_error)
+}
+
 async fn summary(
     State(engine): State<AppState>,
     Query(q): Query<StatsQuery>,
@@ -574,6 +584,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/stats/partners", get(partners))
         .route("/api/stats/summary", get(summary))
         .route("/api/stats/boss-history", get(boss_history))
+        .route("/api/stats/run-history", get(run_history))
         .route("/api/overlay", get(get_overlay).post(set_overlay))
         .route("/api/overlay/toggle-lock", post(toggle_lock))
         .route("/api/overlay/toggle-visible", post(toggle_visible))

@@ -77,6 +77,8 @@ struct DungeonEntry {
     name: String,
     #[serde(default)]
     difficulty: Option<String>,
+    #[serde(default)]
+    activity: Option<String>,
 }
 
 static DUNGEONS: LazyLock<HashMap<i32, DungeonEntry>> = LazyLock::new(|| {
@@ -89,6 +91,11 @@ static DUNGEONS: LazyLock<HashMap<i32, DungeonEntry>> = LazyLock::new(|| {
 
 pub fn dungeon_name(id: i32) -> Option<String> {
     DUNGEONS.get(&id).map(|d| d.name.clone())
+}
+
+/// Only catalogued instances have a verified activity; unknown IDs stay unknown.
+pub fn dungeon_activity(id: i32) -> Option<&'static str> {
+    DUNGEONS.get(&id)?.activity.as_deref()
 }
 
 /// "Erkundung", "Normal", "Schwer" or "Stufe n". The last digit of an instance
@@ -174,6 +181,9 @@ mod tests {
         assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 5)");
         assert_eq!(dungeon_label(0), "Offene Welt");
         assert_eq!(dungeon_label(123), "Instanz 123");
+        assert_eq!(dungeon_activity(600093), Some("expedition"));
+        assert_eq!(dungeon_activity(600055), Some("transcendence"));
+        assert_eq!(dungeon_activity(600999), None);
     }
 
     #[test]

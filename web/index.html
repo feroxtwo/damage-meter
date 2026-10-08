@@ -202,8 +202,11 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     <div class="page-title"><div><div class="eyebrow">Performance</div><h2>Deine Statistik</h2><p>Vergleiche Kämpfe und entdecke deine besten Runs.</p></div><span class="tag">AION 2 · LINUX</span></div>
     <div class="grid stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-top:16px">
       <div class="card" style="grid-column:1 / -1"><h2>Wie entwickelt sich meine DPS?</h2>
-        <div class="chart-tools"><label>Boss <select id="bossSel" aria-label="Boss für DPS-Verlauf"></select></label>
-        <label>Versuche <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
+        <div class="chart-tools activity-filters"><label>Bereich <select id="activitySel" aria-label="Bereich für DPS-Verlauf"><option value="all">Alle Bereiche</option><option value="field_boss">Feldbosse</option><option value="open_world">Open World</option><option value="expedition">Expeditionen</option><option value="secret_dungeon">Secret Dungeons</option><option value="nightmare">Nightmare</option><option value="transcendence">Transzendenz</option><option value="sanctuary">Sanctuary / Raids</option><option value="daily">Tägliche Dungeons</option><option value="unclassified">Nicht zugeordnet</option></select></label>
+        <label><span id="contentFilterLabel">Expedition / Gebiet</span> <select id="contentSel" aria-label="Expedition oder Gebiet für DPS-Verlauf"><option value="">Alle Gebiete</option></select></label>
+        <label>Auswertung <select id="bossSel" aria-label="Boss oder gesamte Expedition für DPS-Verlauf"></select></label>
+        <label>Versuche / Runs <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
+        <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details>
         <div id="bossInsights"></div><div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
         <label class="curve-scrubber">Versuch <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
@@ -530,55 +533,93 @@ async function loadStats() {
 
 // Attempts are equally spaced, including fights without an observed kill.
 let bossHistory = [], bossSelectedKey = '', bossSelectedAttempt = 0;
-const bossKey=b=>JSON.stringify([b.boss,b.dungeon_id??b.difficulty??'']);
+const activityLabels={field_boss:'Feldbosse',open_world:'Open World',expedition:'Expeditionen',secret_dungeon:'Secret Dungeons',nightmare:'Nightmare',transcendence:'Transzendenz',sanctuary:'Sanctuary / Raids',daily:'Tägliche Dungeons',unclassified:'Nicht zugeordnet'};
+const bossKey=b=>b.scope==='run'?'run:'+b.dungeon_id:JSON.stringify([b.boss,b.dungeon_id??b.difficulty??'',b.mob_code??'']);
+const contentKey=b=>String(b.dungeon_id??'unknown');
+const mappingKey=b=>Number(b.dungeon_id)>0?'area:'+b.dungeon_id:Number(b.mob_code)>0?'mob:'+b.mob_code:null;
+let activityOverrides={};
+try {const saved=JSON.parse(localStorage.getItem('a2m-activity-overrides')||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))activityOverrides=Object.fromEntries(Object.entries(saved).slice(0,1000).filter(([k,v])=>/^(area|mob):[1-9][0-9]*$/.test(k)&&Object.hasOwn(activityLabels,v)&&v!=='unclassified'));} catch {}
+const activityOf=b=>activityOverrides[mappingKey(b)]||(Object.hasOwn(activityLabels,b.activity)?b.activity:'unclassified');
+const contentLabel=b=>(b.dungeon_name||(Number(b.dungeon_id)>0?'Instanz '+b.dungeon_id:Number(b.dungeon_id)===0?'Offene Welt':'Gebiet unbekannt'))+(b.difficulty?' · '+b.difficulty:'');
 async function loadBossHistory() {
-  const request = ++bossRequest;
-  const history = await api('/api/stats/boss-history?' + charQ());
-  if (request !== bossRequest) return;
-  bossHistory = history;
-  const sel = $('#bossSel'), cur = sel.value;
-  sel.innerHTML = bossHistory.map(b => `<option value="${esc(bossKey(b))}">${esc(b.boss)}${b.difficulty?' · '+esc(b.difficulty):''} (${b.attempts.length} Versuche)</option>`).join('');
-  if (bossHistory.some(b=>bossKey(b)===cur)) sel.value=cur;
-  drawBoss();
+  const request=++bossRequest;
+  const [bosses,runs]=await Promise.all([api('/api/stats/boss-history?'+charQ()),api('/api/stats/run-history?'+charQ())]);
+  if(request!==bossRequest)return;
+  bossHistory=[...bosses,...runs];refreshActivityFilters();
 }
+function refreshActivityFilters() {
+  const category=$('#activitySel').value,content=$('#contentSel'),previous=content.value;
+  const entries=bossHistory.filter(b=>category==='all'||activityOf(b)===category),areas=new Map();
+  for(const b of entries)areas.set(contentKey(b),contentLabel(b));
+  $('#contentFilterLabel').textContent=category==='expedition'?'Expedition':'Expedition / Gebiet';
+  content.innerHTML='<option value="">'+(category==='expedition'?'Alle Expeditionen':'Alle Gebiete')+'</option>'+[...areas].sort((a,b)=>a[1].localeCompare(b[1],'de')).map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join('');
+  if(areas.has(previous))content.value=previous;
+  content.disabled=!areas.size;refreshBossOptions();
+}
+function refreshBossOptions() {
+  const category=$('#activitySel').value,area=$('#contentSel').value,sel=$('#bossSel'),previous=sel.value;
+  let entries=bossHistory.filter(b=>(category==='all'||activityOf(b)===category)&&(!area||contentKey(b)===area));
+  // Whole-run option leads only once a particular area is chosen.
+  if(area)entries=entries.slice().sort((a,b)=>(b.scope==='run')-(a.scope==='run')||a.boss.localeCompare(b.boss,'de'));
+  const duplicated=b=>entries.some(other=>other!==b&&other.scope!=='run'&&b.scope!=='run'&&other.boss===b.boss&&contentKey(other)===contentKey(b));
+  sel.innerHTML=entries.map(b=>`<option value="${esc(bossKey(b))}">${esc(b.scope==='run'?(activityOf(b)==='expedition'?'Gesamte Expedition':'Gesamter Run'):b.boss)}${duplicated(b)?' · #'+Number(b.mob_code||0):''}${!area?' · '+esc(contentLabel(b)):''} (${b.attempts.length} ${b.scope==='run'?(b.attempts.length===1?'Run':'Runs'):(b.attempts.length===1?'Versuch':'Versuche')})</option>`).join('');
+  if(entries.some(b=>bossKey(b)===previous))sel.value=previous;
+  sel.disabled=!entries.length;drawBoss();
+}
+function renderActivityMapping(b) {
+  const key=b&&mappingKey(b),show=!!key;
+  $('#activityMapping').hidden=!show;
+  if(!show)return;
+  $('#activityMappingNote').textContent=(key.startsWith('area:')?'Gebiet '+b.dungeon_id:'Ziel-ID '+b.mob_code)+' · Eigene Zuordnung gilt nur in diesem Browser. Gespeicherte Messwerte werden nicht verändert.';
+  $('#activityOverride').innerHTML='<option value="">Automatisch / nicht zugeordnet</option>'+Object.entries(activityLabels).filter(([k])=>k!=='unclassified').map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('');
+  $('#activityOverride').value=activityOverrides[key]||'';
+  $('#activityOverride').onchange=()=>{
+    const next={...activityOverrides};if($('#activityOverride').value)next[key]=$('#activityOverride').value;else delete next[key];
+    try {localStorage.setItem('a2m-activity-overrides',JSON.stringify(next));activityOverrides=next;refreshActivityFilters();}
+    catch {toast('Bereichszuordnung konnte nicht gespeichert werden.',true);}
+  };
+}
+$('#activitySel').onchange=()=>{$('#contentSel').value='';refreshActivityFilters();};
+$('#contentSel').onchange=()=>{$('#bossSel').value='';refreshBossOptions();};
+
 function drawBoss() {
   const box=$('#bossChart'),range=$('#bossAttempt'),readout=$('#bossReadout'),open=$('#bossOpen');
-  const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);
+  const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);renderActivityMapping(b);const isRun=b?.scope==='run',noun=isRun?'Run':'Versuch';open.textContent=isRun?'Run öffnen':'Kampfbericht öffnen';
   range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossInsights').innerHTML='';$('#bossNote').textContent='';
-  if(!b?.attempts.length){box.innerHTML='<div class="empty">Noch keine gespeicherten Bossversuche mit dir. Wähle bei Bedarf einen anderen Charakter.</div>';return;}
+  if(!b?.attempts.length){box.innerHTML='<div class="empty">Keine gespeicherten Versuche in diesem Bereich. Wähle einen anderen Bereich oder Charakter. Unbekannte Gebiete findest du unter „Nicht zugeordnet“.</div>';return;}
   const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   const story=typeof window.bossStory==='function'?bossStory(k,!!character):null;
   if(story?.hint)$('#bossInsights').innerHTML=`<p class="analysis-note">${esc(story.hint)}</p>`;
-  else if(story?.verdict)$('#bossInsights').innerHTML=story.verdict;
-  $('#bossSummary').innerHTML=story?story.summary:summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
+  else if(story?.verdict)$('#bossInsights').innerHTML=isRun?story.verdict.replace(/Versuch/g,'Run'):story.verdict;
+  $('#bossSummary').innerHTML=story?(isRun?story.summary.replace(/Versuch/g,'Run'):story.summary):summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
   box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,low=k.reduce((n,p)=>Math.min(n,p.dps),best),spread=Math.max(best-low,best*.05);
   // A line chart may start above zero: the range of your own attempts decides the scale, so change stays visible.
   const min=Math.max(0,low-spread*.6),max=Math.max(min+1,best+spread*.25);
   const x=i=>k.length===1?(L+W-R)/2:L+i*(W-L-R)/(k.length-1),y=v=>T+(1-(v-min)/(max-min))*(H-T-B);
   const rolling=k.map((_,i)=>{const w=k.slice(Math.max(0,i-2),i+1);return w.reduce((n,p)=>n+p.dps,0)/w.length;});
   const step=Math.max(1,Math.ceil(k.length/600)),visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
-  box.innerHTML=`<svg class="curve-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Eigene DPS pro Versuch gegen ${esc(b.boss)}">
+  box.innerHTML=`<svg class="curve-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Eigene DPS pro ${noun} · ${esc(contentLabel(b))} · ${esc(b.boss)}">
     <text x="${L}" y="14">DPS</text>
     ${[0,.25,.5,.75,1].map(t=>min+(max-min)*t).map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="curve-grid"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end">${num(v)}</text>`).join('')}
     ${k.length>=3?`<path class="curve-rolling" d="${rolling.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(' ')}"/>`:''}
     <line x1="${L}" x2="${W-R}" y1="${y(mean)}" y2="${y(mean)}" class="curve-average"/><text x="${W-R}" y="${Math.max(T,y(mean)-6)}" text-anchor="end">Ø ${num(mean)}</text>
     <path d="${visible.map(({p,i},j)=>`${j?'L':'M'}${x(i).toFixed(2)},${y(p.dps).toFixed(2)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"/>
-    ${visible.map(({p,i})=>`<circle cx="${x(i)}" cy="${y(p.dps)}" r="4" fill="${p.died?'var(--red)':'var(--accent)'}"><title>Versuch ${offset+i+1}: ${num(p.dps)} DPS${p.died?' · eigener Tod erfasst':''}</title></circle>`).join('')}
-    <text x="${L}" y="${H-9}">Versuch ${offset+1}</text>${k.length>1?`<text x="${W-R}" y="${H-9}" text-anchor="end">Versuch ${offset+k.length}</text>`:''}
+    ${visible.map(({p,i})=>`<circle cx="${x(i)}" cy="${y(p.dps)}" r="4" fill="${p.died?'var(--red)':'var(--accent)'}"><title>${noun} ${offset+i+1}: ${num(p.dps)} DPS${p.died?' · eigener Tod erfasst':''}</title></circle>`).join('')}
+    <text x="${L}" y="${H-9}">${noun} ${offset+1}</text>${k.length>1?`<text x="${W-R}" y="${H-9}" text-anchor="end">${noun} ${offset+k.length}</text>`:''}
     <line id="bossCross" y1="${T}" y2="${H-B}" class="curve-cross"/>
     <rect id="bossHit" class="curve-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
   </svg>`;
-  $('#bossNote').textContent=`Chronologische Versuche mit gleichen Abständen; Skala beginnt beim Bereich deiner Versuche, nicht bei 0. Breite Linie: gleitender Ø über 3 Versuche. Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
+  $('#bossNote').textContent=(isRun?'Beendete Runs: eigener erfasster Schaden / gemeinsame erfasste Kampfzeit, mindestens 1 Sekunde je Kampf, ohne Training. Fehlende Teilnahme zählt als 0 Schaden. Wege/Pausen zählen nicht zur DPS. Unterschiedliche aufgezeichnete Kampfzusammenstellungen können Runs beeinflussen. ':'')+`Chronologische ${isRun?'Runs':'Versuche'} mit gleichen Abständen; Skala beginnt beim Bereich der Daten, nicht bei 0. Breite Linie: gleitender Ø über 3 ${isRun?'Runs':'Versuche'}. Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
   range.disabled=false;range.max=k.length-1;
   const select=i=>{
     range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=character&&prev&&typeof knownClassJob==='function'&&knownClassJob(p.job)&&p.job===prev.job&&[false,0].includes(p.numeric_limited)&&[false,0].includes(prev.numeric_limited)&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
-    const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':'−'}${Math.abs(change).toFixed(1).replace('.',',')} % zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
+    const parts=[`${noun} ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':'−'}${Math.abs(change).toFixed(1).replace('.',',')} % zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
     readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
     range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);
     const cross=$('#bossCross');cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));
-    open.disabled=!p.fight_id;open.onclick=p.fight_id?()=>task(openFight(p.fight_id)):null;
+    open.disabled=isRun?!p.run_id:!p.fight_id;open.onclick=isRun?(p.run_id?()=>task(openRun(p.run_id)):null):(p.fight_id?()=>task(openFight(p.fight_id)):null);
   };
   select(bossSelectedKey===bossKey(b)&&bossSelectedAttempt>=offset&&bossSelectedAttempt<offset+k.length?bossSelectedAttempt-offset:k.length-1);range.oninput=()=>select(Number(range.value));
   $('#bossHit').onpointermove=$('#bossHit').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();select(k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((e.clientX-r.left)/r.width*(k.length-1)))));};

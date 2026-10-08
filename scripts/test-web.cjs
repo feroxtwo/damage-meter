@@ -90,6 +90,7 @@ const server = http.createServer((req,res) => {
     }
     else if (/^\/api\/runs\/\d+\/favorite$/.test(u.pathname)) { runFavorites.push({id:u.pathname.split('/')[3],...req.postDataJSON()}); data = null; }
     else if (/^\/api\/runs\/\d+$/.test(u.pathname)) data = {...run, id:Number(u.pathname.split('/').pop()), totals:[], fights:[]};
+    else if (u.pathname === '/api/stats/run-history') data = [];
     else if (u.pathname === '/api/stats/summary') data = summary;
     else if (u.pathname === '/api/stats/partners') data = [{name:'Moon', class_key:'gladiator',class_name:'Gladiator',runs:10}];
     else if (u.pathname === '/api/stats/boss-history') data = [{boss:'Kargos',attempts:[{dps:40000,started_at:run.started_at,duration_ms:90000,share:40},{dps:50000,started_at:run.ended_at,duration_ms:90000,share:48}]}];
@@ -570,6 +571,43 @@ const server = http.createServer((req,res) => {
       await page.locator('#bossOpen').click();await page.locator('#fightDamageChart').waitFor();
       await page.locator('#closeDialog').click();await page.setViewportSize({width:1440,height:1000});
       await page.unroute('**/api/stats/boss-history**');await page.selectOption('#bossLimit','20');await page.getByRole('button',{name:'Live',exact:true}).click();
+    });
+    await check('activity hierarchy separates expeditions, bosses and ended runs and keeps manual unknown mappings',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      const attempt=(dps,id='f1')=>({dps,started_at:run.started_at,duration_ms:90000,fight_id:id,job:'cleric',numeric_limited:0});
+      const groups=[
+        {boss:'Kargos',dungeon_id:600093,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Schwer',mob_code:100,attempts:[attempt(50000)]},
+        {boss:'Kargos',dungeon_id:600093,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Schwer',mob_code:102,attempts:[attempt(15000)]},
+        {boss:'Wachposten',dungeon_id:600093,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Schwer',mob_code:101,attempts:[attempt(30000)]},
+        {boss:'Kargos',dungeon_id:600092,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Normal',mob_code:100,attempts:[attempt(90000)]},
+        {boss:'Boss B',dungeon_id:600001,dungeon_name:'Krao Cave',activity:'expedition',difficulty:'Erkundung',mob_code:200,attempts:[attempt(20000)]},
+        {boss:'Feldboss',dungeon_id:0,activity:'field_boss',mob_code:300,attempts:[attempt(70000)]},
+        {boss:'Weltgegner',dungeon_id:0,activity:'open_world',mob_code:400,attempts:[attempt(10000)]},
+        {boss:'Unbekannter Boss',dungeon_id:900001,activity:'unclassified',mob_code:500,attempts:[attempt(60000)]}
+      ];
+      const runs=[{boss:'Gesamter Run',scope:'run',dungeon_id:600093,dungeon_name:'Ferocious Horn Den',activity:'expedition',difficulty:'Schwer',attempts:[{...attempt(42000),fight_id:undefined,run_id:1,fight_count:3}]}];
+      await isolated.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(groups)}));
+      await isolated.route('**/api/stats/run-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(runs)}));
+      try {
+        await isolated.goto(base+'/#stats');await isolated.locator('#bossChart svg').waitFor();
+        await isolated.selectOption('#activitySel','expedition');await isolated.selectOption('#contentSel','600093');
+        assert.deepEqual(await isolated.locator('#bossSel option').allTextContents(),['Gesamte Expedition (1 Run)','Kargos · #100 (1 Versuch)','Kargos · #102 (1 Versuch)','Wachposten (1 Versuch)']);
+        assert.match(await isolated.locator('#bossSummary').textContent(),/42,0K/);assert.match(await isolated.locator('#bossNote').textContent(),/gemeinsame erfasste Kampfzeit/);
+        await isolated.locator('#bossOpen').click();assert.match(await isolated.locator('#dialogTitle').textContent(),/Ferocious/);await isolated.locator('#closeDialog').click();
+        await isolated.selectOption('#bossSel',{label:'Kargos · #100 (1 Versuch)'});assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);
+        groups.reverse();await isolated.evaluate(()=>loadBossHistory());assert.match(await isolated.locator('#bossSummary').textContent(),/50,0K/);assert.equal(await isolated.locator('#contentSel').inputValue(),'600093');
+        for(const width of [1440,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'activity-expedition-'+width+'.png'),fullPage:true});}
+        await isolated.selectOption('#contentSel','600092');assert.match(await isolated.locator('#bossSummary').textContent(),/90,0K/);
+        await isolated.selectOption('#activitySel','field_boss');assert.equal(await isolated.locator('#bossSel option').count(),1);assert.match(await isolated.locator('#bossSummary').textContent(),/70,0K/);
+        await isolated.selectOption('#activitySel','open_world');assert.equal(await isolated.locator('#bossSel option').count(),1);assert.match(await isolated.locator('#bossSummary').textContent(),/10,0K/);
+        await isolated.selectOption('#activitySel','nightmare');assert.equal(await isolated.locator('#bossChart svg').count(),0);assert.equal(await isolated.locator('#bossOpen').isDisabled(),true);
+        await isolated.selectOption('#activitySel','unclassified');if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','nightmare');
+        await isolated.selectOption('#activitySel','nightmare');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        await isolated.reload();await isolated.locator('#bossChart svg').waitFor();await isolated.selectOption('#activitySel','nightmare');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        assert.equal(groups.find(g=>g.dungeon_id===900001).activity,'unclassified','browser mapping must not alter records');
+        if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','secret_dungeon');await isolated.selectOption('#activitySel','secret_dungeon');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+        if(!await isolated.locator('#activityMapping').evaluate(e=>e.open))await isolated.locator('#activityMapping summary').click();await isolated.selectOption('#activityOverride','');await isolated.selectOption('#activitySel','unclassified');assert.match(await isolated.locator('#bossSummary').textContent(),/60,0K/);
+      } finally {await isolated.close();await page.evaluate(()=>localStorage.removeItem('a2m-activity-overrides'));}
     });
     await check('trimmed history does not invent a first-interval damage spike',async()=>{
       const html=await page.evaluate(()=>{

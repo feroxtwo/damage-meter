@@ -298,3 +298,6 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 #stats #kpis .card.kpi {background:none;border:0;border-radius:0;box-shadow:none;padding:18px 20px;border-left:1px solid var(--line)}#stats #kpis .card.kpi:first-child {border-left:0;padding-left:0}
 @media(max-width:600px){#stats #kpis .card.kpi{border-left:0;border-bottom:1px solid var(--line);padding:12px 0}}
 @media(max-width:450px){.live-signal{margin-bottom:22px}}
+
+/* Activity hierarchy belongs to the existing performance center. */
+.activity-filters label{min-width:0;flex:1 1 190px}.activity-filters select{width:100%;min-width:0;max-width:100%}#activityMapping{margin:12px 0;border-left:2px solid var(--gold);padding:6px 12px}#activityMapping select{max-width:100%}

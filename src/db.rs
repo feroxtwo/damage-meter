@@ -155,7 +155,10 @@ fn register_functions(conn: &Connection) -> Result<()> {
                 .unwrap_or_default())
         },
     )?;
-    set_world_mob_check(conn, |_| false)
+    set_world_mob_check(conn, |_| false)?;
+    set_activity_check(conn, |id, _| {
+        names::dungeon_activity(id).unwrap_or("unclassified").into()
+    })
 }
 
 /// `world_mob(mob_code)` is true for known monsters that are neither bosses
@@ -173,6 +176,24 @@ fn set_world_mob_check(
         move |ctx| {
             let code = ctx.get::<Option<i64>>(0)?.unwrap_or(0);
             Ok(code > 0 && is_world_mob(code as i32))
+        },
+    )?;
+    Ok(())
+}
+
+fn set_activity_check(
+    conn: &Connection,
+    classify: impl Fn(i32, i32) -> String + Send + 'static,
+) -> Result<()> {
+    use rusqlite::functions::FunctionFlags;
+    conn.create_scalar_function(
+        "activity_kind",
+        2,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let id = ctx.get::<Option<i32>>(0)?.unwrap_or(-1);
+            let code = ctx.get::<Option<i32>>(1)?.unwrap_or(0);
+            Ok(classify(id, code))
         },
     )?;
     Ok(())
@@ -1036,6 +1057,13 @@ impl Db {
         }
     }
 
+    /// Classification uses known instance metadata and the existing NPC lookup.
+    pub fn set_activity_check(&self, classify: impl Fn(i32, i32) -> String + Send + 'static) {
+        if let Err(e) = set_activity_check(&self.conn.lock(), classify) {
+            tracing::error!("Registering activity check failed: {e:#}");
+        }
+    }
+
     pub fn search_fights(&self, s: &FightSearch) -> Result<Value> {
         let conn = self.conn.lock();
         let kind = match s.kind {
@@ -1123,30 +1151,83 @@ impl Db {
         Ok(rows)
     }
 
-    /// Your DPS on every kill of each boss, oldest first, for the trend chart.
+    /// Recorded target attempts, grouped by stable area and mob IDs; no kill claim.
     pub fn boss_history(&self, character: &str) -> Result<Value> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
-                    fp.dps, fp.share, fp.died, fp.job, f.numeric_limited
+                    fp.dps, fp.share, fp.died, fp.job, f.numeric_limited, f.mob_code,
+                    activity_kind(f.dungeon_id, f.mob_code) AS activity
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
              ORDER BY f.started_at",
         )?;
         let rows = rows_to_json(&mut stmt, params![character])?;
-        let mut bosses: HashMap<(String, i32), Vec<Value>> = HashMap::new();
+        let mut bosses: HashMap<(String, i32, i32, String), Vec<Value>> = HashMap::new();
         for mut row in rows {
             let boss = row["boss"].as_str().unwrap_or_default().to_string();
             let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
             row["difficulty"] = json!(names::dungeon_difficulty(id));
-            bosses.entry((boss, id)).or_default().push(row);
+            let mob = row["mob_code"].as_i64().unwrap_or(0) as i32;
+            let activity = row["activity"].as_str().unwrap_or("unclassified").to_string();
+            bosses.entry((boss, id, mob, activity)).or_default().push(row);
         }
         let mut bosses: Vec<_> = bosses.into_iter().collect();
         bosses.sort_by_key(|(_, list)| std::cmp::Reverse(list.len()));
         Ok(Value::Array(
             bosses
                 .into_iter()
-                .map(|((boss,id), attempts)| json!({ "boss": boss, "dungeon_id":id,"difficulty":names::dungeon_difficulty(id),"attempts": attempts }))
+                .map(|((boss, id, mob, activity), attempts)| {
+                    json!({ "boss": boss, "dungeon_id": id, "mob_code": mob,
+                        "dungeon_name": names::dungeon_name(id), "activity": activity,
+                        "scope": "boss", "difficulty": names::dungeon_difficulty(id),
+                        "attempts": attempts })
+                })
+                .collect(),
+        ))
+    }
+
+    /// Ended runs only. Match run-detail's shared recorded fight windows,
+    /// including zero contribution in fights the selected character missed.
+    pub fn run_history(&self, character: &str) -> Result<Value> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "WITH windows AS (
+                SELECT run_id, SUM(MAX(duration_ms,1000)) AS duration_ms, COUNT(*) AS fight_count
+                FROM fights WHERE is_train=0 AND run_id IS NOT NULL GROUP BY run_id
+             ), own AS (
+                SELECT f.run_id, SUM(fp.damage) AS damage, MAX(fp.died) AS died,
+                       CASE WHEN COUNT(fp.job)=COUNT(*) AND COUNT(DISTINCT fp.job)=1
+                            THEN MAX(fp.job) ELSE NULL END AS job,
+                       CASE WHEN COUNT(f.numeric_limited)=COUNT(*)
+                            THEN MAX(f.numeric_limited) ELSE NULL END AS numeric_limited
+                FROM fight_players fp JOIN fights f ON f.id=fp.fight_id
+                WHERE fp.is_self=1 AND f.is_train=0 AND (?1='' OR fp.name=?1)
+                GROUP BY f.run_id
+             )
+             SELECT r.id AS run_id, r.dungeon_id, r.started_at, w.duration_ms, w.fight_count,
+                    o.damage, o.damage*1000.0/w.duration_ms AS dps, o.died, o.job,
+                    o.numeric_limited, NULL AS share
+             FROM runs r JOIN windows w ON w.run_id=r.id JOIN own o ON o.run_id=r.id
+             WHERE r.ended_at IS NOT NULL ORDER BY r.started_at, r.id",
+        )?;
+        let rows = rows_to_json(&mut stmt, params![character])?;
+        let mut groups: HashMap<i32, Vec<Value>> = HashMap::new();
+        for row in rows {
+            let id = row["dungeon_id"].as_i64().unwrap_or(0) as i32;
+            groups.entry(id).or_default().push(row);
+        }
+        let mut groups: Vec<_> = groups.into_iter().collect();
+        groups.sort_by_key(|(id, _)| *id);
+        Ok(Value::Array(
+            groups
+                .into_iter()
+                .map(|(id, attempts)| {
+                    json!({ "boss": "Gesamter Run", "dungeon_id": id,
+                        "dungeon_name": names::dungeon_name(id), "scope": "run",
+                        "activity": names::dungeon_activity(id).unwrap_or("unclassified"),
+                        "difficulty": names::dungeon_difficulty(id), "attempts": attempts })
+                })
                 .collect(),
         ))
     }
@@ -1424,6 +1505,98 @@ mod tests {
         assert!(db.delete_run(run).unwrap());
         assert!(!db.set_run_note(run, "missing").unwrap());
     }
+    #[test]
+    fn activity_history_keeps_same_named_targets_and_unknown_areas_separate() {
+        let db = Db::in_memory().unwrap();
+        db.set_activity_check(|id, code| {
+            if id != 0 {
+                names::dungeon_activity(id).unwrap_or("unclassified").into()
+            } else if code == 100 {
+                "field_boss".into()
+            } else if code == 200 {
+                "open_world".into()
+            } else {
+                "unclassified".into()
+            }
+        });
+        let mut boss = record("field", 1000, 1000);
+        boss.dungeon_id = 0;
+        boss.mob_code = 100;
+        let mut mob = record("world", 2000, 2000);
+        mob.dungeon_id = 0;
+        mob.mob_code = 200;
+        let mut unknown = record("unknown", 3000, 3000);
+        unknown.dungeon_id = 600999;
+        db.save_fights(
+            &[boss, mob, unknown],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        let groups = db.boss_history("Me").unwrap();
+        let groups = groups.as_array().unwrap();
+        assert_eq!(groups.len(), 3);
+        for (code, activity) in [
+            (100, "field_boss"),
+            (200, "open_world"),
+            (0, "unclassified"),
+        ] {
+            let group = groups.iter().find(|g| g["mob_code"] == code).unwrap();
+            assert_eq!(group["activity"], activity);
+            assert_eq!(group["attempts"].as_array().unwrap().len(), 1);
+        }
+        assert!(db.boss_history("Alt").unwrap().as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn run_history_matches_shared_windows_excludes_training_and_active_runs() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        let first = record("first", 1000, 100_000);
+        let mut second = record("second", 20_000, 900_000);
+        second.duration_ms = 30_000;
+        let mut absent = record("absent", 60_000, 10_000);
+        absent.actors[0].nickname = "Other".into();
+        let mut dummy = record("dummy", 80_000, 1_000_000);
+        dummy.is_train = true;
+        db.save_fights(
+            &[first, second, absent, dummy],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(db.run_history("Me").unwrap().as_array().unwrap().is_empty());
+        db.end_run(run, 100_000).unwrap();
+        let history = db.run_history("Me").unwrap();
+        let group = &history[0];
+        assert_eq!(group["activity"], "expedition");
+        assert_eq!(group["scope"], "run");
+        let point = &group["attempts"][0];
+        assert_eq!(point["damage"], 1_000_000);
+        assert_eq!(point["duration_ms"], 50_000);
+        assert_eq!(point["fight_count"], 3);
+        assert_eq!(point["dps"], 20_000.0);
+        assert_eq!(point["numeric_limited"], 0);
+        let detail = db.run_detail(run).unwrap().unwrap();
+        let me = detail["totals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["is_self"] == 1)
+            .unwrap();
+        assert_eq!(point["dps"], me["dps"]);
+        assert!(db.run_history("Alt").unwrap().as_array().unwrap().is_empty());
+        db.conn
+            .lock()
+            .execute("UPDATE fights SET numeric_limited=NULL WHERE id='second'", [])
+            .unwrap();
+        assert!(db.run_history("Me").unwrap()[0]["attempts"][0]["numeric_limited"].is_null());
+    }
+
     #[test]
     fn boss_trends_keep_difficulty_separate_and_do_not_claim_kills() {
         let db = Db::in_memory().unwrap();
