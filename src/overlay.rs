@@ -47,7 +47,10 @@ fn footer_height(compact: bool) -> f32 {
 fn overlay_size(compact: bool, rows: usize) -> Vec2 {
     Vec2::new(
         overlay_width(compact),
-        header_height(compact) + footer_height(compact) + row_height(compact) * rows.max(1) as f32 + 4.0,
+        header_height(compact)
+            + footer_height(compact)
+            + row_height(compact) * rows.max(1) as f32
+            + 4.0,
     )
 }
 fn palette(theme: &str) -> ([u8; 3], [u8; 3], [u8; 3]) {
@@ -85,9 +88,22 @@ fn with_alpha(c: [u8; 3], a: u8) -> Color32 {
 }
 
 /// A short shadow keeps foreground text readable over bright game scenes.
-fn shadow_text(p: &egui::Painter, pos: Pos2, align: Align2, text: impl ToString, font: FontId, color: Color32) {
+fn shadow_text(
+    p: &egui::Painter,
+    pos: Pos2,
+    align: Align2,
+    text: impl ToString,
+    font: FontId,
+    color: Color32,
+) {
     let text = text.to_string();
-    p.text(pos + Vec2::new(0.0, 1.0), align, &text, font.clone(), Color32::from_black_alpha(240));
+    p.text(
+        pos + Vec2::new(0.0, 1.0),
+        align,
+        &text,
+        font.clone(),
+        Color32::from_black_alpha(240),
+    );
     p.text(pos, align, text, font, color);
 }
 
@@ -96,9 +112,17 @@ fn shadow_text(p: &egui::Painter, pos: Pos2, align: Align2, text: impl ToString,
 fn native_fixture() -> Option<Live> {
     let path = std::env::var_os("A2M_NATIVE_FIXTURE")?;
     let bytes = std::fs::read(path).ok()?;
-    if bytes.len() > 1024 * 1024 { return None; }
+    if bytes.len() > 1024 * 1024 {
+        return None;
+    }
     let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    let mut live = Live { target_name: "SYNTHETISCH · Kargos".into(), target_hp: Some(0.38), battle_time_ms: 90_000, ping_ms: Some(42), ..Default::default() };
+    let mut live = Live {
+        target_name: "SYNTHETISCH · Kargos".into(),
+        target_hp: Some(0.38),
+        battle_time_ms: 90_000,
+        ping_ms: Some(42),
+        ..Default::default()
+    };
     live.capture.permission = true;
     live.capture.game_running = true;
     live.capture.locked_port = Some(13328);
@@ -106,8 +130,18 @@ fn native_fixture() -> Option<Live> {
         let class = crate::names::class_info(r.get("job")?.as_str()?);
         let damage = r.get("damage")?.as_f64()?.clamp(0.0, 1e15);
         live.rows.push(crate::engine::LiveRow {
-            id: i as i32 + 1, name: r.get("name")?.as_str()?.chars().take(100).collect(), class_key: class.key, class_name: class.name, color: class.color,
-            damage, dps: damage / 90.0, heal: damage / 5.0, hps: damage / 450.0, is_self: i == 0, dead: i == 3, ..Default::default()
+            id: i as i32 + 1,
+            name: r.get("name")?.as_str()?.chars().take(100).collect(),
+            class_key: class.key,
+            class_name: class.name,
+            color: class.color,
+            damage,
+            dps: damage / 90.0,
+            heal: damage / 5.0,
+            hps: damage / 450.0,
+            is_self: i == 0,
+            dead: i == 3,
+            ..Default::default()
         });
     }
     Some(live)
@@ -136,7 +170,7 @@ impl Overlay {
                 .with_app_id(APP_ID)
                 .with_position(self.engine.overlay.read().position.unwrap_or([40.0, 40.0]))
                 .with_inner_size([WIDTH, HEADER + FOOTER + ROW * 2.0])
-                .with_min_inner_size([200.0, 60.0])
+                .with_min_inner_size([160.0, 48.0])
                 .with_decorations(false)
                 .with_transparent(true)
                 .with_always_on_top()
@@ -172,20 +206,71 @@ impl Overlay {
             Sense::click_and_drag(),
         );
         let p = ui.painter();
-        p.rect_filled(rect, 6, with_alpha(palette(&settings.theme).1, bg.saturating_add(40)));
-        let title = if live.target_name.is_empty() { "Kein Ziel" } else { &live.target_name };
+        p.rect_filled(
+            rect,
+            6,
+            with_alpha(palette(&settings.theme).1, bg.saturating_add(40)),
+        );
+        let title = if live.target_name.is_empty() {
+            "Kein Ziel"
+        } else {
+            &live.target_name
+        };
         let time = duration(live.battle_time_ms);
         let mut title_rect = rect;
         title_rect.set_right(rect.right() - 50.0);
-        shadow_text(&p.with_clip_rect(title_rect), rect.left_top() + Vec2::new(8.0, 3.0), Align2::LEFT_TOP, title, FontId::proportional(12.5), with_alpha(palette(&settings.theme).2, 255));
-        shadow_text(p, rect.right_top() + Vec2::new(-8.0, 3.0), Align2::RIGHT_TOP, time, FontId::monospace(12.0), Color32::WHITE);
-        let total = live.rows.iter().map(|r| metric_value(r, &settings.metric)).sum::<f64>();
+        shadow_text(
+            &p.with_clip_rect(title_rect),
+            rect.left_top() + Vec2::new(8.0, 3.0),
+            Align2::LEFT_TOP,
+            title,
+            FontId::proportional(12.5),
+            with_alpha(palette(&settings.theme).2, 255),
+        );
+        shadow_text(
+            p,
+            rect.right_top() + Vec2::new(-8.0, 3.0),
+            Align2::RIGHT_TOP,
+            time,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+        );
+        let total = live
+            .rows
+            .iter()
+            .map(|r| metric_value(r, &settings.metric))
+            .sum::<f64>();
         let rate = total * 1000.0 / live.battle_time_ms.max(1000) as f64;
-        let label = match settings.metric.as_str() { "heal" => "HPS", "damage_received" => "Erlitten/s", _ => "DPS" };
-        shadow_text(p, rect.left_top() + Vec2::new(8.0, 19.0), Align2::LEFT_TOP, format!("Gruppe  {} {label}", short_number(rate)), FontId::proportional(10.0), Color32::from_gray(205));
+        let label = match settings.metric.as_str() {
+            "heal" => "HPS",
+            "damage_received" => "Erlitten/s",
+            _ => "DPS",
+        };
+        shadow_text(
+            p,
+            rect.left_top() + Vec2::new(8.0, 19.0),
+            Align2::LEFT_TOP,
+            format!("Gruppe  {} {label}", short_number(rate)),
+            FontId::proportional(10.0),
+            Color32::from_gray(205),
+        );
         if let Some(hp) = live.target_hp {
-            shadow_text(p, rect.right_top() + Vec2::new(-8.0, 19.0), Align2::RIGHT_TOP, format!("{}{:0.1}% HP", if live.hp_estimated { "~" } else { "" }, hp * 100.0), FontId::proportional(10.0), Color32::from_gray(220));
-            let bar = Rect::from_min_size(rect.left_bottom() + Vec2::new(8.0, -3.0), Vec2::new(width - 16.0, 2.0));
+            shadow_text(
+                p,
+                rect.right_top() + Vec2::new(-8.0, 19.0),
+                Align2::RIGHT_TOP,
+                format!(
+                    "{}{:0.1}% HP",
+                    if live.hp_estimated { "~" } else { "" },
+                    hp * 100.0
+                ),
+                FontId::proportional(10.0),
+                Color32::from_gray(220),
+            );
+            let bar = Rect::from_min_size(
+                rect.left_bottom() + Vec2::new(8.0, -3.0),
+                Vec2::new(width - 16.0, 2.0),
+            );
             p.rect_filled(bar, 1, Color32::from_black_alpha(160));
             let mut fill = bar;
             fill.set_width(bar.width() * hp.clamp(0.0, 1.0) as f32);
@@ -298,45 +383,130 @@ impl Overlay {
             }
             let p = ui.painter();
             let inner = rect.shrink2(Vec2::new(4.0, 1.0));
-            p.rect_filled(inner, 3, Color32::from_black_alpha(if row.is_self { 155 } else { 110 }));
-            let track = Rect::from_min_size(inner.left_bottom() - Vec2::new(0.0, 2.0), Vec2::new(inner.width(), 2.0));
+            p.rect_filled(
+                inner,
+                3,
+                Color32::from_black_alpha(if row.is_self { 155 } else { 110 }),
+            );
+            let track = Rect::from_min_size(
+                inner.left_bottom() - Vec2::new(0.0, 2.0),
+                Vec2::new(inner.width(), 2.0),
+            );
             p.rect_filled(track, 1, Color32::from_black_alpha(160));
             let mut fill = track;
             fill.set_width(track.width() * (value / top).clamp(0.0, 1.0) as f32);
-            p.rect_filled(fill, 1, with_alpha(row.color, if row.dead { 100 } else { 220 }));
+            p.rect_filled(
+                fill,
+                1,
+                with_alpha(row.color, if row.dead { 100 } else { 220 }),
+            );
             if row.is_self {
-                p.rect_stroke(inner, 3, Stroke::new(0.7, with_alpha(palette(&settings.theme).2, 140)), StrokeKind::Inside);
+                p.rect_stroke(
+                    inner,
+                    3,
+                    Stroke::new(0.7, with_alpha(palette(&settings.theme).2, 140)),
+                    StrokeKind::Inside,
+                );
             }
-            let name = if hide_names && !row.is_self { masked(&row.name) } else { row.name.clone() };
-            let primary = if show_dps { format!("{}/s", short_number(rate)) } else { short_number(value) };
+            let name = if hide_names && !row.is_self {
+                masked(&row.name)
+            } else {
+                row.name.clone()
+            };
+            let primary = if show_dps {
+                format!("{}/s", short_number(rate))
+            } else {
+                short_number(value)
+            };
             let share = format!("{:0.0}%", value * 100.0 / total);
             let primary_font = FontId::proportional(13.0);
-            let primary_width = p.layout_no_wrap(primary.clone(), primary_font.clone(), Color32::WHITE).size().x;
+            let primary_width = p
+                .layout_no_wrap(primary.clone(), primary_font.clone(), Color32::WHITE)
+                .size()
+                .x;
             let primary_x = inner.right() - if settings.compact { 35.0 } else { 6.0 };
             let mut name_rect = inner;
             name_rect.set_right((primary_x - primary_width - 8.0).max(inner.left()));
-            let color = if row.dead { Color32::from_gray(155) } else { Color32::WHITE };
+            let color = if row.dead {
+                Color32::from_gray(155)
+            } else {
+                Color32::WHITE
+            };
             let name_painter = p.with_clip_rect(name_rect);
-            shadow_text(&name_painter, inner.left_center() + Vec2::new(5.0, -1.0), Align2::LEFT_CENTER, (i + 1).to_string(), FontId::monospace(10.0), Color32::from_gray(190));
+            shadow_text(
+                &name_painter,
+                inner.left_center() + Vec2::new(5.0, -1.0),
+                Align2::LEFT_CENTER,
+                (i + 1).to_string(),
+                FontId::monospace(10.0),
+                Color32::from_gray(190),
+            );
             let icon = self.class_icons.get(row.class_key);
             if let Some(texture) = icon {
-                let icon_rect = Rect::from_center_size(inner.left_center() + Vec2::new(29.0, -1.0), Vec2::splat(if settings.compact { 16.0 } else { 18.0 }));
-                name_painter.image(texture.id(), icon_rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), color);
+                let icon_rect = Rect::from_center_size(
+                    inner.left_center() + Vec2::new(29.0, -1.0),
+                    Vec2::splat(if settings.compact { 16.0 } else { 18.0 }),
+                );
+                name_painter.image(
+                    texture.id(),
+                    icon_rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    color,
+                );
             }
-            shadow_text(&name_painter, inner.left_center() + Vec2::new(if icon.is_some() { 41.0 } else { 22.0 }, -1.0), Align2::LEFT_CENTER, format!("{}{}", if row.dead { "† " } else { "" }, name), FontId::proportional(12.0), color);
-            let y = if settings.compact { inner.center().y - 1.0 } else { inner.top() + 7.0 };
-            shadow_text(p, Pos2::new(primary_x, y), Align2::RIGHT_CENTER, primary, primary_font, color);
-            if settings.compact {
-                shadow_text(p, inner.right_center() + Vec2::new(-5.0, -1.0), Align2::RIGHT_CENTER, share, FontId::proportional(9.0), Color32::from_gray(185));
+            shadow_text(
+                &name_painter,
+                inner.left_center() + Vec2::new(if icon.is_some() { 41.0 } else { 22.0 }, -1.0),
+                Align2::LEFT_CENTER,
+                format!("{}{}", if row.dead { "† " } else { "" }, name),
+                FontId::proportional(12.0),
+                color,
+            );
+            let y = if settings.compact {
+                inner.center().y - 1.0
             } else {
-                let secondary = if show_dps { format!("{}  ·  {share}", short_number(value)) } else { share };
-                shadow_text(p, inner.right_bottom() + Vec2::new(-6.0, -3.0), Align2::RIGHT_BOTTOM, secondary, FontId::proportional(9.0), Color32::from_gray(185));
+                inner.top() + 7.0
+            };
+            shadow_text(
+                p,
+                Pos2::new(primary_x, y),
+                Align2::RIGHT_CENTER,
+                primary,
+                primary_font,
+                color,
+            );
+            if settings.compact {
+                shadow_text(
+                    p,
+                    inner.right_center() + Vec2::new(-5.0, -1.0),
+                    Align2::RIGHT_CENTER,
+                    share,
+                    FontId::proportional(9.0),
+                    Color32::from_gray(185),
+                );
+            } else {
+                let secondary = if show_dps {
+                    format!("{}  ·  {share}", short_number(value))
+                } else {
+                    share
+                };
+                shadow_text(
+                    p,
+                    inner.right_bottom() + Vec2::new(-6.0, -3.0),
+                    Align2::RIGHT_BOTTOM,
+                    secondary,
+                    FontId::proportional(9.0),
+                    Color32::from_gray(185),
+                );
             }
         }
     }
 
     fn footer(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, footer_height(live.overlay.compact)), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(
+            Vec2::new(width, footer_height(live.overlay.compact)),
+            Sense::click(),
+        );
         let p = ui.painter();
         p.rect_filled(
             rect,
@@ -363,7 +533,14 @@ impl Overlay {
                 "keine Capture-Berechtigung".to_string(),
             )
         } else if c.locked_port.is_some() {
-            (Color32::from_rgb(80, 200, 100), if live.overlay.compact || live.dungeon.is_empty() { "Verbunden".to_string() } else { live.dungeon.clone() })
+            (
+                Color32::from_rgb(80, 200, 100),
+                if live.overlay.compact || live.dungeon.is_empty() {
+                    "Verbunden".to_string()
+                } else {
+                    live.dungeon.clone()
+                },
+            )
         } else if c.game_running {
             (
                 Color32::from_rgb(230, 180, 60),
@@ -558,7 +735,9 @@ impl eframe::App for Overlay {
         }
         let mut live = self.engine.live();
         #[cfg(debug_assertions)]
-        if let Some(fixture) = &self.fixture { live = fixture.clone(); }
+        if let Some(fixture) = &self.fixture {
+            live = fixture.clone();
+        }
         live.overlay = self.engine.overlay.read().clone();
         let settings = live.overlay.clone();
         ctx.set_zoom_factor(settings.scale.clamp(0.6, 2.5));
@@ -622,9 +801,18 @@ impl eframe::App for Overlay {
 mod tests {
     #[test]
     fn compact_geometry_keeps_a_single_window_small() {
-        assert_eq!(super::overlay_size(true, 0), eframe::egui::vec2(312.0, 82.0));
-        assert_eq!(super::overlay_size(true, 5), eframe::egui::vec2(312.0, 170.0));
-        assert_eq!(super::overlay_size(false, 5), eframe::egui::vec2(360.0, 216.0));
+        assert_eq!(
+            super::overlay_size(true, 0),
+            eframe::egui::vec2(312.0, 82.0)
+        );
+        assert_eq!(
+            super::overlay_size(true, 5),
+            eframe::egui::vec2(312.0, 170.0)
+        );
+        assert_eq!(
+            super::overlay_size(false, 5),
+            eframe::egui::vec2(360.0, 216.0)
+        );
     }
 
     #[test]

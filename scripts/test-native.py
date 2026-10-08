@@ -23,13 +23,17 @@ if fixture_mode:
         {'name':'Zephyros','job':'호법성','damage':90000000}]+[{'name':f'Zusätzlicher Spieler {i+6}','job':'궁성','damage':80000000-i*1000000} for i in range(19)]}),encoding='utf-8')
     env['A2M_NATIVE_FIXTURE']=str(fixture)
 compact_height=36+20+22*row_count+4
-p=None
+p=None;compositor=None
 try:
     for _ in range(30):
         r=subprocess.run([str(root/'bin/xdotool'),'getdisplaygeometry'],env=env,capture_output=True,text=True)
         if r.returncode==0: break
         time.sleep(.1)
     assert r.returncode==0, r.stderr
+    if fixture_mode:
+        compositor=subprocess.Popen(['picom','--backend','xrender','--config','/dev/null'],env=env,stdout=log,stderr=log)
+        time.sleep(.3)
+        assert compositor.poll() is None,'X11 test compositor did not start'
     p=subprocess.Popen([binary,'--x11','--db',str(Path(workspace.name)/'native.db'),'--port','8796'],env=env,stdout=log,stderr=log)
     for _ in range(50):
         if p.poll() is not None: raise RuntimeError((Path(workspace.name)/'native.log').read_text())
@@ -69,13 +73,17 @@ try:
     if fixture_mode:
         for theme in ['midnight','aether','ember']:
             for compact in [True,False]:
+                backdrop_pixels=[]
                 for scene,color in [('dark','#101820'),('bright','#e8ddbf')]:
                     subprocess.run(['xsetroot','-solid',color],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
                     height=compact_height if compact else 40+22+30*row_count+4
                     g=wait_geometry(width,height);time.sleep(.35)
-                    ImageGrab.grab(xdisplay=env['DISPLAY']).crop((0,0,width+90,height+90)).save(output/f'native-{theme}-{compact}-{scene}.png')
+                    frame=ImageGrab.grab(xdisplay=env['DISPLAY'])
+                    backdrop_pixels.append(frame.getpixel((int(g['X'])+6,int(g['Y'])+height//2)))
+                    frame.crop((0,0,width+90,height+90)).save(output/f'native-{theme}-{compact}-{scene}.png')
+                assert backdrop_pixels[0]!=backdrop_pixels[1],'Underlying scene did not composite through the native overlay'
         for scale in [.6,1,2.5]:
             s=get();s.update(compact=True,scale=scale,max_rows=24);post(s)
             g=wait_geometry(312*scale,(36+20+22*24+4)*scale)
@@ -109,5 +117,6 @@ except Exception:
     raise
 finally:
     if p and p.poll() is None:p.kill();p.wait()
+    if compositor and compositor.poll() is None:compositor.terminate();compositor.wait(timeout=5)
     x.terminate();x.wait(timeout=5)
     workspace.cleanup()

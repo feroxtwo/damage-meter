@@ -137,3 +137,9 @@ th {letter-spacing:.5px} td {font-variant-numeric:tabular-nums} tbody tr:hover {
 @media(max-width:1000px) {.live-workspace{grid-template-columns:1fr}.performance-story{grid-template-columns:repeat(2,minmax(0,1fr))}.fight-story{grid-template-columns:1fr 1fr}.fight-story .story-intro{grid-column:1/-1}}
 @media(max-width:600px) {.live-metrics{grid-template-columns:1fr 1fr;gap:18px}.combat-context{grid-column:1/-1;grid-template-columns:1fr 1fr;border-left:0;border-top:1px solid var(--line);padding:14px 0 0}.live-metrics .personal-rate .v{font-size:40px}.live-metrics .group-rate .v{font-size:30px}.damage-chart{padding:12px}.performance-story{gap:16px;padding:16px 0}.performance-story strong{font-size:19px}.performance-story .story-intro{grid-column:1/-1}.live-console>.row>.row{gap:8px}.live-console .row select{width:100%}.window-hits li{flex-wrap:wrap}.page-title h2{font-size:26px}}
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+/* Second UX pass: keep maintenance controls below the performance on small screens. */
+.live-console {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px}
+.live-console>.row:first-child {grid-column:1;grid-row:1}.live-console>.live-controls {grid-column:2;grid-row:1;align-self:start;font-size:12px}
+.live-console>.hp {grid-column:1/-1;grid-row:2}.live-console>.live-metrics {grid-column:1/-1;grid-row:3}
+@media(max-width:850px) {.live-console{grid-template-columns:1fr}.live-console>.live-controls{grid-column:1;grid-row:4;margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}}
+@media(max-width:360px) {header nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}header nav button{padding:7px 2px;font-size:10px;min-height:50px}}

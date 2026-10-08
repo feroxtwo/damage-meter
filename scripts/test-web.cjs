@@ -684,7 +684,11 @@ const server = http.createServer((req,res) => {
       await page.selectOption('#fightChartMetric','total');assert.match(await page.locator('[data-curve-readout]').textContent(),/Schaden/);
       await page.setViewportSize({width:320,height:844});assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
       await page.setViewportSize({width:1440,height:1000});await page.selectOption('#fightChartMetric','dps');await page.locator('[data-curve-peak]').click();
-      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-fight-story.png'),fullPage:true});
+      if(process.env.SCREENSHOT_DIR){
+        await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-peak-window.png'),fullPage:true});
+        await page.locator('#fightDialog').evaluate(e=>e.scrollTop=0);
+        await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'signature-fight-story.png'),fullPage:true});
+      }
       await page.locator('#closeDialog').click();await page.unroute('**/api/fights/insight');
     });
     await check('personal progression requires a character and a comparable class',async()=>{
