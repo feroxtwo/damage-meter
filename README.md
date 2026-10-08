@@ -21,6 +21,8 @@ Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regu
 
 Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKILL_CATALOG.md) · [Abnahmematrix dieser Erweiterung](docs/RELEASE_REVIEW_SKILL_CATALOG.md).
 
+[Übersichtlichere Statistik und Schadensverläufe](docs/STATISTICS_QOL.md): Gruppe oder Spieler, DPS oder Gesamtschaden, 5-Sekunden-Glättung, bedienbare Zeit-/Versuchsauswahl und Bosskennzahlen.
+
 **Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
 ## Neu in 0.3.0

@@ -83,10 +83,15 @@ function exportPlayers(players,anonymous) {
 }
 async function copyText(text) {
   try {await navigator.clipboard.writeText(text);}catch(e) {
-    const input=document.createElement('textarea');input.value=text;document.body.append(input);input.select();
-    const ok=document.execCommand('copy');input.remove();if(!ok)throw new Error('Zwischenablage nicht verfügbar');
+    const focused=document.activeElement,input=document.createElement('textarea');input.value=text;
+    input.tabIndex=-1;input.setAttribute('aria-hidden','true');input.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    (document.querySelector('dialog[open]')||document.body).append(input);
+    try {input.focus();input.select();if(!document.execCommand('copy'))throw new Error('Zwischenablage nicht verfügbar');}
+    catch(e){toast('Kopieren fehlgeschlagen. Die Zwischenablage ist hier nicht verfügbar.',true);return false;}
+    finally {input.remove();if(focused?.isConnected)focused.focus({preventScroll:true});}
   }
   toast('Ergebnis kopiert.');
+  return true;
 }
 function rankingText(title,players,ms,metric='damage') {
   const label=metric==='heal'?'Heilung':metric==='damage_received'?'Erlittener Schaden':'Schaden';
@@ -196,7 +201,7 @@ function skillTable(skills,heal=false) {
   columns.push(['min','Min'],['max','Max']);
   const extra=heal?[]:[['back_rate','Rücken'],['frontal_rate','Frontal'],['perfect_rate','Perfekt'],['double_rate','Double'],['parry_rate','Pariert'],['multi_hit_count','Multihit'],['block_rate','Block'],['perfect_block_rate','Perfektblock'],['endurance_rate','Ausdauer'],['regeneration_rate','Regeneration'],['miss_count','Verfehlt'],['resist_count','Effekt resistiert']];
   const cell=(s,key)=>key==='name'?`${skillLabel(s)}${s.is_dot?` <span class="badge">${heal?'HoT':'DoT'}</span>`:''}`:key==='share'||key.endsWith('_rate')?pct(s[key]):s[key]==null||(['min','max'].includes(key)&&s[key]<=0)?'—':num(s[key]);
-  return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Skill suchen"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''} aria-sort="${k==='damage'?'descending':'none'}"><button type="button" class="sort-head" data-sort="${k}" title="Nach ${esc(label)} sortieren">${label}</button></th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
+  return `<div class="skill-browser" data-skills="${esc(JSON.stringify(rows))}"><p class="analysis-note">Treffer und Ticks sind keine Skill-Aktivierungen. Anteil bezieht sich auf diese Spielerliste. ${heal?'Heilung seit Parser-Reset.':'Treffermerkmale: beobachtete Anteile, vollständige Erfassung unbekannt.'} — bedeutet kein nachgewiesener Wert, nicht gemessene 0 %. Resist zählt widerstandene Effekte.</p><div class="row skill-tools"><input type="search" class="skill-search" aria-label="Skills suchen" placeholder="Name / Skill-ID" title="/: Suche fokussieren · Esc: Suche leeren"><select class="skill-sort" aria-label="Skills sortieren"><option value="damage">${heal?'Heilung':'Schaden'} absteigend</option><option value="name">Name A–Z</option><option value="hits">Treffer / Ticks absteigend</option></select>${extra.length?'<label><input type="checkbox" class="skill-extra"> Weitere Treffermerkmale</label>':''}<span class="skill-count muted">${rows.length} Skills</span></div><div class="table-scroll"><table><thead><tr>${[...columns,...extra].map(([k,label],i)=>`<th${i>=columns.length?' class="skill-advanced"':''} aria-sort="${k==='damage'?'descending':'none'}"><button type="button" class="sort-head" data-sort="${k}" title="Nach ${esc(label)} sortieren">${label}</button></th>`).join('')}</tr></thead><tbody>${rows.map(s=>`<tr>${[...columns,...extra].map(([k],i)=>`<td${i>=columns.length?' class="skill-advanced"':''} title="${k==='name'?esc(s.name):esc(s[k]==null?'Kein nachgewiesener Wert':Number(s[k]).toLocaleString('de-DE',{maximumFractionDigits:2}))}">${cell(s,k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="skill-empty muted" hidden>Keine passenden Skills.</p></div>`;
 }
 function bindSkillTables(root) {
   root.querySelectorAll('.skill-browser').forEach(box=>{
@@ -223,19 +228,89 @@ function bindSkillTables(root) {
     const extra=box.querySelector('.skill-extra');if(extra)extra.onchange=()=>box.classList.toggle('show-advanced',extra.checked);
   });
 }
-function svgCurve(points,value,label) {
-  if(!points.length)return '<p class="muted">Für diesen Kampf wurden keine Verlaufsdaten gespeichert.</p>';
-  const W=900,H=180,L=55,R=15,T=12,B=28, end=points.reduce((n,p)=>Math.max(n,p.ms),1000), max=points.reduce((n,p)=>Math.max(n,value(p)),1);
-  const step=Math.max(1,Math.ceil(points.length/600));points=points.filter((_,i)=>i%step===0||i===points.length-1);
+// Curves use saved cumulative observations; smoothing changes presentation only.
+function damageSamples(f,actor=null,windowMs=0) {
+  const points=f.analytics?.points||[],partial=Boolean(f.analytics?.partial);
+  const totals=points.map(p=>actor==null?Object.values(p.damage||{}).reduce((a,b)=>a+(Number(b)||0),0):Number(p.damage?.[actor]||0));
+  let base=partial?0:-1;
+  return points.map((p,i)=>{
+    if(windowMs>0){while(base+1<i&&points[base+1].ms<=p.ms-windowMs)base++;}
+    else base=i-1;
+    const span=p.ms-(base<0?0:points[base].ms);
+    return {ms:p.ms,total:totals[i],dps:span>0?Math.max(0,totals[i]-(base<0?0:totals[base]))*1000/Math.max(500,span):0};
+  }).slice(partial?1:0);
+}
+function curveMarkup(points,series,{label='Schadensverlauf',unit='DPS',width=900,end=0}={}) {
+  if(!points.length)return '<p class="analysis-note">Keine auswertbaren Verlaufsdaten gespeichert. Ältere Kämpfe enthalten diese Daten eventuell nicht.</p>';
+  const W=Math.max(280,width),H=240,L=58,R=18,T=26,B=34;
+  end=Math.max(1000,end,points[points.length-1].ms);
+  const max=series.reduce((m,s)=>points.reduce((n,p,i)=>Math.max(n,s.value(p,i)),m),1)*1.08;
   const x=ms=>L+ms/end*(W-L-R),y=v=>T+(1-v/max)*(H-T-B);
-  const line=points.map((p,i)=>`${i?'L':'M'}${x(p.ms).toFixed(2)},${y(value(p)).toFixed(2)}`).join(' ');
-  return `<svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}"><path d="M${L},${T}V${H-B}H${W-R}" fill="none" stroke="#7898b655"/><path d="${line}" fill="none" stroke="#5ad2c8" stroke-width="2"/><text x="0" y="20">${num(max)}</text><text x="${L}" y="${H-5}">0:00</text><text x="${W-65}" y="${H-5}">${dur(end)}</text>${points.filter((_,i)=>i%Math.max(1,Math.ceil(points.length/300))===0).map(p=>`<circle cx="${x(p.ms)}" cy="${y(value(p))}" r="3" fill="transparent"><title>${dur(p.ms)}: ${num(value(p))} ${esc(label)}</title></circle>`).join('')}</svg>`;
+  const step=Math.max(1,Math.ceil(points.length/600));
+  const indices=points.map((_,i)=>i).filter(i=>i%step===0||i===points.length-1);
+  return `<svg class="curve-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">
+    <text x="${L}" y="14">${esc(unit)}</text>
+    ${[0,.25,.5,.75,1].map(t=>`<line x1="${L}" x2="${W-R}" y1="${y(max*t)}" y2="${y(max*t)}" class="curve-grid"/><text x="${L-8}" y="${y(max*t)+4}" text-anchor="end">${num(max*t)}</text>`).join('')}
+    ${[0,.25,.5,.75,1].map(t=>`<text x="${x(end*t)}" y="${H-9}" text-anchor="${t===0?'start':t===1?'end':'middle'}">${end<10000?(end*t/1000).toLocaleString('de-DE',{maximumFractionDigits:1})+' s':dur(end*t)}</text>`).join('')}
+    ${series.map(s=>`<path d="${indices.map((i,j)=>`${j?'L':'M'}${x(points[i].ms).toFixed(2)},${y(s.value(points[i],i)).toFixed(2)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"><title>${esc(s.name)} · ${num(points.reduce((m,p,i)=>Math.max(m,s.value(p,i)),0))}${unit==='DPS'?'/s':' '+esc(unit)}</title></path>${points.length===1?`<circle cx="${x(points[0].ms)}" cy="${y(s.value(points[0],0))}" r="4" fill="${s.color}"/>`:''}`).join('')}
+    <line class="curve-cross" x1="${x(points[points.length-1].ms)}" x2="${x(points[points.length-1].ms)}" y1="${T}" y2="${H-B}"/>
+    <rect class="curve-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
+  </svg>${step>1?'<p class="analysis-note">Diagramm ausgedünnt (höchstens 601 Punkte je Linie). Die Zeitauswahl verwendet alle gespeicherten Beobachtungen.</p>':''}`;
+}
+function svgCurve(points,value,label) {
+  return curveMarkup(points,[{name:label,color:'var(--accent)',value}],{label,unit:label});
 }
 function damageCurve(f,actor=null) {
-  const points=f.analytics?.points||[];
-  const total=p=>actor==null?Object.values(p.damage).reduce((a,b)=>a+Number(b),0):Number(p.damage[actor]||0);
-  const curves=points.map((p,i)=>{const prev=points[i-1];return {ms:p.ms,dps:Math.max(0,total(p)-(prev?total(prev):0))*1000/Math.max(500,p.ms-(prev?prev.ms:0))};});
-  return svgCurve(f.analytics?.partial?curves.slice(1):curves,p=>p.dps,'beobachtete Intervall-DPS');
+  return curveMarkup(damageSamples(f,actor),[{name:'Schaden',color:'var(--accent)',value:p=>p.dps}],{label:'Beobachtete Intervall-DPS',end:f.duration_ms})+(f.analytics?.partial?'<p class="analysis-note">Verlauf unvollständig; der erste gespeicherte Wert wird nur als Ausgangswert verwendet.</p>':'');
+}
+function fightChartControls(f) {
+  return `<div class="damage-chart" id="fightDamageChart" aria-label="Schadensverlauf"><h3>Schadensverlauf</h3>
+    <div class="chart-tools"><label>Ansicht <select id="fightChartScope"><option value="group">Gesamte Gruppe</option><option value="players">Spieler vergleichen</option>${f.players.map(p=>`<option value="${Number(p.actor_id)}">${esc(p.name)}</option>`).join('')}</select></label>
+    <label>Wert <select id="fightChartMetric"><option value="dps">DPS</option><option value="total">Gesamtschaden</option></select></label>
+    <label>Glättung <select id="fightChartWindow"><option value="5000">5 Sekunden</option><option value="0">Einzelne Intervalle</option></select></label></div>
+    <p class="analysis-note" data-curve-note></p><div class="chart-legend" data-curve-legend></div><div data-curve-plot></div>
+    <label class="curve-scrubber">Zeitpunkt <input type="range" data-curve-range min="0" max="0" value="0" aria-label="Zeitpunkt im Schadensverlauf"></label><div class="curve-readout" data-curve-readout></div></div>`;
+}
+function bindFightChart(f) {
+  const root=$('#fightDamageChart');if(!root)return;
+  const scope=$('#fightChartScope'),metric=$('#fightChartMetric'),smooth=$('#fightChartWindow'),hidden=new Set();
+  let selected=-1;
+  function render() {
+    const unit=metric.value==='total'?'Schaden':'DPS',windowMs=Number(smooth.value),all=scope.value==='players';
+    smooth.disabled=metric.value==='total';
+    const actors=all?f.players:scope.value==='group'?[{actor_id:null,name:'Gesamte Gruppe'}]:f.players.filter(p=>String(p.actor_id)===scope.value);
+    const samples=actors.map(p=>damageSamples(f,p.actor_id,windowMs));
+    const points=samples[0]||[];
+    const series=actors.map((p,i)=>({name:p.name,color:all?chartColors[i%chartColors.length]:'var(--accent)',value:(_,j)=>samples[i][j][metric.value==='total'?'total':'dps']}));
+    const visible=series.filter((_,i)=>!all||!hidden.has(i));
+    root.querySelector('[data-curve-note]').textContent=metric.value==='total'?'Gespeicherter Gesamtschaden bis zum gewählten Zeitpunkt.':windowMs?'DPS im gleitenden 5-Sekunden-Fenster, gerundet auf gespeicherte Beobachtungen; am Anfang über die bereits beobachtete Zeit.':'DPS je gespeichertem Beobachtungsintervall.';
+    root.querySelector('[data-curve-note]').textContent+=` Beobachtungsraster: ${f.analytics?.resolution_ms||500} ms.${f.analytics?.partial?' Verlauf unvollständig; der erste Wert dient nur als Ausgangswert.':''}`;
+    const legend=root.querySelector('[data-curve-legend]');
+    legend.innerHTML=all?series.map((s,i)=>`<button type="button" class="legend-toggle" data-series="${i}" aria-pressed="${!hidden.has(i)}" title="Linie ein- oder ausblenden"><i style="background:${s.color}"></i><span>${esc(s.name)}</span></button>`).join(''):'';
+    legend.querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.series);hidden.has(i)?hidden.delete(i):hidden.add(i);render();legend.querySelector(`[data-series="${i}"]`)?.focus();});
+    const plot=root.querySelector('[data-curve-plot]');root.drawnWidth=root.clientWidth;
+    plot.innerHTML=visible.length?curveMarkup(points,visible,{unit,label:all?unit+'-Verlauf aller Spieler':unit+' · '+actors[0]?.name,width:Math.min(900,root.clientWidth||900),end:f.duration_ms}):'<p class="analysis-note">Alle Linien ausgeblendet. Wähle einen Spieler in der Legende.</p>';
+    const range=root.querySelector('[data-curve-range]'),readout=root.querySelector('[data-curve-readout]');
+    range.max=Math.max(0,points.length-1);range.disabled=!points.length;
+    const show=i=>{
+      selected=Math.max(0,Math.min(points.length-1,i));range.value=selected;
+      if(!points.length){readout.textContent='Keine zeitliche Schadensaufzeichnung vorhanden.';return;}
+      const point=points[selected],value=s=>`${num(s.value(point,selected))} ${unit}`;
+      readout.innerHTML=`<strong>${(point.ms/1000).toLocaleString('de-DE',{maximumFractionDigits:1})} s</strong>${visible.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)} <b>${value(s)}</b></span>`).join('')}`;
+      range.setAttribute('aria-valuetext',`${point.ms/1000} Sekunden; `+visible.map(s=>s.name+': '+value(s)).join('; '));
+      const svg=plot.querySelector('svg'),line=plot.querySelector('.curve-cross');
+      if(line){const W=svg.viewBox.baseVal.width,end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),x=58+point.ms/end*(W-76);line.setAttribute('x1',x);line.setAttribute('x2',x);}
+    };
+    show(selected<0?points.length-1:selected);range.oninput=()=>show(Number(range.value));
+    const hit=plot.querySelector('.curve-hit');
+    if(hit)hit.onpointermove=hit.onpointerdown=e=>{
+      const r=hit.getBoundingClientRect(),end=Math.max(1000,f.duration_ms||0,points[points.length-1].ms),ms=(e.clientX-r.left)/r.width*end;
+      let lo=0,hi=points.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(points[mid].ms<ms)lo=mid+1;else hi=mid;}
+      if(lo>0&&ms-points[lo-1].ms<points[lo].ms-ms)lo--;show(lo);
+    };
+  }
+  scope.onchange=metric.onchange=smooth.onchange=render;
+  root.renderCurve=render;render();
 }
 function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';
@@ -277,8 +352,8 @@ async function openFight(id) {
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
     <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
-    <h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
-    <h3>Gruppen-DPS im Kampfverlauf</h3>${damageCurve(f)}<h3>Ping-Verlauf</h3>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}
+    ${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
+    <details><summary>Verbindung · Ping-Verlauf</summary>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}</details>
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
@@ -290,6 +365,7 @@ async function openFight(id) {
     if(exportScopeIndex(f)!=null){const p=exp.players[0];rows.push([],['Skill','Art','Wert','Treffer/Ticks','Krit %','Min','Max']);for(const [kind,list] of [['Schaden',p.skills],['Heilung',p.heal_skills]])for(const sk of list||[])rows.push([sk.name,kind,sk.damage,sk.hits,sk.crit_rate,sk.min,sk.max]);}
     download(`aion2-kampf${exportSuffix(f)}.csv`,'\uFEFF'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
   if(window.installFightQol)installFightQol(f);
+  bindFightChart(f);
   $('#compareBtn').onclick=()=>task(compareFight());
   $('#compareFight').onchange=()=>{comparisonRequest++;$('#comparison').textContent='';};
   try {const data=await api('/api/fights?query='+encodeURIComponent(f.boss_name||'')+'&character='+encodeURIComponent(f.players.find(p=>p.is_self)?.name||''));if(request!==detailRequest)return;
@@ -324,3 +400,9 @@ $('#saveProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',
 $('#loadProfile').onclick=()=>task(overlayAction(()=>api('/api/overlay/profile',{method:'POST',body:JSON.stringify({key:profileKey(),save:false})}),'Profil geladen.'));
 $('#recoverOverlay').onclick=()=>task(overlayAction(()=>api('/api/overlay',{method:'POST',body:JSON.stringify({position:[40,40],visible:true,locked:false})}),'Overlay auf Startposition zurückgeholt.'));
 if(tab==='runs')task(loadFights());
+
+// One redraw per frame and only when the chart width changed; keeps hover targets stable.
+let fightChartFrame=0;
+window.addEventListener('resize',()=>{cancelAnimationFrame(fightChartFrame);fightChartFrame=requestAnimationFrame(()=>{
+  const root=$('#fightDamageChart');if($('#fightDialog').open&&root?.renderCurve&&root.clientWidth!==root.drawnWidth)root.renderCurve();
+});});

@@ -25,4 +25,17 @@ node('#catalogSearch').value='';node('#catalogClass').value='fighter';vm.runInCo
 node('#catalogClass').value='';vm.runInContext('renderSkillCatalog()',ctx);assert.equal((node('#catalogRows').innerHTML.match(/<tr>/g)||[]).length,80);
 ctx.f={boss_name:'Boss',duration_ms:1000,players:[{name:'PRIVATE',class_key:'gladiator',damage:12345,dps:456,skills:[skill],heal_skills:[],buffs:[]}]};
 const exp=vm.runInContext('fightExport(f,true)',ctx);assert.equal(exp.players[0].name,'Spieler 1');assert.equal(exp.players[0].skills[0].name,'Overhead Slam');assert.equal(exp.players[0].skills[0].damage,12345);assert.equal(exp.players[0].skills[0].hits,7);assert.equal(skill.name,'Old stored name');
-(async()=>{ctx.exp=exp;const images=await vm.runInContext('reportImages(exp)',ctx);assert.equal(images.size,2);ctx.images=images;const blocks=vm.runInContext('reportBlocks(exp,null,images)',ctx);const draws=[],canvas=new Proxy({measureText:s=>({width:s.length*7}),drawImage:(img,...args)=>draws.push(img.url)}, {get:(t,k)=>k in t?t[k]:()=>{}});for(const b of blocks)b.draw(canvas,0);assert.ok(draws.includes(skill.icon));assert.ok(draws.includes('/assets/icons/class-gladiator.webp'));console.log('PASS skill language, IDs, escaping, catalog pagination, anonymous exports and PNG icons (6 presentation checks)');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{
+  let saved;
+  ctx.localStorage={getItem:()=>JSON.stringify({query:'x'.repeat(250),class_key:'invalid',variants:'true',page:-1}),setItem:(k,v)=>{saved=JSON.parse(v);}};
+  vm.runInContext('restoreCatalogView()',ctx);assert.equal(node('#catalogSearch').value.length,200);assert.equal(node('#catalogClass').value,'');assert.equal(node('#catalogVariants').checked,false);assert.equal(vm.runInContext('catalogPage',ctx),0);
+  node('#catalogSearch').value='slam';node('#catalogClass').value='fighter';node('#catalogVariants').checked=true;vm.runInContext('catalogPage=2;saveCatalogView()',ctx);assert.deepEqual(saved,{query:'slam',class_key:'fighter',variants:true,page:2});
+  ctx.localStorage.getItem=()=>'{broken';assert.doesNotThrow(()=>vm.runInContext('restoreCatalogView()',ctx));assert.equal(node('#catalogSearch').value,'slam');
+  ctx.localStorage.getItem=ctx.localStorage.setItem=()=>{throw new Error('storage blocked');};assert.doesNotThrow(()=>vm.runInContext('restoreCatalogView();saveCatalogView()',ctx));
+  node('#catalogSearch').value='';node('#catalogClass').value='';node('#catalogVariants').checked=false;
+  let loads=0;ctx.api=async()=>{loads++;return catalog;};vm.runInContext('skillCatalog=null',ctx);await Promise.all([vm.runInContext('loadSkillCatalog()',ctx),vm.runInContext('loadSkillCatalog()',ctx)]);assert.equal(loads,1);
+  ctx.api=async()=>({skills:null});vm.runInContext('skillCatalog=null',ctx);await assert.rejects(vm.runInContext('loadSkillCatalog()',ctx),/Skillkatalog fehlt/);
+  ctx.api=async()=>catalog;await vm.runInContext('loadSkillCatalog()',ctx);assert.equal(vm.runInContext('catalogLoad',ctx),null);
+  ctx.exp=exp;const images=await vm.runInContext('reportImages(exp)',ctx);assert.equal(images.size,2);ctx.images=images;const blocks=vm.runInContext('reportBlocks(exp,null,images)',ctx);const draws=[],canvas=new Proxy({measureText:s=>({width:s.length*7}),drawImage:(img,...args)=>draws.push(img.url)}, {get:(t,k)=>k in t?t[k]:()=>{}});for(const b of blocks)b.draw(canvas,0);assert.ok(draws.includes(skill.icon));assert.ok(draws.includes('/assets/icons/class-gladiator.webp'));
+  console.log('PASS skill language, IDs, escaping, catalog storage/loading, anonymous exports and PNG icons (8 presentation checks)');
+})().catch(e=>{console.error(e);process.exitCode=1;});

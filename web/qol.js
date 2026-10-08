@@ -1,4 +1,18 @@
 // Additional local views. PNGs are drawn from an explicit export allowlist.
+function handleSearchShortcut(e) {
+  if(e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;
+  const target=e.target;
+  if(target?.closest('[contenteditable]:not([contenteditable="false"])'))return;
+  if(e.key==='Escape'&&target?.matches('input[type="search"]')&&target.value){
+    e.preventDefault();target.value='';target.dispatchEvent(new Event('input',{bubbles:true}));return;
+  }
+  if(e.key!=='/'||target?.closest('input,textarea,select'))return;
+  const dialog=document.querySelector('dialog[open]');
+  const search=dialog?dialog.querySelector('input[type="search"]'):document.querySelector(tab==='skills'?'#skills.active #catalogSearch':'#runs.active #fightSearch');
+  if(search){e.preventDefault();search.focus();search.select();}
+}
+document.addEventListener('keydown',handleSearchShortcut);
+$('#fightSearch').title='/: Suche fokussieren · Esc: Suche leeren';
 function applyAppearance(s={}) {
   document.documentElement.dataset.theme=['midnight','aether','ember'].includes(s.theme)?s.theme:'midnight';
   document.documentElement.classList.toggle('compact',Boolean(s.compact));
@@ -16,19 +30,6 @@ function chatLine(title,players,ms,metric='damage',limit=200) {
 }
 $('#copyChat').onclick=()=>{if(latestLive)task(copyText(chatLine(latestLive.target_name||'Kampf',exportPlayers(metricRows(latestLive.rows),$('#anonymousExport').checked),latestLive.battle_time_ms,metricKey())));};
 const chartColors=['#75e0ce','#f6b179','#cda8ff','#7eafff','#f58dba','#d8dc76','#91cfe5','#f18282','#add9a1','#d8b59a'];
-function partyCurve(f) {
-  const points=f.analytics?.points||[];
-  if(points.length<2)return '<p class="analysis-note">Zu wenige gespeicherte Beobachtungen für einen Gruppenverlauf.</p>';
-  const W=900,H=230,L=60,R=15,T=20,B=30;
-  const series=f.players.map((p,i)=>({player:p,color:chartColors[i%chartColors.length],values:points.map((q,j)=>{
-    const prev=points[j-1];if(j===0&&f.analytics.partial)return 0;return Math.max(0,Number(q.damage[p.actor_id]||0)-Number(prev?.damage[p.actor_id]||0))*1000/Math.max(500,q.ms-(prev?.ms||0));
-  })}));
-  const end=points.reduce((n,p)=>Math.max(n,p.ms),1000),max=series.reduce((n,s)=>s.values.reduce((m,v)=>Math.max(m,v),n),1);
-  const step=Math.max(1,Math.ceil(points.length/600)),indices=points.map((_,i)=>i).filter(i=>(!f.analytics.partial||i>0)&&(i%step===0||i===points.length-1));
-  const x=ms=>L+ms/end*(W-L-R),y=v=>T+(1-v/max)*(H-T-B);
-  const lines=series.map(s=>`<path d="${indices.map((i,j)=>`${j?'L':'M'}${x(points[i].ms).toFixed(2)},${y(s.values[i]).toFixed(2)}`).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2"><title>${esc(s.player.name)}</title></path>`).join('');
-  return `<p class="analysis-note">Beobachtete Intervall-DPS, ${f.analytics.resolution_ms||500} ms${step>1?' · Darstellung ausgedünnt (max. 601 Punkte je Spieler)':''}${f.analytics.partial?' · Daten unvollständig':''}. Kein Verlauf einzelner Schadenspakete. Vollständigkeit vor Aufnahmebeginn unbekannt.</p><div class="chart-legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.player.name)}</span>`).join('')}</div><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="DPS-Verlauf aller Spieler"><path d="M${L},${T}V${H-B}H${W-R}" fill="none" stroke="#7898b655"/>${lines}<text x="0" y="20">${num(max)}/s</text><text x="${L}" y="${H-5}">0:00</text><text x="${W-65}" y="${H-5}">${dur(end)}</text></svg>`;
-}
 function pairSkills(skills=[]) {
   return `<div class="table-scroll pair-skills"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer/Ticks</th><th>Krit</th><th>Max</th></tr></thead><tbody>${skills.map(s=>`<tr><td>${skillLabel(s)}${s.is_dot?' · DoT':''}</td><td>${num(s.damage)}</td><td>${s.hits??'—'}</td><td>${pct(s.crit_rate)}</td><td>${s.max>0?num(s.max):'—'}</td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -41,7 +42,7 @@ function installFightQol(f) {
   // After the fight-to-fight comparison, so export buttons and notes stay together.
   const anchor=$('#comparison');
   const options=f.players.map(p=>`<option value="${Number(p.actor_id)}">${esc(p.name)}</option>`).join('');
-  const block=document.createElement('div');block.innerHTML=`<h3>Spieler direkt vergleichen</h3><div class="row fight-tools"><select id="pairA" aria-label="Erster Spieler">${options}</select><select id="pairB" aria-label="Zweiter Spieler">${options}</select><button class="btn" id="pairCompare">Spieler vergleichen</button></div><div id="playerPair"></div><h3>Alle Spieler im selben Diagramm</h3>${partyCurve(f)}`;
+  const block=document.createElement('div');block.innerHTML=`<h3>Spieler direkt vergleichen</h3><div class="row fight-tools"><select id="pairA" aria-label="Erster Spieler">${options}</select><select id="pairB" aria-label="Zweiter Spieler">${options}</select><button class="btn" id="pairCompare">Spieler vergleichen</button></div><div id="playerPair"></div>`;
   anchor.parentNode.insertBefore(block,anchor.nextSibling);
   if(f.players.length>1)$('#pairB').selectedIndex=1;
   $('#pairCompare').onclick=()=>{$('#playerPair').innerHTML=pairReport(f.players.find(p=>String(p.actor_id)===$('#pairA').value),f.players.find(p=>String(p.actor_id)===$('#pairB').value),f);};
@@ -68,14 +69,10 @@ const reportColors=['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300',
 const reportInk={bg:'#101c2c',panel:'#16263a',text:'#edf3fb',muted:'#aabbd0',faint:'#7898b6',grid:'#7898b633',accent:'#75e0ce',buff:'#8ea6c4'};
 // Rolling DPS over the stored cumulative damage samples, one series per exported player.
 function reportCurves(f,players,window=5000) {
-  const points=(f.analytics?.points||[]).slice(f.analytics?.partial?1:0);
-  if(points.length<3)return null;
-  const series=(f.players||[]).slice(0,players.length).map((p,i)=>{
-    const cum=points.map(q=>Number(q.damage?.[p.actor_id]||0));let j=0;
-    const values=points.map((q,k)=>{while(j<k&&points[j+1].ms<=q.ms-window)j++;const span=q.ms-points[j].ms;return k===0||span<=0?0:Math.max(0,cum[k]-cum[j])*1000/span;});
-    return {name:players[i].name,color:i<reportColors.length?reportColors[i]:reportInk.faint,values};
-  });
-  return {ms:points.map(q=>q.ms),series};
+  const samples=(f.players||[]).slice(0,players.length).map(p=>damageSamples(f,p.actor_id,window));
+  if(!samples.length||samples[0].length<3)return null;
+  const series=samples.map((points,i)=>({name:players[i].name,color:i<reportColors.length?reportColors[i]:reportInk.faint,values:points.map(p=>p.dps)}));
+  return {ms:samples[0].map(p=>p.ms),series};
 }
 function fitText(ctx,text,width) {
   text=String(text??'');if(ctx.measureText(text).width<=width)return text;

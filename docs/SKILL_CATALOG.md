@@ -4,6 +4,12 @@ Der Meter enthält einen lokalen DE/EN-Katalog mit 364 Hauptfähigkeiten aller n
 
 Unter **Overlay → Fähigkeits- und Klassennamen** lässt sich Deutsch oder Englisch wählen. Die Wahl wird mit Einstellungen und Profilen gespeichert. `--lang en` bestimmt die Voreinstellung bei fehlender gespeicherter Sprachwahl; vorhandene Einstellungen haben Vorrang. Das übrige Dashboard bleibt deutsch.
 
+Suche, Klassenfilter, zusätzliche Paket-IDs und aktuelle Katalogseite bleiben im selben Browser auch nach einem Neuladen erhalten. **Zurücksetzen** stellt die ungefilterte erste Seite wieder her. Bei fehlenden Treffern erscheint eine Erklärung. Beschädigter oder gesperrter Browserspeicher verhindert die Nutzung nicht; gleichzeitiges Öffnen des Tabs teilt sich eine Kataloganfrage.
+
+**Tastatur:** `/` fokussiert die Suche im Fähigkeitentab, in der Kampfbibliothek oder im geöffneten Skilldialog. Beim Schreiben in Eingabefeldern bleibt `/` ein normales Zeichen. `Esc` leert zuerst eine befüllte Suche; im Dialog schließt ein weiteres `Esc` wie bisher den Dialog. Die Kürzel stehen auch im Hinweis der Suchfelder.
+
+Kopieren aus einem Dialog verwendet bei verweigerter Clipboard-API einen lokalen Fallback innerhalb dieses Dialogs und stellt den vorherigen Fokus wieder her. Wenn beide Kopierwege scheitern, erscheint eine Meldung zur Zwischenablage statt eines Verbindungsfehlers. Temporäre Kopierfelder werden auch im Fehlerfall entfernt.
+
 ## Umfang und Zuordnung
 
 | Bestandteil | Umfang / Verhalten |

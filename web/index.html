@@ -206,20 +206,25 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     <div class="page-title"><div><div class="eyebrow">Performance</div><h2>Deine Statistik</h2><p>Vergleiche Kämpfe und entdecke deine besten Runs.</p></div><span class="tag">AION 2 · LINUX</span></div>
     <div class="grid" id="kpis"></div>
     <div class="grid stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-top:16px">
+      <div class="card" style="grid-column:1 / -1"><h2>Wie entwickelt sich meine DPS?</h2>
+        <div class="chart-tools"><label>Boss <select id="bossSel" aria-label="Boss für DPS-Verlauf"></select></label>
+        <label>Versuche <select id="bossLimit" aria-label="Anzahl der Versuche"><option value="20">Letzte 20</option><option value="50">Letzte 50</option><option value="0">Alle</option></select></label></div>
+        <div id="bossSummary" class="trend-summary"></div><div id="bossChart"></div>
+        <label class="curve-scrubber">Versuch <input type="range" id="bossAttempt" aria-label="Versuch auswählen" min="0" max="0" value="0" disabled></label>
+        <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
+        <p class="analysis-note" id="bossNote"></p></div>
       <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
       <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
       <div class="card"><h2>Meine beste DPS pro Boss</h2><div id="myBest"></div></div>
-      <div class="card" style="grid-column: 1 / -1"><div class="row" style="justify-content:space-between;margin-bottom:8px">
-        <h2 style="margin:0">Meine DPS pro Boss im Verlauf</h2><select id="bossSel" aria-label="Boss für DPS-Verlauf"></select></div>
-        <div id="bossChart" style="position:relative"></div></div>
+
       <div class="card"><h2>Runs der letzten 30 Tage</h2><div class="spark" id="perDay"></div><div class="muted" id="perDayLbl" style="font-size:12px;margin-top:6px"></div></div>
     </div>
   </section>
 
   <section id="skills">
     <div class="card"><h2>Fähigkeiten · Skills</h2><p class="muted">Offline-Katalog mit deutschen und englischen Namen. Suche auch nach Skill-ID oder Varianten-ID. Quelle: Wakayashi / Questlog, Stand 07.10.2026.</p>
-    <div class="row"><input id="catalogSearch" type="search" placeholder="Name / Skill-ID" aria-label="Fähigkeiten suchen"><select id="catalogClass" aria-label="Klasse filtern"><option value="">Alle Klassen</option><option value="gladiator">Gladiator</option><option value="templar">Templer</option><option value="assassin">Assassine</option><option value="ranger">Jäger</option><option value="sorcerer">Zauberer</option><option value="elementalist">Beschwörer</option><option value="cleric">Kleriker</option><option value="chanter">Kantor</option><option value="fighter">Faustkämpfer</option></select><label><input id="catalogVariants" type="checkbox"> Weitere Paket-IDs / Effekte</label></div>
-    <p id="catalogCount" class="analysis-note" role="status">Katalog wird geladen …</p><div class="table-scroll"><table><thead><tr><th>Fähigkeit</th><th>Deutsch</th><th>English</th><th>Klasse</th><th>ID / Varianten</th></tr></thead><tbody id="catalogRows"></tbody></table></div><div class="row"><button id="catalogPrev" class="btn">Zurück</button><span id="catalogPage"></span><button id="catalogNext" class="btn">Weiter</button></div>
+    <div class="row"><input id="catalogSearch" type="search" maxlength="200" placeholder="Name / Skill-ID" aria-label="Fähigkeiten suchen" title="/: Suche fokussieren · Esc: Suche leeren"><select id="catalogClass" aria-label="Klasse filtern"><option value="">Alle Klassen</option><option value="gladiator">Gladiator</option><option value="templar">Templer</option><option value="assassin">Assassine</option><option value="ranger">Jäger</option><option value="sorcerer">Zauberer</option><option value="elementalist">Beschwörer</option><option value="cleric">Kleriker</option><option value="chanter">Kantor</option><option value="fighter">Faustkämpfer</option></select><label><input id="catalogVariants" type="checkbox"> Weitere Paket-IDs / Effekte</label><button id="catalogReset" class="btn" title="Suche, Klassenfilter und Seite zurücksetzen" disabled>Zurücksetzen</button></div>
+    <p id="catalogCount" class="analysis-note" role="status">Katalog wird geladen …</p><p id="catalogEmpty" class="muted" hidden>Keine passenden Fähigkeiten. Ändere die Suche oder setze die Filter zurück.</p><div class="table-scroll"><table><thead><tr><th>Fähigkeit</th><th>Deutsch</th><th>English</th><th>Klasse</th><th>ID / Varianten</th></tr></thead><tbody id="catalogRows"></tbody></table></div><div class="row"><button id="catalogPrev" class="btn">Zurück</button><span id="catalogPage"></span><button id="catalogNext" class="btn">Weiter</button></div>
     <p class="analysis-note">Unbekannte IDs bleiben sichtbar. Ein zugeordnetes Symbol bestätigt keine Ingame-Messgenauigkeit.</p></div>
   </section>
   <section id="settings">
@@ -520,58 +525,59 @@ async function loadStats() {
   const days = []; const map = Object.fromEntries(s.per_day.map(d => [d.day, d.runs]));
   for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); const k = d.toLocaleDateString('sv-SE'); days.push([k, map[k] || 0]); }
   const maxR = Math.max(1, ...days.map(d => d[1]));
-  $('#perDay').innerHTML = days.map(([k, v]) => `<div title="${k}: ${v}" style="height:${v / maxR * 100}%"></div>`).join('');
-  $('#perDayLbl').textContent = `${days[0][0]} – ${days[29][0]}`;
+  $('#perDay').innerHTML = days.some(([,v])=>v>0)?days.map(([k, v]) => `<div title="${k}: ${v} Runs" style="height:${v / maxR * 100}%;opacity:${v?'.75':'.15'}"></div>`).join(''):'<div class="activity-empty">Keine Runs in diesem Zeitraum.</div>';
+  $('#perDayLbl').textContent = `${days.reduce((n,d)=>n+d[1],0)} Runs an ${days.filter(d=>d[1]>0).length} aktiven Tagen · ${days[0][0]} – ${days[29][0]}`;
 }
 
-// Boss DPS trend: one series (your DPS per kill), so no legend; the title names it.
-let bossHistory = [];
+// Attempts are equally spaced, including fights without an observed kill.
+let bossHistory = [], bossSelectedKey = '', bossSelectedAttempt = 0;
+const bossKey=b=>JSON.stringify([b.boss,b.dungeon_id??b.difficulty??'']);
 async function loadBossHistory() {
   const request = ++bossRequest;
   const history = await api('/api/stats/boss-history?' + charQ());
   if (request !== bossRequest) return;
   bossHistory = history;
   const sel = $('#bossSel'), cur = sel.value;
-  sel.innerHTML = bossHistory.map((b, i) => `<option value="${i}">${esc(b.boss)}${b.difficulty?' · '+esc(b.difficulty):''} (${b.attempts.length} Versuche)</option>`).join('');
-  if (cur && cur < bossHistory.length) sel.value = cur;
+  sel.innerHTML = bossHistory.map(b => `<option value="${esc(bossKey(b))}">${esc(b.boss)}${b.difficulty?' · '+esc(b.difficulty):''} (${b.attempts.length} Versuche)</option>`).join('');
+  if (bossHistory.some(b=>bossKey(b)===cur)) sel.value=cur;
   drawBoss();
 }
 function drawBoss() {
-  const box = $('#bossChart');
-  const b = bossHistory[Number($('#bossSel').value) || 0];
-  if (!b) { box.innerHTML = '<div class="empty">Noch keine Bosskämpfe mit dir.</div>'; return; }
-  const k = b.attempts, W = Math.max(box.clientWidth, 240), H = 220, L = 56, R = 16, T = 14, B = 28;
-  const max = k.reduce((n,p)=>Math.max(n,p.dps),1)*1.1;
-  const x = (i) => k.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (k.length - 1);
-  const y = (v) => T + (1 - v / max) * (H - T - B);
-  const ticks = [0, .25, .5, .75, 1].map(f => f * max);
-  const step=Math.max(1,Math.ceil(k.length/600));
-  const visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
-  const path = visible.map(({p,i},j) => `${j ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.dps).toFixed(1)}`).join('');
-  box.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="DPS-Verlauf ${esc(b.boss)}">
-    ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/>
-      <text x="${L - 8}" y="${y(t) + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${num(t)}</text>`).join('')}
-    <text x="${L}" y="${H - 8}" fill="var(--muted)" font-size="11">${date(k[0].started_at)}</text>
-    <text x="${W - R}" y="${H - 8}" fill="var(--muted)" font-size="11" text-anchor="end">${date(k[k.length - 1].started_at)}</text>
-    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
-    ${visible.map(({p,i}) => `<circle cx="${x(i)}" cy="${y(p.dps)}" r="4.5" fill="${p.died ? 'var(--red)' : 'var(--accent)'}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
-    <line id="bossCross" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>
-    <rect x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent" id="bossHit"/>
-  </svg><div id="bossTip" class="card" style="position:absolute;display:none;padding:8px 10px;margin:0;pointer-events:none;font-size:12px;white-space:nowrap"></div>
-  <div class="muted" style="font-size:12px">Erfasste Versuche, kein Kill-Nachweis. Rote Punkte: Kämpfe mit erfasstem eigenem Tod.${step>1?' Darstellung ausgedünnt.':''}</div>`;
-  const hit = $('#bossHit'), tip = $('#bossTip'), cross = $('#bossCross');
-  hit.onmousemove = (e) => {
-    const r = hit.getBoundingClientRect(), mx = e.clientX - r.left + L;
-    const i=k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((mx-L)/(W-L-R)*(k.length-1))));
-    const p = k[i];
-    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
-    tip.innerHTML = `<b>${num(p.dps)}/s</b>${p.difficulty ? ' · ' + esc(p.difficulty) : ''}<br>${date(p.started_at)} · ${dur(p.duration_ms)} · ${(p.share ?? 0).toFixed(0)}% Anteil${p.died ? '<br><span style="color:var(--red)">† gestorben</span>' : ''}`;
-    tip.style.display = 'block';
-    tip.style.left = Math.min(x(i) + 12, W - 190) + 'px'; tip.style.top = (y(p.dps) - 10) + 'px';
+  const box=$('#bossChart'),range=$('#bossAttempt'),readout=$('#bossReadout'),open=$('#bossOpen');
+  const b=bossHistory.find(b=>bossKey(b)===$('#bossSel').value);
+  range.disabled=true;open.disabled=true;open.onclick=null;readout.textContent='';$('#bossSummary').innerHTML='';$('#bossNote').textContent='';
+  if(!b?.attempts.length){box.innerHTML='<div class="empty">Noch keine gespeicherten Bossversuche mit dir. Wähle bei Bedarf einen anderen Charakter.</div>';return;}
+  const limit=Number($('#bossLimit').value),offset=limit?Math.max(0,b.attempts.length-limit):0,k=b.attempts.slice(offset);
+  const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
+  const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
+  $('#bossSummary').innerHTML=summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
+  box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,max=Math.max(1,best)*1.1;
+  const x=i=>k.length===1?(L+W-R)/2:L+i*(W-L-R)/(k.length-1),y=v=>T+(1-v/max)*(H-T-B);
+  const step=Math.max(1,Math.ceil(k.length/600)),visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
+  box.innerHTML=`<svg class="curve-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Eigene DPS pro Versuch gegen ${esc(b.boss)}">
+    <text x="${L}" y="14">DPS</text>
+    ${[0,.25,.5,.75,1].map(t=>`<line x1="${L}" x2="${W-R}" y1="${y(max*t)}" y2="${y(max*t)}" class="curve-grid"/><text x="${L-8}" y="${y(max*t)+4}" text-anchor="end">${num(max*t)}</text>`).join('')}
+    <line x1="${L}" x2="${W-R}" y1="${y(mean)}" y2="${y(mean)}" class="curve-average"/><text x="${W-R}" y="${Math.max(T,y(mean)-6)}" text-anchor="end">Ø ${num(mean)}</text>
+    <path d="${visible.map(({p,i},j)=>`${j?'L':'M'}${x(i).toFixed(2)},${y(p.dps).toFixed(2)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${visible.map(({p,i})=>`<circle cx="${x(i)}" cy="${y(p.dps)}" r="4" fill="${p.died?'var(--red)':'var(--accent)'}"><title>Versuch ${offset+i+1}: ${num(p.dps)} DPS${p.died?' · eigener Tod erfasst':''}</title></circle>`).join('')}
+    <text x="${L}" y="${H-9}">Versuch ${offset+1}</text>${k.length>1?`<text x="${W-R}" y="${H-9}" text-anchor="end">Versuch ${offset+k.length}</text>`:''}
+    <line id="bossCross" y1="${T}" y2="${H-B}" class="curve-cross"/>
+    <rect id="bossHit" class="curve-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
+  </svg>`;
+  $('#bossNote').textContent=`Chronologische Versuche mit gleichen Abständen; Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
+  range.disabled=false;range.max=k.length-1;
+  const select=i=>{
+    range.value=i;bossSelectedKey=bossKey(b);bossSelectedAttempt=offset+i;const p=k[i],prev=k[i-1],change=prev&&prev.dps>0?(p.dps-prev.dps)/prev.dps*100:null;
+    const parts=[`Versuch ${offset+i+1} · ${date(p.started_at)}`,dur(p.duration_ms),p.share!=null?Number(p.share).toFixed(0)+'% Anteil':'Anteil nicht erfasst',change==null?'':`${change>=0?'+':''}${change.toFixed(1)}% zum vorherigen Versuch`,p.died?'Eigener Tod erfasst':''].filter(Boolean);
+    readout.innerHTML=`<strong>${num(p.dps)} DPS</strong><span>${esc(parts.join(' · '))}</span>`;
+    range.setAttribute('aria-valuetext',parts.join('; ')+`; ${num(p.dps)} DPS`);
+    const cross=$('#bossCross');cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));
+    open.disabled=!p.fight_id;open.onclick=p.fight_id?()=>task(openFight(p.fight_id)):null;
   };
-  hit.onmouseleave = () => { tip.style.display = 'none'; cross.setAttribute('visibility', 'hidden'); };
+  select(bossSelectedKey===bossKey(b)&&bossSelectedAttempt>=offset&&bossSelectedAttempt<offset+k.length?bossSelectedAttempt-offset:k.length-1);range.oninput=()=>select(Number(range.value));
+  $('#bossHit').onpointermove=$('#bossHit').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();select(k.length===1?0:Math.max(0,Math.min(k.length-1,Math.round((e.clientX-r.left)/r.width*(k.length-1)))));};
 }
-$('#bossSel').onchange = drawBoss;
+$('#bossSel').onchange = $('#bossLimit').onchange = drawBoss;
 
 // Settings
 let settings = null, settingsTimer, settingsSaving = false, settingsDirty = false;
@@ -634,7 +640,8 @@ document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
 });
 
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== tab) show(t); });
-window.addEventListener('resize', () => { if (tab === 'stats') drawBoss(); });
+let bossChartFrame = 0;
+window.addEventListener('resize', () => { cancelAnimationFrame(bossChartFrame); bossChartFrame = requestAnimationFrame(() => { if (tab === 'stats' && $('#bossChart').clientWidth !== $('#bossChart').drawnWidth) drawBoss(); }); });
 show(tab);
 </script>
 <script src="/skills.js"></script>

@@ -44,6 +44,14 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
+        env:
+          SCREENSHOT_DIR: test-artifacts/web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-screenshots
+          path: test-artifacts/web/
+          if-no-files-found: ignore
   msrv:
     runs-on: ubuntu-latest
     steps:
