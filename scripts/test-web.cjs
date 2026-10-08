@@ -788,6 +788,8 @@ const server = http.createServer((req,res) => {
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
       await page.waitForFunction(()=>document.querySelector('#selfRank').textContent==='#1');assert.match(await page.locator('#selfContext').textContent(),/47,6%.*3 Spieler/);
+      // Share ribbon: one segment per player, yours marked; the gap is derived from the same rates.
+      assert.equal(await page.locator('#shareRibbon i').count(),3);assert.equal(await page.locator('#shareRibbon i.me').count(),1);assert.match(await page.locator('#selfGap').textContent(),/16,7K\/s vor #2/);
       // Dedicated tracks retain real proportions independently of row surfaces.
       const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,width:f.getBoundingClientRect().width,opacity:Number(getComputedStyle(f).opacity)};}));
       assert.ok(bars.length>=3&&bars.every(b=>b.height>=4&&b.opacity>=.7)&&Math.abs(bars[1].width/bars[0].width-2/3)<.02,JSON.stringify(bars));

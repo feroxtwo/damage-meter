@@ -41,4 +41,32 @@ assert.equal(run('appendLiveSignal(state,{...live,battle_time_ms:500}).length'),
 run('for(let i=1;i<=500;i++)appendLiveSignal(state,{...live,battle_time_ms:i*1000})');
 assert.ok(run('state.points.length')<=120);assert.ok(run('state.points.at(-1).ms-state.points[0].ms')<=60000);
 
-console.log('PASS insights: complete windows, observed limits, identities and bounded live signal (37 assertions)');
+
+// Personal context of a stored fight: only earlier, comparable attempts of the same boss, difficulty and character.
+assert.equal(run('clock(69500)'),'1:09,5');assert.equal(run('clock(75000)'),'1:15');assert.equal(run('clock(600000)'),'10:00');
+(async()=>{
+  const attempt=(fight_id,dps,extra={})=>({fight_id,dps,job:'gladiator',numeric_limited:0,...extra});
+  let calls=0;context.history=[{boss:'Kargos',dungeon_id:600093,attempts:[attempt('a',40000),attempt('b',50000,{numeric_limited:1}),attempt('c',44000),attempt('cur',48400),attempt('later',90000)]},
+    {boss:'Kargos',dungeon_id:600092,attempts:[attempt('n',99000),attempt('cur2',10000)]}];
+  context.api=async()=>{calls++;return context.history;};
+  const fight=(id,extra={})=>({id,boss_name:'Kargos',dungeon_id:600093,players:[{is_self:true,name:'FeroxTOO',job:'gladiator',dps:48400}],...extra});
+  context.fight=fight;
+  let c=plain(await run('attemptContext(fight("cur"))'));
+  assert.equal(c.count,2,'capped attempt and later attempts are not compared');assert.equal(c.mean,42000);assert.equal(c.last,44000);
+  assert.ok(Math.abs(c.vsMean-100*6400/42000)<1e-9);assert.equal(c.record,true);
+  assert.equal(await run('attemptContext(fight("a"))'),null,'first attempt has nothing to compare');
+  assert.equal(await run('attemptContext(fight("cur",{is_train:1}))'),null,'training is never compared');
+  assert.equal(await run('attemptContext(fight("cur",{numeric_limited:true}))'),null);
+  assert.equal(await run('attemptContext(fight("cur",{players:[{is_self:true,name:"FeroxTOO",job:"cleric",dps:1}]}))'),null,'other class');
+  assert.equal(await run('attemptContext(fight("cur2",{dungeon_id:600092}))').count,undefined);
+  c=plain(await run('attemptContext(fight("cur2",{dungeon_id:600092,players:[{is_self:true,name:"FeroxTOO",job:"gladiator",dps:10000}]}))'));
+  assert.equal(c.count,1,'other difficulty stays separate');assert.equal(c.best,99000);assert.equal(c.record,false);
+  const before=calls;context.history=[{...context.history[0],attempts:[...context.history[0].attempts,attempt('new',60000)]},context.history[1]];await run('attemptContext(fight("new"))');assert.equal(calls,before+1,'a fight missing from the cached history refetches');
+  context.num=v=>String(Math.round(v));context.attempts=[40,41,42,50,51,52].map(dps=>({dps,job:'gladiator',numeric_limited:0}));
+  assert.match(run('bossStory(attempts,true).verdict'),/Aufwärtstrend/);
+  context.attempts=[50,51,52,40,41,42].map(dps=>({dps,job:'gladiator',numeric_limited:0}));
+  assert.match(run('bossStory(attempts,true).verdict'),/Abwärtstrend/);
+  assert.equal(run('bossStory(attempts.slice(1),true).verdict'),'','fewer than six attempts give no direction');
+  assert.equal(run('bossStory(attempts,false).verdict'),undefined,'no character, no verdict');
+  console.log('PASS insights: complete windows, observed limits, identities, bounded live signal, attempt context and trend (58 assertions)');
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -94,11 +94,11 @@ const historyCache=new Map();
 async function attemptContext(f) {
   const me=f.players?.find(p=>p.is_self);
   if(!me||f.is_train||f.numeric_limited||!knownClassJob(me.job))return null;
-  const cached=historyCache.get(me.name);
-  const history=cached&&Date.now()-cached.at<30000?cached.data:await api('/api/stats/boss-history?character='+encodeURIComponent(me.name));
-  historyCache.set(me.name,{at:cached&&Date.now()-cached.at<30000?cached.at:Date.now(),data:history});
-  const boss=(history||[]).find(b=>b.boss===f.boss_name&&Number(b.dungeon_id??0)===Number(f.dungeon_id??0));
-  const index=boss?.attempts.findIndex(a=>a.fight_id===f.id)??-1;if(index<1)return null;
+  const find=history=>{const boss=(history||[]).find(b=>b.boss===f.boss_name&&Number(b.dungeon_id??0)===Number(f.dungeon_id??0));return {boss,index:boss?.attempts.findIndex(a=>a.fight_id===f.id)??-1};};
+  // A cached history that does not know this fight yet (just saved) is fetched again.
+  const cached=historyCache.get(me.name);let found=cached&&Date.now()-cached.at<30000?find(cached.data):{index:-1};
+  if(found.index<0){const data=await api('/api/stats/boss-history?character='+encodeURIComponent(me.name));historyCache.set(me.name,{at:Date.now(),data});found=find(data);}
+  const {boss,index}=found;if(index<1)return null;
   const comparable=a=>a.job===me.job&&[false,0].includes(a.numeric_limited)&&Number.isFinite(Number(a.dps))&&Number(a.dps)>0;
   const current=boss.attempts[index];if(!comparable(current))return null;
   const previous=boss.attempts.slice(0,index).filter(comparable);if(!previous.length)return null;
