@@ -515,7 +515,9 @@ const server = http.createServer((req,res) => {
       assert.match(await page.locator('[data-curve-note]').textContent(),/unvollständig/);
       await page.setViewportSize({width:320,height:844});
       assert.equal(await page.locator('#fightDialog').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
-      const hit=page.locator('.curve-hit');const bounds=await hit.boundingBox();await hit.dispatchEvent('pointerdown',{clientX:bounds.x+bounds.width/2});
+      // Resolve and hit the plot in one step; a resize redraw may replace the SVG in between.
+      await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+      await page.evaluate(()=>{const hit=document.querySelector('#fightDamageChart .curve-hit'),r=hit.getBoundingClientRect();hit.dispatchEvent(new PointerEvent('pointerdown',{clientX:r.x+r.width/2,bubbles:true}));});
       assert.match(await page.locator('[data-curve-readout]').textContent(),/200 DPS/);
       await page.evaluate(()=>{
         const f={duration_ms:1000,players:[{actor_id:1,name:'One'}],analytics:{points:[{ms:500,damage:{1:50}}]}};

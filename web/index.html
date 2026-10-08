@@ -551,7 +551,7 @@ function drawBoss() {
   const mean=k.reduce((n,p)=>n+p.dps,0)/k.length,best=k.reduce((n,p)=>Math.max(n,p.dps),0),last=k[k.length-1];
   const summary=(value,label)=>`<div><strong>${value}</strong><span>${label}</span></div>`;
   $('#bossSummary').innerHTML=summary(num(last.dps)+' DPS','Letzter Versuch')+summary(num(best)+' DPS','Bestwert im Ausschnitt')+summary(num(mean)+' DPS','Ø pro Versuch')+summary(k.length,'Versuche im Ausschnitt');
-  const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,max=Math.max(1,best)*1.1;
+  box.drawnWidth=box.clientWidth;const W=Math.max(280,box.clientWidth),H=250,L=58,R=18,T=26,B=34,max=Math.max(1,best)*1.1;
   const x=i=>k.length===1?(L+W-R)/2:L+i*(W-L-R)/(k.length-1),y=v=>T+(1-v/max)*(H-T-B);
   const step=Math.max(1,Math.ceil(k.length/600)),visible=k.map((p,i)=>({p,i})).filter(({i})=>i%step===0||i===k.length-1);
   box.innerHTML=`<svg class="curve-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Eigene DPS pro Versuch gegen ${esc(b.boss)}">
@@ -562,7 +562,7 @@ function drawBoss() {
     ${visible.map(({p,i})=>`<circle cx="${x(i)}" cy="${y(p.dps)}" r="4" fill="${p.died?'var(--red)':'var(--accent)'}"><title>Versuch ${offset+i+1}: ${num(p.dps)} DPS${p.died?' · eigener Tod erfasst':''}</title></circle>`).join('')}
     <text x="${L}" y="${H-9}">Versuch ${offset+1}</text>${k.length>1?`<text x="${W-R}" y="${H-9}" text-anchor="end">Versuch ${offset+k.length}</text>`:''}
     <line id="bossCross" y1="${T}" y2="${H-B}" class="curve-cross"/>
-    <rect id="bossHit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
+    <rect id="bossHit" class="curve-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>
   </svg>`;
   $('#bossNote').textContent=`Chronologische Versuche mit gleichen Abständen; Ø ist der arithmetische Mittelwert der Versuch-DPS. Rote Punkte: eigener Tod erfasst. Ein Versuch ist kein Kill-Nachweis.${!character?' Alle eigenen Charaktere zusammen; für gezielte Vergleiche oben einen Charakter wählen.':''}${step>1?' Diagramm ausgedünnt; die Versuchs-Auswahl enthält alle Daten.':''}`;
   range.disabled=false;range.max=k.length-1;
@@ -640,7 +640,8 @@ document.querySelectorAll('[data-k]').forEach(i => i.oninput = () => {
 });
 
 window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== tab) show(t); });
-window.addEventListener('resize', () => { if (tab === 'stats') drawBoss(); });
+let bossChartFrame = 0;
+window.addEventListener('resize', () => { cancelAnimationFrame(bossChartFrame); bossChartFrame = requestAnimationFrame(() => { if (tab === 'stats' && $('#bossChart').clientWidth !== $('#bossChart').drawnWidth) drawBoss(); }); });
 show(tab);
 </script>
 <script src="/skills.js"></script>
