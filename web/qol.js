@@ -69,14 +69,10 @@ const reportColors=['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300',
 const reportInk={bg:'#101c2c',panel:'#16263a',text:'#edf3fb',muted:'#aabbd0',faint:'#7898b6',grid:'#7898b633',accent:'#75e0ce',buff:'#8ea6c4'};
 // Rolling DPS over the stored cumulative damage samples, one series per exported player.
 function reportCurves(f,players,window=5000) {
-  const points=(f.analytics?.points||[]).slice(f.analytics?.partial?1:0);
-  if(points.length<3)return null;
-  const series=(f.players||[]).slice(0,players.length).map((p,i)=>{
-    const cum=points.map(q=>Number(q.damage?.[p.actor_id]||0));let j=0;
-    const values=points.map((q,k)=>{while(j<k&&points[j+1].ms<=q.ms-window)j++;const span=q.ms-points[j].ms;return k===0||span<=0?0:Math.max(0,cum[k]-cum[j])*1000/span;});
-    return {name:players[i].name,color:i<reportColors.length?reportColors[i]:reportInk.faint,values};
-  });
-  return {ms:points.map(q=>q.ms),series};
+  const samples=(f.players||[]).slice(0,players.length).map(p=>damageSamples(f,p.actor_id,window));
+  if(!samples.length||samples[0].length<3)return null;
+  const series=samples.map((points,i)=>({name:players[i].name,color:i<reportColors.length?reportColors[i]:reportInk.faint,values:points.map(p=>p.dps)}));
+  return {ms:samples[0].map(p=>p.ms),series};
 }
 function fitText(ctx,text,width) {
   text=String(text??'');if(ctx.measureText(text).width<=width)return text;

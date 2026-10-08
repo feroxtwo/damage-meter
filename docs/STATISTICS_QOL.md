@@ -17,11 +17,11 @@ Die Aktivität der letzten 30 Tage nennt zusätzlich Runs und aktive Tage. Lange
 - Alte Berichte ohne Verlaufsdaten erhalten einen erklärenden Leerzustand und einen deaktivierten Zeitregler. Ein einzelner verwertbarer Punkt wird als Punkt angezeigt.
 - Bossversuche haben gleiche Abstände in zeitlicher Reihenfolge; die X-Achse benennt ausdrücklich Versuche. Ein Versuch ist kein Kill-Nachweis. Rote Punkte markieren den erfassten eigenen Tod. Fehlende Anteilswerte werden als **nicht erfasst** ausgewiesen.
 - Ohne Charakterfilter können verschiedene eigene Charaktere in einer Bossserie stehen. Die Ansicht weist darauf hin; gezielte Vergleiche brauchen die Charakterwahl oben.
-- PNG-Berichte behalten ihre vorhandene separate Darstellung und Exportauswahl. Anonymisierung, lokale Symbole und unveränderte Rohwerte bleiben Teil der Export-Regression.
+- PNG-Berichte verwenden dieselbe Fenster-DPS-Berechnung und behalten ihre separate Darstellung und Exportauswahl. Anonymisierung, lokale Symbole und unveränderte Rohwerte bleiben Teil der Export-Regression.
 
 ## Technische Abnahme
 
-`node scripts/test-chart-ui.cjs` prüft acht Bereiche ohne Browser: Gruppen-/Spieler-DPS, Gesamtschaden, gleitendes Fenster, gekürzte Ausgangswerte, fehlende/einzelne Samples, sichere Beschriftung, begrenzte Linien und unveränderte Datensätze. `node scripts/test-skill-ui.cjs` prüft weiterhin acht Katalog-/Exportbereiche.
+`node scripts/test-chart-ui.cjs` prüft neun Bereiche ohne Browser: Gruppen-/Spieler-DPS, Gesamtschaden, gleitendes Fenster, gekürzte Ausgangswerte, fehlende/einzelne Samples, sichere Beschriftung, begrenzte Linien und unveränderte Datensätze und dieselbe Fensterberechnung für PNG-Berichte. `node scripts/test-skill-ui.cjs` prüft weiterhin acht Katalog-/Exportbereiche.
 
 Die echte Chromium-Suite ergänzt vier Fälle: Umfang/Glättung/Gesamtschaden samt Tastatur und Legende; teilweise/fehlende/einzelne Verläufe; dichte Mehrspieler-Kurven auf Desktop und 320-Pixel-Displays; Bosskennzahlen/Versuchsauswahl/stabile Boss-ID und Berichtssprung. Die vorhandenen Export-, Sprach-, Overlay- und Langzeittests bleiben enthalten. Insgesamt sind 45 Browserfälle vorgesehen. GitHub Actions stellt synthetische Screenshots als `web-screenshots` bereit.
 
@@ -33,7 +33,7 @@ Lokal fehlt das Chromium-Binary; diese Einschränkung zählt nicht als bestanden
 |---|---|
 | `web/index.html` | Bossansicht, Kennzahlen, stabile Auswahl, Versuchregler, Berichtssprung, Aktivitätszusammenfassung |
 | `web/enhancements.js` | Gemeinsame Chart-Darstellung, Intervall-/Fenster-DPS, Gesamtschaden, Umfangsauswahl, Legende, Zeitauswahl, Leerzustände |
-| `web/qol.js` | Zweites Gruppendiagramm entfernt; bestehender Paarvergleich und PNG-Export bleiben erhalten |
+| `web/qol.js` | Zweites Gruppendiagramm entfernt; PNG-Fenster-DPS angeglichen; bestehender Paarvergleich und Exportumfang bleiben erhalten |
 | `web/enhancements.css` | Responsive Diagramme, Bedienelemente, dauerhaft sichtbare Werte und Kennzahlen |
 | `scripts/test-chart-ui.cjs` | Berechnungs- und Darstellungsinvarianten ohne Chromium |
 | `scripts/test-web.cjs` | Vier neue Browserfälle und Anpassung des bisherigen Gruppendiagramm-Checks |

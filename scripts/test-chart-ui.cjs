@@ -23,4 +23,10 @@ const markup=run('curveMarkup(points,[{name:"Large",color:"var(--accent)",value:
 const path=markup.match(/<path d="([^"]+)"/)[1];assert.ok((path.match(/[ML]/g)||[]).length<=601);assert.match(markup,/99999\/s/);
 assert.equal(run('damageSamples(f,1,5000); JSON.stringify(f)'),JSON.stringify(context.f),'rendering leaves stored samples intact');
 context.original=JSON.parse(before);assert.equal(run('damageSamples(original,1,5000); JSON.stringify(original)'),before);
-console.log('PASS chart samples, actor totals, rolling window, trimmed baseline, empty/single samples, escaping, downsampling and immutable records (8 chart checks)');
+const qol=fs.readFileSync(require('node:path').join(__dirname,'../web/qol.js'),'utf8');
+context.reportColors=['#fff'];context.reportInk={faint:'#aaa'};
+vm.runInContext(qol.slice(qol.indexOf('function reportCurves('),qol.indexOf('function fitText(')),context);
+context.f.analytics.points.push({ms:11500,damage:{1:1000300}});
+assert.deepEqual(plain(run('reportCurves(f,[{name:"One"}]).series[0].values')),plain(run('damageSamples(f,1,5000).map(p=>p.dps)')));
+assert.equal(run('reportCurves(original,[{name:"One"}])'),null);
+console.log('PASS chart samples, actor totals, rolling window, trimmed baseline, empty/single samples, escaping, downsampling, immutable records and PNG consistency (9 chart checks)');

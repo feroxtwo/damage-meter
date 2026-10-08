@@ -320,7 +320,8 @@ const server = http.createServer((req,res) => {
       await page.selectOption('#compareFight','f2');await page.locator('#compareBtn').click();
       await page.waitForFunction(()=>document.querySelector('#comparison').textContent.includes('10,0K'));
       assert.match(await page.locator('#comparison').textContent(),/25.0%/);
-      assert.ok(await page.locator('#fightContent svg').count()>=3);
+      assert.equal(await page.locator('#fightDamageChart svg.curve-chart').count(),1);
+      assert.equal(await page.locator('svg[aria-label="ms Ping"]').count(),1);
       await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
       await delay(100);assert.deepEqual(annotations.at(-1),{id:'f1',favorite:true,note:'neues Gear',tags:'rotation'});
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'combat-analysis.png'),fullPage:true});
@@ -378,7 +379,7 @@ const server = http.createServer((req,res) => {
       await page.selectOption('#fightChartScope','players');
       assert.equal(await page.locator('svg[aria-label="DPS-Verlauf aller Spieler"] path[stroke-width="2"]').count(),3);
       assert.deepEqual(await page.evaluate(()=>reportBuffs([{name:'Wachtschild',uptime:11.5},{name:'Wachtschild',uptime:9},{name:'Fury',uptime:99}]).map(b=>b.name+' '+b.uptime)),['Fury 99','Wachtschild 11.5']);
-      assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),1000);
+      assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),2000/3);
       await page.locator('#anonFight').check();
       assert.equal(await page.locator('#exportScope').inputValue(),'','exports default to the whole group');
       const pngTexts=async value=>{await page.selectOption('#exportScope',value);return page.evaluate(async actor=>{
@@ -552,7 +553,7 @@ const server = http.createServer((req,res) => {
       await page.locator('#bossAttempt').focus();await page.keyboard.press('Home');assert.match(await page.locator('#bossReadout').textContent(),/Versuch 6/);
       await page.selectOption('#bossLimit','0');assert.equal(await page.locator('#bossAttempt').getAttribute('max'),'24');
       const key=await page.locator('#bossSel').inputValue();histories.reverse();await page.evaluate(()=>loadBossHistory());
-      assert.equal(await page.locator('#bossSel').inputValue(),key);assert.match(await page.locator('#bossSummary').textContent(),/25,0K DPS/);
+      assert.equal(await page.locator('#bossSel').inputValue(),key);assert.match(await page.locator('#bossSummary').textContent(),/25,0K DPS/);assert.match(await page.locator('#bossReadout').textContent(),/Versuch 6/);
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'statistics-desktop.png'),fullPage:true});
       await page.setViewportSize({width:320,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'statistics-mobile.png'),fullPage:true});
