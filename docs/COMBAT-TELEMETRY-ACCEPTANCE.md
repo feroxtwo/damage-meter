@@ -2,6 +2,8 @@
 
 Basis: aktueller main `f34442c` mit den bereits integrierten Premium- und Gegenprüfungsänderungen einschließlich `deb50cb`. Version bleibt 0.3.1. Umsetzung auf `design/combat-telemetry`, [PR #17](https://github.com/feroxtwo/damage-meter/pull/17). Frühere Abnahmen und deren Grenzen bleiben unter [Premium Combat Experience](PREMIUM-UX-ACCEPTANCE.md) nachvollziehbar.
 
+Nachtrag 8. Oktober 2026: Die zusätzliche [Bereichs-/Expeditionsauswahl für die DPS-Entwicklung](PERFORMANCE_ACTIVITY_FILTERS.md) wird separat in [PR #18](https://github.com/feroxtwo/damage-meter/pull/18) geprüft. Ihre Änderungen und Testergebnisse stehen dort; die folgenden Ergebnisse dokumentieren weiterhin die vorherige Combat-Telemetry-Abnahme.
+
 Das Dashboard `/`, das bestehende native eframe/egui-Fenster und die Browser-/OBS-Ansicht `/overlay` bleiben drei getrennte Oberflächen. Dashboard und natives Fenster können gleichzeitig laufen. Es wurde kein zweites natives Fenster gebaut und kein Datenbankschema geändert.
 
 ## Sichtbare und analytische Verbesserungen

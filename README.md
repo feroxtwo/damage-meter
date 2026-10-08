@@ -27,6 +27,8 @@ Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKI
 
 [Combat Telemetry: Abschluss, Vorher/Nachher und Abnahmematrix](docs/COMBAT-TELEMETRY-ACCEPTANCE.md): offene Live-Komposition mit eigener Rate/Rang, lokal beobachtetem Burst-Signal, passendem gespeichertem Versuch und Training mit tatsächlichem Fortschritt. Das bestehende native Fenster erhält offene Zeilen, Zahlenkontrast und Hover-Aktionen; alle drei Themes bleiben verfügbar.
 
+[DPS-Entwicklung nach Bereich und Expedition](docs/PERFORMANCE_ACTIVITY_FILTERS.md): Feldbosse/Open World und Instanzmodi filtern, innerhalb einer Expedition deren gesamte erfasste Leistung oder einzelne Bosse auswählen. Unbekannte IDs bleiben sichtbar und können selbst eingeordnet werden.
+
 **Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
 ## Neu in 0.3.0
