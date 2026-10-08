@@ -38,7 +38,7 @@ let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/skills.js'?'skills.js':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -89,6 +89,7 @@ const server = http.createServer((req,res) => {
       else data = {runs:ids.map(id=>({...run, id, dungeon_name:u.searchParams.get('character') === 'Alt' ? 'Alt Dungeon' : run.dungeon_name})), total, dungeons:[run.dungeon_name]};
     }
     else if (/^\/api\/runs\/\d+\/favorite$/.test(u.pathname)) { runFavorites.push({id:u.pathname.split('/')[3],...req.postDataJSON()}); data = null; }
+    else if (/^\/api\/runs\/\d+\/analysis$/.test(u.pathname)) data = {...run, id:Number(u.pathname.split('/')[3]), fights:[telemetryFight()]};
     else if (/^\/api\/runs\/\d+$/.test(u.pathname)) data = {...run, id:Number(u.pathname.split('/').pop()), totals:[], fights:[]};
     else if (u.pathname === '/api/stats/run-history') data = [];
     else if (u.pathname === '/api/stats/summary') data = summary;
@@ -442,7 +443,7 @@ const server = http.createServer((req,res) => {
         document.querySelector('#fightContent').innerHTML=skillTable([{name:'Zed',damage:100,hits:2,average:50,min:25,max:75,crit_rate:50},{name:'Alpha',damage:200,hits:4,average:50,min:40,max:60,crit_rate:null}]);
         bindSkillTables(document.querySelector('#fightContent'));document.querySelector('#fightDialog').showModal();
       });
-      const box=page.locator('.skill-browser');
+      const box=page.locator('#fightContent .skill-browser');
       assert.equal(await box.locator('.skill-advanced').first().isVisible(),false);
       await box.locator('.skill-extra').check();assert.equal(await box.locator('.skill-advanced').first().isVisible(),true);
       await box.locator('.skill-sort').selectOption('name');assert.match(await box.locator('tbody tr').first().textContent(),/^Alpha/);
@@ -572,6 +573,34 @@ const server = http.createServer((req,res) => {
       await page.locator('#closeDialog').click();await page.setViewportSize({width:1440,height:1000});
       await page.unroute('**/api/stats/boss-history**');await page.selectOption('#bossLimit','20');await page.getByRole('button',{name:'Live',exact:true}).click();
     });
+    await check('dungeon totals aggregate skills and damage curves across recorded fights',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      const first={...telemetryFight('f1'),started_at:run.started_at,numeric_limited:false};
+      const second={...telemetryFight('f2'),started_at:first.started_at+100000,players:first.players.map(p=>({...p,actor_id:p.actor_id+100})),analytics:{...first.analytics,points:first.analytics.points.map(p=>({...p,damage:Object.fromEntries(Object.entries(p.damage).map(([actor,damage])=>[Number(actor)+100,damage]))}))}};
+      const absent={...first,id:'f3',boss_name:'Gegnergruppe',started_at:first.started_at+200000,duration_ms:10000,players:[{...first.players[1],damage:1000000,skills:undefined}],analytics:{points:[{ms:5000,damage:{2:500000}},{ms:10000,damage:{2:1000000}}],resolution_ms:5000}};
+      const legacy={...first,id:'legacy',started_at:first.started_at+220000,duration_ms:1000,players:[{...first.players[0],damage:5000000,skills:undefined}],analytics:null};
+      const full={...run,fights:[second,absent,legacy,first,{...first,id:'training',is_train:1}]};
+      let slow=false;
+      await isolated.route('**/api/runs/*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...run,fights:full.fights,totals:first.players})}));
+      await isolated.route('**/api/runs/*/analysis',async route=>{const id=Number(new URL(route.request().url()).pathname.split('/')[3]);if(slow&&id===1)await delay(350);await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(id===2?{...run,fights:[]}:full)});});
+      try {
+        await isolated.goto(base+'/#runs');await isolated.locator('#runRows tr.click').first().waitFor();await isolated.locator('#runRows tr.click').first().click();
+        await isolated.locator('[data-run-summary]').waitFor();assert.equal(await isolated.locator('#fightLibrary').isVisible(),false);assert.match(await isolated.locator('[data-run-summary]').textContent(),/14,00M/);
+        assert.equal(await isolated.locator('[data-run-skills] tbody tr').count(),4);assert.match(await isolated.locator('[data-run-skill-note]').textContent(),/2 von 3/);
+        assert.match(await isolated.locator('[data-run-coverage]').textContent(),/1 Kampf ohne auswertbaren Verlauf/);
+        assert.equal(await isolated.locator('[data-run-plot] svg').count(),1);
+        await isolated.selectOption('[data-run-metric]','total');assert.equal(await isolated.locator('[data-run-window]').isDisabled(),true);assert.match(await isolated.locator('[data-run-readout]').textContent(),/9,00M/);
+        await isolated.locator('[data-run-fight]').click();await isolated.locator('#fightDialog[open]').waitFor();await isolated.locator('#closeDialog').click();
+        await isolated.selectOption('[data-run-player]','group');assert.match(await isolated.locator('[data-run-summary]').textContent(),/24,90M/);
+        await isolated.locator('#runAnalysis .skill-search').fill('does not exist');assert.equal(await isolated.locator('#runAnalysis .skill-empty').isVisible(),true);await isolated.locator('#runAnalysis .skill-search').fill('');
+        await isolated.locator('[data-run-fight]').focus();await isolated.keyboard.press('/');assert.equal(await isolated.locator('#runAnalysis .skill-search').evaluate(e=>document.activeElement===e),true);
+        for(const width of [1440,768,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'run-analysis-'+width+'.png'),fullPage:true});}
+        await check('late dungeon analyses cannot replace a newer run or reopen its report',async()=>{
+          slow=true;await isolated.evaluate(()=>{openRun(1);});await delay(80);await isolated.evaluate(()=>openRun(2));await delay(450);
+          assert.equal(await isolated.locator('#runAnalysis [data-run-plot] svg').count(),0);assert.match(await isolated.locator('#runAnalysis [data-run-summary]').textContent(),/0/);assert.equal(await isolated.locator('[data-run-fight]').isDisabled(),true);
+        });
+      } finally {await isolated.close();}
+    });
     await check('activity hierarchy separates expeditions, bosses and ended runs and keeps manual unknown mappings',async()=>{
       const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
       const attempt=(dps,id='f1')=>({dps,started_at:run.started_at,duration_ms:90000,fight_id:id,job:'cleric',numeric_limited:0});
@@ -664,7 +693,7 @@ const server = http.createServer((req,res) => {
         document.querySelector('#fightContent').innerHTML=skillTable(Array.from({length:100},(_,i)=>({name:'Langer Skill '+i+' '+('S'.repeat(120)),damage:2000000000,hits:1})));
         bindSkillTables(document.querySelector('#fightContent'));document.querySelector('#fightDialog').showModal();
       });
-      assert.equal(await page.locator('.skill-browser tbody tr').count(),100);
+      assert.equal(await page.locator('#fightContent .skill-browser tbody tr').count(),100);
       assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
       await page.locator('#closeDialog').click();live.rows=oldRows;live.numeric_limited=false;
       await page.setViewportSize({width:1440,height:1000});
@@ -704,7 +733,7 @@ const server = http.createServer((req,res) => {
       await page.waitForFunction(()=>settings.skill_language==='en'&&!settingsDirty&&!settingsSaving);assert.equal(settings.skill_language,'en');
       await page.evaluate(()=>show('live'));await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();
       await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
-      assert.match(await page.locator('.skill-browser').first().textContent(),/Strike/);assert.ok(await page.locator('.skill-browser .game-icon').count()>0);
+      assert.match(await page.locator('#fightContent .skill-browser').first().textContent(),/Strike/);assert.ok(await page.locator('#fightContent .skill-browser .game-icon').count()>0);
       const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'FeroxTOO');assert.equal(exported.players[1].name,'Spieler 2');
       await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
     });
@@ -730,7 +759,7 @@ const server = http.createServer((req,res) => {
       await page.keyboard.type('boss');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightSearch').inputValue(),'');
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
       await page.locator('#refreshPlayer').focus();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('skill-search')),true);
-      await page.keyboard.type('nothing');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),true);assert.equal(await page.locator('.skill-search').first().inputValue(),'');
+      await page.keyboard.type('nothing');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),true);assert.equal(await page.locator('#fightContent .skill-search').first().inputValue(),'');
       await page.keyboard.press('Escape');assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),false);
     });
     await check('clipboard fallback stays inside modal and cleans up on failure',async()=>{

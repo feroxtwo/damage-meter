@@ -8,7 +8,7 @@ function handleSearchShortcut(e) {
   }
   if(e.key!=='/'||target?.closest('input,textarea,select'))return;
   const dialog=document.querySelector('dialog[open]');
-  const search=dialog?dialog.querySelector('input[type="search"]'):document.querySelector(tab==='skills'?'#skills.active #catalogSearch':'#runs.active #fightSearch');
+  const search=dialog?dialog.querySelector('input[type="search"]'):document.querySelector(tab==='skills'?'#skills.active #catalogSearch':document.querySelector('#runDetail')?.style.display==='block'?'#runs.active #runAnalysis input[type="search"]':'#runs.active #fightSearch');
   if(search){e.preventDefault();search.focus();search.select();}
 }
 document.addEventListener('keydown',handleSearchShortcut);

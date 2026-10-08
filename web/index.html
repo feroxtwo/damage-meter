@@ -437,6 +437,7 @@ async function toggleRunFavorite(button, run) {
 }
 
 async function loadRuns(reset) {
+  $('#runs').classList.remove('run-open');
   $('#runDetail').style.display = 'none'; $('#runList').style.display = 'block';
   const request = ++runsRequest;
   $('#runPrev').disabled = $('#runNext').disabled = true;
@@ -476,20 +477,23 @@ async function openRun(id) {
   const request = ++runsRequest;
   const r = await api('/api/runs/' + id);
   if (request !== runsRequest || tab !== 'runs') return;
+  $('#runs').classList.add('run-open');
   $('#runList').style.display = 'none';
   const el = $('#runDetail'); el.style.display = 'block';
   el.innerHTML = `<button class="btn back" id="backBtn">← Zurück</button>
   <div class="card"><div class="row" style="justify-content:space-between">
     <div><div style="font-size:20px;font-weight:700">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
-    <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} Bosskämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
+    <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} erfasste Kämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
     <div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
     <button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Löschen</button></div></div>
     <div style="margin-top:10px">${r.members.map(chip).join('')}</div></div>
   <div class="card"><h2>Gesamt über erfasste Kämpfe</h2><p class="analysis-note">${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}</p>${bars(r.totals)}</div>
+  <div class="card" id="runAnalysis"><h2>Dungeon-Gesamtstatistik</h2><p class="muted">Skills und Damageverlauf werden geladen …</p></div>
   ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Unbekannter Gegner')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
     <span class="muted"> · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden · ${date(f.started_at)}</span>
     <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
     ${bars(f.players)}<div class="skills" id="sk-${esc(f.id)}"></div></details></div>`).join('')}`;
+  if(window.loadRunAnalysis)task(loadRunAnalysis(id,request));
   $('#backBtn').onclick = () => loadRuns(false);
   const star = el.querySelector('[data-fav-run]'); star.onclick = () => task(toggleRunFavorite(star, r));
   $('#noteBtn').onclick = async () => { await api(`/api/runs/${id}/note`, { method: 'POST', body: JSON.stringify({ note: $('#noteIn').value }) }); toast('Notiz gespeichert.'); };
@@ -719,5 +723,6 @@ show(tab);
 <script src="/skills.js"></script>
 <script src="/enhancements.js"></script>
 <script src="/qol.js"></script>
+<script src="/run-analysis.js"></script>
 </body>
 </html>

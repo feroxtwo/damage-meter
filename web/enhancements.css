@@ -304,3 +304,9 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 
 .activity-filters [hidden]{display:none}.activity-filters .attempt-limit{flex:0 1 130px}
 @media(max-width:600px){.activity-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.activity-filters label{font-size:12px}.activity-filters .attempt-limit{grid-row:1;grid-column:2}.activity-filters #contentFilter{grid-column:1 / -1}.activity-filters label:has(#bossSel){grid-column:1 / -1;grid-row:3}.activity-filters:has(#contentFilter[hidden]) label:has(#bossSel){grid-row:2}#activityMapping{font-size:12px;margin:8px 0;padding:4px 8px}}
+
+/* Run-wide analysis uses the same instruments as the combat report. */
+#runAnalysis .run-analysis-tools label{flex:1 1 160px;min-width:0}#runAnalysis .run-analysis-tools select{width:100%;min-width:0}#runAnalysis .trend-summary{margin:18px 0}#runAnalysis h3{margin-top:24px}#runAnalysis .curve-readout{margin:12px 0}#runAnalysis .skill-tools{flex-wrap:wrap}
+@media(max-width:600px){#runAnalysis .run-analysis-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#runAnalysis .run-analysis-tools label:first-child{grid-column:1 / -1}#runAnalysis .trend-summary strong{font-size:22px}#runAnalysis .skill-tools input{min-width:0;max-width:100%}}
+
+#runs.run-open #fightLibrary,#runs.run-open #mobLibrary{display:none}

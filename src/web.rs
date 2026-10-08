@@ -143,6 +143,19 @@ async fn run_detail(
     .ok_or(StatusCode::NOT_FOUND)
 }
 
+async fn run_analysis(
+    State(engine): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| {
+        e.db.run_analysis(id).map(|v| v.map(|v| display(e, v)))
+    })
+    .await?
+    .map_err(db_error)?
+    .map(Json)
+    .ok_or(StatusCode::NOT_FOUND)
+}
+
 async fn delete_run(
     State(engine): State<AppState>,
     headers: HeaderMap,
@@ -567,11 +580,21 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
                 )
             }),
         )
+        .route(
+            "/run-analysis.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/run-analysis.js"),
+                )
+            }),
+        )
         .route("/api/version", get(version))
         .route("/api/update-check", post(update_check))
         .route("/api/live", get(live))
         .route("/api/runs", get(runs))
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
+        .route("/api/runs/{id}/analysis", get(run_analysis))
         .route("/api/runs/{id}/note", post(run_note))
         .route("/api/runs/{id}/favorite", post(run_favorite))
         .route("/api/fights", get(search_fights))
@@ -663,6 +686,76 @@ mod tests {
             builder = builder.header(ACTION_HEADER, "1");
         }
         builder.body(Body::from(body.to_string())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn run_analysis_is_read_only_handles_empty_missing_runs_and_serves_script() {
+        let engine = Engine::new(
+            crate::db::Db::in_memory().unwrap(),
+            "de",
+            std::env::temp_dir(),
+        );
+        let id = engine.db.start_run(600093, 1000, Some("Me"), 1).unwrap();
+        let app = router(engine, "127.0.0.1:8787".parse().unwrap());
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/api/runs/{id}/analysis"),
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        let report: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 1_000_000).await.unwrap())
+                .unwrap();
+        assert_eq!(report["id"], id);
+        assert_eq!(report["fights"], json!([]));
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/runs/999999/analysis",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let response = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                &format!("/api/runs/{id}/analysis"),
+                "localhost:8787",
+                true,
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        let response = app
+            .oneshot(request(
+                "GET",
+                "/run-analysis.js",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        let script = to_bytes(response.into_body(), 100_000).await.unwrap();
+        assert!(String::from_utf8_lossy(&script).contains("function runCombatModel"));
     }
 
     #[tokio::test]

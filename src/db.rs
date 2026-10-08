@@ -840,7 +840,10 @@ impl Db {
     }
 
     pub fn run_detail(&self, run_id: i64) -> Result<Option<Value>> {
-        let conn = self.conn.lock();
+        Self::run_detail_from(&self.conn.lock(), run_id)
+    }
+
+    fn run_detail_from(conn: &Connection, run_id: i64) -> Result<Option<Value>> {
         let mut stmt = conn.prepare("SELECT * FROM runs WHERE id = ?1")?;
         let Some(mut run) = rows_to_json(&mut stmt, params![run_id])?.into_iter().next() else {
             return Ok(None);
@@ -853,7 +856,7 @@ impl Db {
         decorate_job(&mut members);
         let mut stmt = conn.prepare(
             "SELECT id, boss_name, mob_code, started_at, duration_ms, total_damage, max_hp, is_train
-             FROM fights WHERE run_id = ?1 ORDER BY started_at",
+             FROM fights WHERE run_id = ?1 ORDER BY started_at, id",
         )?;
         let mut fights = rows_to_json(&mut stmt, params![run_id])?;
         let mut stmt = conn.prepare(
@@ -886,7 +889,10 @@ impl Db {
     }
 
     pub fn fight_detail(&self, fight_id: &str) -> Result<Option<Value>> {
-        let conn = self.conn.lock();
+        Self::fight_detail_from(&self.conn.lock(), fight_id)
+    }
+
+    fn fight_detail_from(conn: &Connection, fight_id: &str) -> Result<Option<Value>> {
         let mut stmt = conn.prepare(
             "SELECT id, run_id, boss_name, mob_code, target_id, dungeon_id, started_at, duration_ms, total_damage, max_hp,
                     is_train, record_json FROM fights WHERE id = ?1",
@@ -902,7 +908,7 @@ impl Db {
             .and_then(|s| serde_json::from_str(s).ok());
         fight.as_object_mut().map(|o| o.remove("record_json"));
         let mut stmt = conn.prepare(
-            "SELECT actor_id, name, job, damage, dps, share, heal, damage_received, hits_received, died,
+            "SELECT actor_id, name, job, server_id, damage, dps, share, heal, damage_received, hits_received, died,
                     combat_power, is_self
              FROM fight_players WHERE fight_id = ?1 ORDER BY damage DESC",
         )?;
@@ -997,6 +1003,28 @@ impl Db {
         }
         fight["players"] = Value::Array(players);
         Ok(Some(fight))
+    }
+
+    /// One consistent read of the recorded run, without training. Reuse the
+    /// fight-detail decoder so legacy records and skill metadata behave alike.
+    pub fn run_analysis(&self, run_id: i64) -> Result<Option<Value>> {
+        let conn = self.conn.lock();
+        let Some(mut run) = Self::run_detail_from(&conn, run_id)? else {
+            return Ok(None);
+        };
+        let mut fights = Vec::new();
+        for fight in run["fights"].as_array().into_iter().flatten() {
+            if fight["is_train"].as_i64() == Some(1) {
+                continue;
+            }
+            if let Some(detail) =
+                Self::fight_detail_from(&conn, fight["id"].as_str().unwrap_or_default())?
+            {
+                fights.push(detail);
+            }
+        }
+        run["fights"] = Value::Array(fights);
+        Ok(Some(run))
     }
 
     pub fn save_analytics(&self, id: &str, data: &Value) -> Result<()> {
@@ -1642,6 +1670,59 @@ mod tests {
             assert_eq!(group["attempts"].as_array().unwrap().len(), 2);
             assert_eq!(group["attempts"][0]["dps"], 0.0);
         }
+    }
+
+    #[test]
+    fn run_analysis_decodes_all_saved_fights_without_training_or_other_runs() {
+        let db = Db::in_memory().unwrap();
+        let run = db.start_run(600093, 0, Some("Me"), 0).unwrap();
+        let first = record("first", 1000, 1000);
+        let second = record("second", 20_000, 2000);
+        let mut training = record("dummy", 40_000, 1_000_000);
+        training.is_train = true;
+        db.save_fights(
+            &[first, second, training],
+            0,
+            &["Me".into()],
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        db.save_analytics(
+            "first",
+            &json!({"resolution_ms":500,"points":[{"ms":500,"damage":{"1":1000}}]}),
+        )
+        .unwrap();
+        db.end_run(run, 60_000).unwrap();
+        let other = db.start_run(600092, 100_000, Some("Me"), 0).unwrap();
+        let mut elsewhere = record("elsewhere", 101_000, 50_000);
+        elsewhere.dungeon_id = 600092;
+        db.save_fights(&[elsewhere], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        db.end_run(other, 120_000).unwrap();
+        let analysis = db.run_analysis(run).unwrap().unwrap();
+        assert_eq!(analysis["id"], run);
+        let fights = analysis["fights"].as_array().unwrap();
+        assert_eq!(fights.len(), 2);
+        assert_eq!(fights[0]["id"], "first");
+        assert_eq!(fights[1]["id"], "second");
+        assert_eq!(fights[0]["analytics"]["points"][0]["damage"]["1"], 1000);
+        let own = fights[0]["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["is_self"] == 1)
+            .unwrap();
+        assert_eq!(own["skills"][0]["damage"], 1000);
+        assert!(own.as_object().unwrap().contains_key("server_id"));
+        assert!(db.run_analysis(999999).unwrap().is_none());
+        db.conn
+            .lock()
+            .execute("UPDATE fights SET record_json=NULL WHERE id='second'", [])
+            .unwrap();
+        let legacy = db.run_analysis(run).unwrap().unwrap();
+        assert!(legacy["fights"][1]["players"][0]["skills"].is_null());
+        assert_eq!(legacy["fights"][1]["players"][0]["damage"], 2000);
     }
 
     #[test]

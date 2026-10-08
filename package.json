@@ -2,7 +2,7 @@
   "name": "aion2-meter-web-tests",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-insights.cjs && node scripts/test-skill-ui.cjs && node scripts/test-chart-ui.cjs && node scripts/test-web.cjs"
+    "test": "node scripts/test-insights.cjs && node scripts/test-skill-ui.cjs && node scripts/test-chart-ui.cjs && node scripts/test-run-analysis.cjs && node scripts/test-web.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"
