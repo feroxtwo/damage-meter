@@ -413,13 +413,22 @@ impl Overlay {
             } else {
                 row.name.clone()
             };
+            response.on_hover_text(format!(
+                "{}. {}\n{} gesamt · {}/s · {:.1}%{}",
+                i + 1,
+                name,
+                short_number(value),
+                short_number(rate),
+                value * 100.0 / total,
+                if row.dead { "\nTod erfasst" } else { "" },
+            ));
             let primary = if show_dps {
                 format!("{}/s", short_number(rate))
             } else {
                 short_number(value)
             };
             let share = format!("{:0.0}%", value * 100.0 / total);
-            let primary_font = FontId::proportional(13.0);
+            let primary_font = FontId::proportional(14.0);
             let primary_width = p
                 .layout_no_wrap(primary.clone(), primary_font.clone(), Color32::WHITE)
                 .size()

@@ -75,7 +75,7 @@ try:
             for compact in [True,False]:
                 backdrop_pixels=[]
                 for scene,color in [('dark','#101820'),('bright','#e8ddbf')]:
-                    subprocess.run(['xsetroot','-solid',color],env=env,check=True)
+                    subprocess.run(['hsetroot','-solid',color],env=env,check=True)
                     s=get();s.update(scale=1,compact=compact,theme=theme,opacity=.6);post(s)
                     width=312 if compact else 360
                     height=compact_height if compact else 40+22+30*row_count+4
@@ -89,7 +89,7 @@ try:
             g=wait_geometry(312*scale,(36+20+22*24+4)*scale)
             ImageGrab.grab(xdisplay=env['DISPLAY']).crop((0,0,int(g['WIDTH'])+90,int(g['HEIGHT'])+90)).save(output/f'native-24-rows-{scale}.png')
         s=get();s.update(compact=True,scale=1,max_rows=5);post(s);wait_geometry(312,compact_height)
-        subprocess.run(['xsetroot','-solid','black'],env=env,check=True)
+        subprocess.run(['hsetroot','-solid','black'],env=env,check=True)
     s=get();s.update(visible=False,locked=True);post(s);time.sleep(.5)
     g=geometry(); hidden=ImageGrab.grab(xdisplay=env['DISPLAY']).crop((int(g['X']),int(g['Y']),int(g['X'])+int(g['WIDTH']),int(g['Y'])+int(g['HEIGHT'])))
     assert hidden.getbbox() is None,'Hidden overlay still paints content'

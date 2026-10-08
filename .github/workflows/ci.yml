@@ -24,7 +24,7 @@ jobs:
         with:
           name: history-benchmark
           path: test-artifacts/benchmark/
-      - run: sudo apt-get update && sudo apt-get install -y rpm xvfb xdotool python3-pil desktop-file-utils xfonts-base x11-xserver-utils picom libegl1-mesa libgl1-mesa-dri libxkbcommon0 libxkbcommon-x11-0
+      - run: sudo apt-get update && sudo apt-get install -y rpm xvfb xdotool python3-pil desktop-file-utils xfonts-base hsetroot picom libegl1-mesa libgl1-mesa-dri libxkbcommon0 libxkbcommon-x11-0
       - run: python3 scripts/test-native-dependencies.py
       - run: python3 scripts/test-installer.py
       - run: python3 scripts/test-native.py
