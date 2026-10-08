@@ -122,8 +122,8 @@ function renderRunAnalysis(root, run) {
   const scope = root.querySelector('[data-run-player]'), metric = root.querySelector('[data-run-metric]'), smooth = root.querySelector('[data-run-window]');
   const own = model.players.filter(p => p.is_self && (!character || p.name === character));
   if (own.length === 1) scope.value = own[0].key;
-  let selected = -1;
-  function render() {
+  let selected = -1, selectedTime = -1;
+  function render(updateSkills = true) {
     const selection = runSelection(model, scope.value), unit = metric.value === 'total' ? 'Schaden' : 'DPS';
     const {samples, missing, partial} = runDamageSamples(model, scope.value, Number(smooth.value), metric.value);
     smooth.disabled = metric.value === 'total';
@@ -136,7 +136,7 @@ function renderRunAnalysis(root, run) {
       (partial ? `${partial} ${partial === 1 ? 'Kampf' : 'Kämpfe'} mit unvollständigen Verlaufsdaten. ` : '') +
       (model.windows.some(w => w.fight.numeric_limited) ? 'Parser-Zahlengrenze in mindestens einem Kampf; Messwerte können begrenzt sein. ' : '') +
       (metric.value === 'total' ? 'Gesamtschaden enthält die gespeicherten Summen vorheriger Kämpfe; Lücken werden nicht interpoliert.' : smooth.value === '0' ? 'DPS je gespeichertem Beobachtungsintervall innerhalb desselben Kampfes; keine Glättung.' : '5s-Glättung verwendet ausschließlich Beobachtungen innerhalb desselben Kampfes und zusammenhängenden Zeitfensters.');
-    const plot = root.querySelector('[data-run-plot]');
+    const plot = root.querySelector('[data-run-plot]'); root.drawnWidth = root.clientWidth;
     plot.innerHTML = curveMarkup(samples, [{name: scope.value === 'group' ? 'Gesamte Gruppe' : label(selection.players[0]),
       color: 'var(--accent)', value: p => p[metric.value]}], {label: 'Dungeon-' + unit + '-Verlauf', unit,
       end: model.duration, width: Math.min(900, root.clientWidth || 900)});
@@ -145,6 +145,7 @@ function renderRunAnalysis(root, run) {
     const show = i => {
       selected = Math.max(0, Math.min(samples.length - 1, i)); range.value = selected;
       const point = samples[selected]; if (!point) {readout.textContent = 'Keine zeitliche Schadensaufzeichnung vorhanden.'; return;}
+      selectedTime = point.ms;
       const text = `${dur(point.ms)} Kampfzeit · ${point.boss} · ${dur(point.fight_ms)} im Kampf`;
       readout.innerHTML = `<strong>${num(point[metric.value])} ${unit}</strong><span>${esc(text)}</span>`;
       range.setAttribute('aria-valuetext', text + '; ' + num(point[metric.value]) + ' ' + unit);
@@ -152,7 +153,8 @@ function renderRunAnalysis(root, run) {
       const svg = plot.querySelector('svg'), cross = plot.querySelector('.curve-cross');
       if (cross) {const x = 58 + point.ms / Math.max(1000, model.duration) * (svg.viewBox.baseVal.width - 76); cross.setAttribute('x1', x); cross.setAttribute('x2', x);}
     };
-    show(selected < 0 ? samples.length - 1 : selected); range.oninput = () => show(Number(range.value));
+    const restored = selectedTime < 0 ? samples.length - 1 : samples.findIndex(p => p.ms >= selectedTime);
+    show(restored < 0 ? samples.length - 1 : restored); range.oninput = () => show(Number(range.value));
     const hit = plot.querySelector('.curve-hit');
     if (hit) hit.onpointerdown = hit.onpointermove = e => {
       const bounds = hit.getBoundingClientRect(), ms = Math.max(0, Math.min(1, (e.clientX - bounds.left) / bounds.width)) * model.duration;
@@ -161,12 +163,24 @@ function renderRunAnalysis(root, run) {
       if (lo && Math.abs(samples[lo - 1].ms - ms) < Math.abs(samples[lo].ms - ms)) lo--;
       show(lo);
     };
-    root.querySelector('[data-run-skill-note]').textContent = `Skill-Aufzeichnungen: ${selection.skill_fights} von ${selection.player_fights} Spieler-Kampfteilnahmen. Skills mit gleicher ID und gleichem DoT/HoT-Typ werden summiert; Skill-DPS verwendet die gesamte gemeinsame Kampfzeit. ` +
-      (selection.skill_fights < selection.player_fights ? 'Fehlende Skilldaten bleiben unbekannt; die Skilltabelle kann weniger Schaden als die Gesamtsumme enthalten. ' : '') +
-      'Trefferquoten werden nach Trefferzahl gewichtet; unbekannte Merkmale bleiben unbekannt.';
-    root.querySelector('[data-run-skills]').innerHTML = skillTable(selection.skills);
-    bindSkillTables(root);
+    if (updateSkills) {
+      root.querySelector('[data-run-skill-note]').textContent = `Skill-Aufzeichnungen: ${selection.skill_fights} von ${selection.player_fights} Spieler-Kampfteilnahmen. Skills mit gleicher ID und gleichem DoT/HoT-Typ werden summiert; Skill-DPS verwendet die gesamte gemeinsame Kampfzeit. ` +
+        (selection.skill_fights < selection.player_fights ? 'Fehlende Skilldaten bleiben unbekannt; die Skilltabelle kann weniger Schaden als die Gesamtsumme enthalten. ' : '') +
+        'Trefferquoten werden nach Trefferzahl gewichtet; unbekannte Merkmale bleiben unbekannt.';
+      root.querySelector('[data-run-skills]').innerHTML = skillTable(selection.skills);
+      bindSkillTables(root);
+    }
   }
-  scope.onchange = () => {selected = -1; render();}; metric.onchange = smooth.onchange = render;
+  scope.onchange = () => {selected = -1; selectedTime = -1; render();}; metric.onchange = smooth.onchange = () => render(false);
+  root.redrawRunChart = () => render(false);
   render();
 }
+
+let runResizeFrame = 0;
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(runResizeFrame);
+  runResizeFrame = requestAnimationFrame(() => {
+    const root = document.querySelector('#runAnalysis');
+    if (tab === 'runs' && root?.offsetParent && root.clientWidth !== root.drawnWidth) root.redrawRunChart?.();
+  });
+});

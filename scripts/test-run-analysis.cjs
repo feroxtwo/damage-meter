@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../web/enhancements.js'), 'utf8');
-const context = vm.createContext({num: String, dur: String, esc: String});
+const context = vm.createContext({num: String, dur: String, esc: String, window: {addEventListener() {}}});
 vm.runInContext(source.slice(source.indexOf('function damageSamples('), source.indexOf('function hitTimeline(')), context);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../web/run-analysis.js'), 'utf8'), context);
 const run = expression => vm.runInContext(expression, context), plain = value => JSON.parse(JSON.stringify(value));
