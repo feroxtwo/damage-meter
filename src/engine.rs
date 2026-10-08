@@ -337,6 +337,20 @@ impl Engine {
                 && !lookup.is_boss(code)
                 && !lookup.is_training_dummy(code)
         });
+        let lookup = npcs.clone();
+        db.set_activity_check(move |id, code| {
+            if id > 0 {
+                names::dungeon_activity(id).unwrap_or("unclassified").into()
+            } else if id < 0 || code <= 0 || lookup.get_npc_name(code).is_empty() {
+                "unclassified".into()
+            } else if lookup.is_boss(code) {
+                "field_boss".into()
+            } else if !lookup.is_training_dummy(code) {
+                "open_world".into()
+            } else {
+                "unclassified".into()
+            }
+        });
         let named = db.fill_missing_boss_names(|code| npcs.get_npc_name(code));
         if let Ok(n @ 1..) = named {
             tracing::info!("Named {n} saved fight(s)");

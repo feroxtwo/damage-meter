@@ -13,6 +13,7 @@ Für jeden Durchlauf festhalten: Meter-Commit, Spielversion, Uhrzeit, Charakter/
 | ☐ | Gespeicherten Versuch nach Zielwechsel prüfen | Bericht passt über ID, Start, Boss und eigenen Charakter; fehlender Datensatz erzeugt keine Ergebnisbehauptung, kein automatischer Siegtext |
 | ☐ | Training und Bestwertzustände im Spiel prüfen | Erster Treffer, reale Trainingszeit, eigene Schadenssumme, Charakter/Ziel/Dauer und bestätigter Bestwert; Abbruch bleibt ohne fertiges Ergebnis |
 | ☐ | Persönlichen und Gruppen-Peak nachprüfen | Wirklich beobachtetes 5s-Fenster samt Rastergrenzen; Kürzungen und Lücken korrekt gekennzeichnet, Treffer/Ticks nicht als Casts interpretiert |
+| ☐ | Bereiche und Expeditionen mit realen Gebiets-/Mob-IDs abgleichen | Feldboss/Open World, Expedition/Schwierigkeit, Secret Dungeon/Nightmare; Gesamt-Run-Schaden und gemeinsame erfasste Kampfzeit gegen Run-Details prüfen, eigene Zuordnung nachvollziehen |
 | ☐ | Boss-Entwicklung am selben Charakter und derselben Klasse prüfen | Rang/Bestwert im gewählten Ausschnitt und Vergleich mit vorherigem Durchschnitt nachvollziehbar; Kill-/Wipe-Erkennung separat prüfen |
 | ☐ | Bestehendes natives Overlay während heller und dunkler Kämpfe lesen | Ziel, Zeit, eigene Rate/Rang und Gruppenrate schnell erfassbar; menschliche Prüfung des Ein-Sekunden-Ziels |
 | ☐ | Native Skalierung und Zeilenstress prüfen | 60/100/150/200/250 %, lange Namen, große Zahlen, viele Spieler, alle Themes, normale/kompakte Zeilen und Tot-Status ohne relevante Überdeckung |
