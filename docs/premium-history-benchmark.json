@@ -1,0 +1,56 @@
+{
+  "synthetic": true,
+  "fights": 5000,
+  "runs": 500,
+  "players_per_fight": 4,
+  "startup_ms": 29.24,
+  "requests": 140,
+  "workers": 4,
+  "elapsed_s": 2.19,
+  "cpu_s": 2.29,
+  "rss_kib_before": 22052,
+  "rss_kib_after": 39756,
+  "rss_kib_idle": 39756,
+  "idle_cpu_s_over_5s": 0.0,
+  "endpoints": {
+    "/api/live": {
+      "median_ms": 1.19,
+      "p95_ms": 2.35,
+      "max_ms": 2.62
+    },
+    "/api/fights?query=Boss&character=Me": {
+      "median_ms": 78.52,
+      "p95_ms": 102.31,
+      "max_ms": 122.73
+    },
+    "/api/runs?character=Me": {
+      "median_ms": 85.38,
+      "p95_ms": 116.8,
+      "max_ms": 124.47
+    },
+    "/api/stats/summary": {
+      "median_ms": 87.67,
+      "p95_ms": 116.81,
+      "max_ms": 117.85
+    },
+    "/api/stats/boss-history": {
+      "median_ms": 109.55,
+      "p95_ms": 121.11,
+      "max_ms": 124.1
+    },
+    "/api/runs/1": {
+      "median_ms": 36.28,
+      "p95_ms": 72.91,
+      "max_ms": 100.34
+    },
+    "/api/fights/bench0": {
+      "median_ms": 33.32,
+      "p95_ms": 44.38,
+      "max_ms": 91.32
+    }
+  },
+  "limitations": [
+    "Synthetic history only; no network capture/event-rate benchmark.",
+    "Shared container and no long-running session; not proof of absence of memory leaks."
+  ]
+}
