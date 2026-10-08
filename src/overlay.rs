@@ -239,7 +239,14 @@ impl Overlay {
             ],
             Stroke::new(1.5_f32, Color32::from_rgb(91, 213, 222)),
         );
-        shadow_text(p,rect.left_top()+Vec2::new(8.0,7.0),Align2::LEFT_TOP,"A2",FontId::monospace(9.0),Color32::from_rgb(91,213,222));
+        shadow_text(
+            p,
+            rect.left_top() + Vec2::new(8.0, 7.0),
+            Align2::LEFT_TOP,
+            "A2",
+            FontId::monospace(9.0),
+            Color32::from_rgb(91, 213, 222),
+        );
         let title = if live.target_name.is_empty() {
             "Kein Ziel"
         } else {
@@ -488,7 +495,16 @@ impl Overlay {
             } else {
                 Color32::WHITE
             };
-            if row.is_self { p.rect_filled(Rect::from_center_size(inner.left_center()+Vec2::new(15.0,-3.0),Vec2::new(24.0,18.0)),2,with_alpha(palette(&settings.theme).2,22)); }
+            if row.is_self {
+                p.rect_filled(
+                    Rect::from_center_size(
+                        inner.left_center() + Vec2::new(15.0, -3.0),
+                        Vec2::new(24.0, 18.0),
+                    ),
+                    2,
+                    with_alpha(palette(&settings.theme).2, 22),
+                );
+            }
             shadow_text(
                 p,
                 inner.left_center() + Vec2::new(7.0, -3.0),
@@ -592,7 +608,10 @@ impl Overlay {
                 "keine Capture-Berechtigung".to_string(),
             )
         } else if live.numeric_limited {
-            (Color32::from_rgb(230,180,60),"Zahlengrenze: Näherungswerte".to_string())
+            (
+                Color32::from_rgb(230, 180, 60),
+                "Zahlengrenze: Näherungswerte".to_string(),
+            )
         } else if c.locked_port.is_some() {
             (
                 Color32::from_rgb(80, 200, 100),
@@ -610,7 +629,11 @@ impl Overlay {
         } else {
             (Color32::from_gray(140), "AION2 nicht gestartet".to_string())
         };
-        let state=if c.recording.is_some() {format!("REC · {state}")} else {state};
+        let state = if c.recording.is_some() {
+            format!("REC · {state}")
+        } else {
+            state
+        };
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
         let controls = !live.overlay.locked && ui.rect_contains_pointer(rect);
         let mut state_rect = rect;

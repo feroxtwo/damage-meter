@@ -157,13 +157,13 @@ function renderLiveSignal(l) {
   const damage=metricKey()==='damage';root.parentElement.hidden=!damage;$('.performance-hero').classList.toggle('without-signal',!damage);
   if(!damage)return;
   if(points.length<2){root.setAttribute('aria-label','Noch keine zusammenhängenden lokalen Burst-Beobachtungen.');root.innerHTML='<span class="signal-empty">Verlauf entsteht mit neuen Live-Beobachtungen.</span>';return;}
-  const end=points.at(-1).ms,start=Math.max(0,end-60000),max=Math.max(1,...points.map(p=>p.value));
+  const end=points.at(-1).ms,start=Math.max(0,end-60000),observedMax=Math.max(0,...points.map(p=>p.value)),max=Math.max(1,observedMax);
   // A missing polling interval is a visible break, never a connecting fabricated trend.
   const segments=[];let segment=[];
   for(const p of points){if(segment.length&&p.ms-segment.at(-1).ms>3000){segments.push(segment);segment=[];}segment.push(p);}segments.push(segment);
-  root.setAttribute('aria-label',`Eigener beobachteter Burst von ${dur(start)} bis ${dur(end)}, höchster empfangener Wert ${num(max)} pro Sekunde. Nur lokale Live-Beobachtungen.`);
+  root.setAttribute('aria-label',`Eigener beobachteter Burst von ${dur(start)} bis ${dur(end)}, höchster empfangener Wert ${num(observedMax)} pro Sekunde. Nur lokale Live-Beobachtungen.`);
   const paths=segments.filter(v=>v.length>1).map(v=>'M'+v.map(p=>`${((p.ms-start)/Math.max(1,end-start)*600).toFixed(1)},${(108-p.value/max*88).toFixed(1)}`).join(' L'));
-  root.innerHTML=`<svg viewBox="0 0 600 130" aria-hidden="true" preserveAspectRatio="none"><path class="signal-grid" d="M0 20H600 M0 64H600 M0 108H600"/>${paths.map(d=>`<path class="signal-line" d="${d}"/>`).join('')}</svg><div class="signal-scale"><span>${dur(start)}</span><span>${num(max)}/s beobachtet</span><span>${dur(end)}</span></div>`;
+  root.innerHTML=`<svg viewBox="0 0 600 130" aria-hidden="true" preserveAspectRatio="none"><path class="signal-grid" d="M0 20H600 M0 64H600 M0 108H600"/>${paths.map(d=>`<path class="signal-line" d="${d}"/>`).join('')}</svg><div class="signal-scale"><span>${dur(start)}</span><span>${num(observedMax)}/s beobachtet</span><span>${dur(end)}</span></div>`;
 }
 
 let previousEncounter=null,postFightRequest=0;

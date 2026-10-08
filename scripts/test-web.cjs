@@ -733,11 +733,12 @@ const server = http.createServer((req,res) => {
     });
     await check('saved attempt moment requires the exact stored encounter and clears on character change',async()=>{
       const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
-      const stored=telemetryFight('auto_9_1000');
+      const stored=telemetryFight('auto_9_1000');let current={...live};
+      await isolated.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...current,capture:{...live.capture,last_packet_ms:Date.now()}})}));
       await isolated.route('**/api/fights/auto_9_1000',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(stored)}));
       try {
         await isolated.goto(base);await isolated.waitForFunction(()=>typeof renderEnhancedLive==='function');
-        await isolated.evaluate(()=>{renderEnhancedLive({...latestLive,target_started_at:1000});renderEnhancedLive({...latestLive,target_started_at:2000,battle_time_ms:1000});});
+        current={...live,target_started_at:2000,battle_time_ms:1000,total_damage:105000,rows:live.rows.map(r=>({...r,damage:r.dps}))};
         await isolated.locator('#postFight').waitFor();assert.match(await isolated.locator('#postFight').textContent(),/LETZTER GESPEICHERTER VERSUCH/);
         assert.doesNotMatch(await isolated.locator('#postFight').textContent(),/Sieg|Kampf beendet/);
         await isolated.locator('#postFight [data-story-peak]').click();await isolated.locator('#fightDialog').waitFor();assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
@@ -751,7 +752,7 @@ const server = http.createServer((req,res) => {
     await check('training instrument shows actual elapsed time, finished result and interruption',async()=>{
       const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
       let training={state:'armed',seconds:60,started_at:1000};
-      await isolated.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...live,target_mode:'trainTargets',battle_time_ms:training.state==='running'?42000:60000,rows:live.rows.map(r=>r.is_self?{...r,damage:training.state==='running'?2024400:3186000,dps:training.state==='running'?48200:53100}:r),training})}));
+      await isolated.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...live,target_mode:'trainTargets',target_name:'Trainingsziel (synthetisch)',target_hp:null,dungeon:null,capture:{...live.capture,last_packet_ms:Date.now()},battle_time_ms:training.state==='running'?42000:60000,rows:live.rows.map(r=>r.is_self?{...r,damage:training.state==='running'?2024400:3186000,dps:training.state==='running'?48200:53100}:{...r,damage:r.dps*(training.state==='running'?42:60)}),training})}));
       try {
         await isolated.goto(base);await isolated.waitForFunction(()=>document.querySelector('#trainingResult').textContent.includes('Warte auf ersten Treffer'));
         training={...training,state:'running',elapsed_ms:42000,target_id:9};
@@ -791,7 +792,10 @@ const server = http.createServer((req,res) => {
       const bars=await page.$$eval('#liveRows .bar',rows=>rows.map(r=>{const f=r.querySelector('.fill');return {height:f.getBoundingClientRect().height,width:f.getBoundingClientRect().width,opacity:Number(getComputedStyle(f).opacity)};}));
       assert.ok(bars.length>=3&&bars.every(b=>b.height>=4&&b.opacity>=.7)&&Math.abs(bars[1].width/bars[0].width-2/3)<.02,JSON.stringify(bars));
       await page.selectOption('#liveMetric','heal');assert.equal(await page.locator('#selfBurst').isVisible(),false);assert.match(await page.locator('#selfDpsLabel').textContent(),/HPS/);
-      await page.selectOption('#liveMetric','damage');await page.emulateMedia({reducedMotion:'reduce'});
+      await page.selectOption('#liveMetric','damage');
+      await page.evaluate(()=>{for(let i=0;i<2;i++)renderLiveSignal({...latestLive,target_started_at:777,battle_time_ms:1000+i*1000,rows:latestLive.rows.map(r=>({...r,burst_dps:0}))});});
+      assert.match(await page.locator('#liveSignal').getAttribute('aria-label'),/höchster empfangener Wert 0 pro Sekunde/);assert.match(await page.locator('.signal-scale').textContent(),/0\/s beobachtet/);
+      await page.emulateMedia({reducedMotion:'reduce'});
       for(const theme of ['midnight','aether','ember']){
         settings.theme=theme;await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,theme);
         for(const width of [1440,320]){
