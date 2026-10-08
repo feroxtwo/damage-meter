@@ -1,4 +1,18 @@
 // Additional local views. PNGs are drawn from an explicit export allowlist.
+function handleSearchShortcut(e) {
+  if(e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;
+  const target=e.target;
+  if(target?.closest('[contenteditable]:not([contenteditable="false"])'))return;
+  if(e.key==='Escape'&&target?.matches('input[type="search"]')&&target.value){
+    e.preventDefault();target.value='';target.dispatchEvent(new Event('input',{bubbles:true}));return;
+  }
+  if(e.key!=='/'||target?.closest('input,textarea,select'))return;
+  const dialog=document.querySelector('dialog[open]');
+  const search=dialog?dialog.querySelector('input[type="search"]'):document.querySelector(tab==='skills'?'#skills.active #catalogSearch':'#runs.active #fightSearch');
+  if(search){e.preventDefault();search.focus();search.select();}
+}
+document.addEventListener('keydown',handleSearchShortcut);
+$('#fightSearch').title='/: Suche fokussieren · Esc: Suche leeren';
 function applyAppearance(s={}) {
   document.documentElement.dataset.theme=['midnight','aether','ember'].includes(s.theme)?s.theme:'midnight';
   document.documentElement.classList.toggle('compact',Boolean(s.compact));

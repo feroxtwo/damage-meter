@@ -543,6 +543,49 @@ const server = http.createServer((req,res) => {
       const exported=await page.evaluate(f=>fightExport(f,true),fight);assert.equal(exported.players[0].skills[0].name,'Strike');assert.equal(exported.players[0].skills[0].damage,fight.players[0].skills[0].damage);assert.equal(exported.players[0].name,'FeroxTOO');assert.equal(exported.players[1].name,'Spieler 2');
       await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
     });
+    await check('catalog view survives reload and empty filters can be reset',async()=>{
+      await page.getByRole('button',{name:'Fähigkeiten',exact:true}).click();await page.locator('#catalogRows tr').first().waitFor();
+      await page.locator('#catalogReset').click();await page.locator('#catalogVariants').check();await page.locator('#catalogNext').click();
+      assert.equal(await page.locator('#catalogPage').textContent(),'81–160');
+      await page.reload();await page.waitForFunction(()=>document.querySelector('#catalogPage').textContent==='81–160');
+      assert.equal(await page.locator('#catalogVariants').isChecked(),true);
+      await page.locator('#catalogSearch').fill('Overhead Slam');await page.locator('#catalogClass').selectOption('gladiator');
+      await page.reload();await page.waitForFunction(()=>document.querySelectorAll('#catalogRows tr').length===1);
+      assert.equal(await page.locator('#catalogSearch').inputValue(),'Overhead Slam');assert.equal(await page.locator('#catalogClass').inputValue(),'gladiator');
+      assert.match(await page.locator('#catalogRows').textContent(),/Abwärtsschlag/);
+      await page.locator('#catalogClass').selectOption('fighter');await page.locator('#catalogEmpty').waitFor();assert.equal(await page.locator('#catalogRows tr').count(),0);
+      await page.locator('#catalogReset').click();assert.equal(await page.locator('#catalogSearch').inputValue(),'');assert.equal(await page.locator('#catalogClass').inputValue(),'');assert.equal(await page.locator('#catalogVariants').isChecked(),false);assert.equal(await page.locator('#catalogPage').textContent(),'1–80');
+      assert.equal(await page.locator('#catalogEmpty').isVisible(),false);assert.equal(await page.locator('#catalogReset').isDisabled(),true);
+    });
+    await check('search shortcuts preserve typing and Escape clears before closing a dialog',async()=>{
+      await page.getByRole('button',{name:'Fähigkeiten',exact:true}).click();await page.keyboard.press('/');
+      assert.equal(await page.evaluate(()=>document.activeElement.id),'catalogSearch');
+      await page.keyboard.type('no-match/');assert.equal(await page.locator('#catalogSearch').inputValue(),'no-match/');await page.keyboard.press('Escape');assert.equal(await page.locator('#catalogSearch').inputValue(),'');
+      await page.getByRole('button',{name:'Runs',exact:true}).click();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.id),'fightSearch');
+      await page.keyboard.type('boss');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightSearch').inputValue(),'');
+      await page.getByRole('button',{name:'Live',exact:true}).click();await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
+      await page.locator('#refreshPlayer').focus();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('skill-search')),true);
+      await page.keyboard.type('nothing');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),true);assert.equal(await page.locator('.skill-search').first().inputValue(),'');
+      await page.keyboard.press('Escape');assert.equal(await page.locator('#fightDialog').evaluate(d=>d.open),false);
+    });
+    await check('clipboard fallback stays inside modal and cleans up on failure',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.goto(base);await isolated.waitForFunction(()=>typeof copyText==='function');
+        const result=await isolated.evaluate(async()=>{
+          const dialog=document.querySelector('#fightDialog'),button=document.querySelector('#closeDialog'),descriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard'),exec=document.execCommand;
+          dialog.showModal();button.focus();const before=document.querySelectorAll('textarea').length;let captured;
+          try {
+            Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('denied');}}});
+            document.execCommand=()=>{const input=document.activeElement;captured={text:input.value,inside:dialog.contains(input),selected:input.selectionEnd-input.selectionStart};return true;};
+            const ok=await copyText('Äon 11170010');const focused=document.activeElement===button;
+            document.execCommand=()=>{throw new Error('unavailable');};const failed=await copyText('not copied');
+            return {captured,ok,focused,failed,clean:document.querySelectorAll('textarea').length===before,focusAfterError:document.activeElement===button,message:document.querySelector('#toast').textContent,error:document.querySelector('#toast').classList.contains('error')};
+          } finally {document.execCommand=exec;if(descriptor)Object.defineProperty(navigator,'clipboard',descriptor);else delete navigator.clipboard;dialog.close();}
+        });
+        assert.deepEqual(result.captured,{text:'Äon 11170010',inside:true,selected:'Äon 11170010'.length});assert.equal(result.ok,true);assert.equal(result.focused,true);assert.equal(result.failed,false);assert.equal(result.clean,true);assert.equal(result.focusAfterError,true);assert.equal(result.error,true);assert.match(result.message,/Zwischenablage/);
+      } finally {await isolated.close();}
+    });
     assert.deepEqual(errors,[]);
     console.log(`${checks} browser checks passed.`);
   } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
