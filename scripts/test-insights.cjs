@@ -28,7 +28,6 @@ assert.ok(run('bossPerformance(attempts.map(p=>({...p,numeric_limited:null})),tr
 context.attempts.push({dps:200,job:'cleric',numeric_limited:false});assert.equal(run('bossPerformance(attempts,true).rank'),1,'equal best values tie');
 assert.equal(run('bossPerformance(attempts.map(p=>({...p,dps:0})),true).change'),null);
 delete context.f.analytics.partial;assert.equal(JSON.stringify(context.f),original,'analysis preserves saved measurements');
-console.log('PASS insights: complete windows, partial baseline, gaps/resets/numeric limits, actor IDs, DoT/tick counts, comparable cohorts, previous-only average and tied ranking (28 assertions)');
 
 // Local telemetry must not blend characters, targets, resets or capped values.
 context.state={key:null,points:[]};context.live={target_id:9,target_started_at:1000,battle_time_ms:1000,rows:[{id:1,is_self:true,burst_dps:10}]};
@@ -41,3 +40,5 @@ assert.equal(run('appendLiveSignal(state,{...live,rows:[{id:2,is_self:true,burst
 assert.equal(run('appendLiveSignal(state,{...live,battle_time_ms:500}).length'),1);
 run('for(let i=1;i<=500;i++)appendLiveSignal(state,{...live,battle_time_ms:i*1000})');
 assert.ok(run('state.points.length')<=120);assert.ok(run('state.points.at(-1).ms-state.points[0].ms')<=60000);
+
+console.log('PASS insights: complete windows, observed limits, identities and bounded live signal (37 assertions)');

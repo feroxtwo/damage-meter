@@ -23,7 +23,7 @@ html, body { margin: 0; background: transparent; color: #edf3fb; font: 13px syst
 .compact .row {min-height:22px;margin:2px 6px} .compact .row .t {padding:2px 7px}
 /* Same hierarchy as the existing native window; OBS remains its own surface. */
 .box {border-radius:7px;border-color:#ffffff20;box-shadow:0 2px 8px #0003}
-.head {padding:5px 10px 0;gap:8px}.head #t{font-weight:600;font-size:12px}.head #time{color:#edf3fb}
+.head {padding:5px 10px 0;gap:8px}.head #t{font-weight:600;font-size:12px}.head #t::before{content:"A2 ";font-size:9px;font-family:ui-monospace,monospace;color:#5bd5de;margin-right:8px}.head #time{color:#edf3fb}
 .group-line {padding:0 10px 5px;font-size:10px;color:#c4cedb;background:var(--header,#101c2c80)}
 .row {min-height:30px;border-radius:3px;margin:2px 4px;background:#0007}.row.me{outline:1px solid color-mix(in srgb,var(--title) 55%,transparent);background:#0009}
 .row .f {inset:auto auto 0 0;height:2px;opacity:.85}.row .t{align-items:center;padding:2px 6px;gap:6px}.row .name{min-width:0;flex:1}
@@ -49,7 +49,7 @@ const dur = (ms) => { const s = Math.max(0, Math.round((ms || 0) / 1000)); retur
 const masked = name => { const c = Array.from(name || ''); return c.length <= 2 ? '*'.repeat(c.length) : c[0] + '*'.repeat(Math.min(c.length - 2, 4)) + c[c.length - 1]; };
 const el = id => document.getElementById(id);
 function appearance(s) {
-  const colors={midnight:['11,16,24','#edc57b','16,28,44'],aether:['8,26,32','#b8eee7','16,41,48'],ember:['25,17,21','#f4d8a7','42,29,36']}[s.theme]||['11,16,24','#edc57b','16,28,44'];
+  const colors={midnight:['11,16,24','#edc57b','16,28,44'],aether:['8,26,32','#f0dcaa','16,41,48'],ember:['25,17,21','#f4d8a7','42,29,36']}[s.theme]||['11,16,24','#edc57b','16,28,44'];
   el('box').style.background=`rgba(${colors[0]},${clamp(s.opacity,0,1)})`;
   document.documentElement.style.setProperty('--title',colors[1]);
   document.documentElement.style.setProperty('--header',`rgba(${colors[2]},.7)`);
@@ -85,7 +85,7 @@ async function tick() {
       <div class="t"><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.rank}. ${r.dead ? '† ' : ''}${esc(name)}</span><span class="n"><strong>${s.show_dps?num(rate)+'/s':num(r.value)}</strong><small>${!s.compact&&s.show_dps?num(r.value)+' · ':''}${(r.value*100/sum).toFixed(0)}%</small></span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
     const c = l.capture;
-    el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
+    el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : l.numeric_limited ? 'Zahlengrenze: Näherungswerte' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
     el('ping').textContent = [c.recording ? '● REC' : '', l.ping_ms != null ? l.ping_ms + ' ms' : ''].filter(Boolean).join(' · ');
   } catch (e) {
     el('state').textContent = 'Meter nicht erreichbar';

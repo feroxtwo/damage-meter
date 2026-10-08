@@ -54,7 +54,7 @@ fn overlay_size(compact: bool, rows: usize) -> Vec2 {
 }
 fn palette(theme: &str) -> ([u8; 3], [u8; 3], [u8; 3]) {
     match theme {
-        "aether" => ([8, 26, 32], [16, 41, 48], [184, 238, 231]),
+        "aether" => ([8, 26, 32], [16, 41, 48], [240, 220, 170]),
         "ember" => ([25, 17, 21], [42, 29, 36], [244, 216, 167]),
         _ => ([11, 16, 24], [16, 28, 44], [240, 220, 170]),
     }
@@ -239,6 +239,7 @@ impl Overlay {
             ],
             Stroke::new(1.5_f32, Color32::from_rgb(91, 213, 222)),
         );
+        shadow_text(p,rect.left_top()+Vec2::new(8.0,7.0),Align2::LEFT_TOP,"A2",FontId::monospace(9.0),Color32::from_rgb(91,213,222));
         let title = if live.target_name.is_empty() {
             "Kein Ziel"
         } else {
@@ -249,7 +250,7 @@ impl Overlay {
         title_rect.set_right(rect.right() - 50.0);
         shadow_text(
             &p.with_clip_rect(title_rect),
-            rect.left_top() + Vec2::new(8.0, 3.0),
+            rect.left_top() + Vec2::new(31.0, 3.0),
             Align2::LEFT_TOP,
             title,
             FontId::proportional(13.0),
@@ -487,6 +488,7 @@ impl Overlay {
             } else {
                 Color32::WHITE
             };
+            if row.is_self { p.rect_filled(Rect::from_center_size(inner.left_center()+Vec2::new(15.0,-3.0),Vec2::new(24.0,18.0)),2,with_alpha(palette(&settings.theme).2,22)); }
             shadow_text(
                 p,
                 inner.left_center() + Vec2::new(7.0, -3.0),
@@ -521,9 +523,23 @@ impl Overlay {
                 color,
                 numbers_left - 8.0 - name_x,
             );
-            let y = if settings.compact { inner.center().y - 3.0 } else { inner.top() + 10.0 };
-            let plate=Rect::from_min_max(Pos2::new(numbers_left-4.0,inner.top()+1.0),Pos2::new(inner.right()-2.0,if settings.compact {inner.bottom()-5.0}else{inner.bottom()-7.0}));
-            p.rect_filled(plate,2,Color32::from_black_alpha(70));
+            let y = if settings.compact {
+                inner.center().y - 3.0
+            } else {
+                inner.top() + 10.0
+            };
+            let plate = Rect::from_min_max(
+                Pos2::new(numbers_left - 4.0, inner.top() + 1.0),
+                Pos2::new(
+                    inner.right() - 2.0,
+                    if settings.compact {
+                        inner.bottom() - 5.0
+                    } else {
+                        inner.bottom() - 7.0
+                    },
+                ),
+            );
+            p.rect_filled(plate, 2, Color32::from_black_alpha(70));
             shadow_text(
                 p,
                 Pos2::new(primary_x, y),
@@ -532,14 +548,16 @@ impl Overlay {
                 primary_font,
                 color,
             );
-            if !settings.compact { shadow_text(
-                p,
-                inner.right_bottom() + Vec2::new(-6.0, -7.0),
-                Align2::RIGHT_BOTTOM,
-                secondary,
-                secondary_font,
-                Color32::from_gray(180),
-            ); }
+            if !settings.compact {
+                shadow_text(
+                    p,
+                    inner.right_bottom() + Vec2::new(-6.0, -7.0),
+                    Align2::RIGHT_BOTTOM,
+                    secondary,
+                    secondary_font,
+                    Color32::from_gray(180),
+                );
+            }
         }
     }
 
@@ -573,6 +591,8 @@ impl Overlay {
                 Color32::from_rgb(220, 60, 60),
                 "keine Capture-Berechtigung".to_string(),
             )
+        } else if live.numeric_limited {
+            (Color32::from_rgb(230,180,60),"Zahlengrenze: Näherungswerte".to_string())
         } else if c.locked_port.is_some() {
             (
                 Color32::from_rgb(80, 200, 100),
@@ -590,6 +610,7 @@ impl Overlay {
         } else {
             (Color32::from_gray(140), "AION2 nicht gestartet".to_string())
         };
+        let state=if c.recording.is_some() {format!("REC · {state}")} else {state};
         p.circle_filled(rect.left_center() + Vec2::new(10.0, 0.0), 3.5, dot);
         let controls = !live.overlay.locked && ui.rect_contains_pointer(rect);
         let mut state_rect = rect;

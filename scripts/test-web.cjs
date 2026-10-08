@@ -25,6 +25,14 @@ const fight={id:'f1',boss_name:'Kargos',dungeon_id:600093,difficulty:'Schwer',st
  analytics:{resolution_ms:500,partial:false,points:[{ms:500,damage:{1:1000,2:500}},{ms:1000,damage:{1:3000,2:1000}}],effects:[{target:1,code:42,start_ms:100,end_ms:1000}]},ping_history:[{tsMs:500,pingMs:42},{tsMs:1000,pingMs:50}]};
 const comparison={...fight,id:'f2',started_at:run.ended_at,players:fight.players.map(p=>({...p,dps:p.dps*.8,skills:p.skills.map(s=>({...s,damage:s.damage*.8}))}))};
 const comparison2={...comparison,id:'f3',players:fight.players.map(p=>({...p,dps:p.dps*.5}))};
+// Populated visual fixture: counters, final totals and rates agree; never used by the product.
+function telemetryFight(id='telemetry') {
+  const weights=Array.from({length:180},(_,i)=>36000+8000*Math.sin(i*.11)+35000*Math.exp(-(((i-160)/9)**2)));
+  const sum=weights.reduce((a,b)=>a+b,0);let cumulative=0;
+  const points=weights.map((v,i)=>{cumulative+=v;return {ms:(i+1)*500,damage:Object.fromEntries(live.rows.map(r=>[r.id,Math.round(r.damage*cumulative/sum)]))};});
+  const fractions=[.314,.286,.2,.2];
+  return {...fight,id,started_at:1000,analytics:{resolution_ms:500,partial:false,points},players:fight.players.map(p=>({...p,share:p.damage/fight.total_damage*100,dps:p.damage/90,skills:fractions.map((part,i)=>({...skill,code:11+i,names:i?{}:skill.names,icon:i?null:skill.icon,name:i?'Unbekannte Fähigkeit #'+(11+i):skill.name,damage:Math.round(p.damage*part),hit_timestamps:Array.from({length:30},(_,j)=>(j*3+i)*1000).filter(ms=>ms<=90000)}))}))};
+}
 const profiles=new Map();
 let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),runFavorites=[],runQueries=[];
 const server = http.createServer((req,res) => {
@@ -279,7 +287,7 @@ const server = http.createServer((req,res) => {
       assert.match(await page.locator('#fightContent').textContent(),/Double/);
       assert.match(await page.locator('#fightContent').textContent(),/65,0K/);
       await page.locator('#closeDialog').click();
-      await page.selectOption('#trainingDuration','180');await page.locator('#startTraining').click();
+      await page.locator('#trainingDuration input[value="180"]').check();await page.locator('#startTraining').click();
       await delay(100);assert.deepEqual(trainingStarts.at(-1),{seconds:180});
       await page.selectOption('#liveMetric','damage');
     });
@@ -725,7 +733,7 @@ const server = http.createServer((req,res) => {
     });
     await check('saved attempt moment requires the exact stored encounter and clears on character change',async()=>{
       const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
-      const stored={...fight,id:'auto_9_1000',started_at:1000,duration_ms:10000,analytics:{resolution_ms:500,points:Array.from({length:20},(_,i)=>({ms:(i+1)*500,damage:{1:(i+1)*100,2:(i+1)*200}}))}};
+      const stored=telemetryFight('auto_9_1000');
       await isolated.route('**/api/fights/auto_9_1000',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(stored)}));
       try {
         await isolated.goto(base);await isolated.waitForFunction(()=>typeof renderEnhancedLive==='function');
@@ -734,10 +742,47 @@ const server = http.createServer((req,res) => {
         assert.doesNotMatch(await isolated.locator('#postFight').textContent(),/Sieg|Kampf beendet/);
         await isolated.locator('#postFight [data-story-peak]').click();await isolated.locator('#fightDialog').waitFor();assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
         await isolated.locator('#closeDialog').click();
+        await isolated.evaluate(()=>scrollTo(0,0));
         if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-saved-moment.png'),fullPage:true});
         await isolated.evaluate(()=>renderEnhancedLive({...latestLive,character:'Alt',rows:latestLive.rows.map(r=>r.is_self?{...r,id:8,name:'Alt'}:r)}));
         assert.equal(await isolated.locator('#postFight').isVisible(),false);
       } finally {await isolated.close();}
+    });
+    await check('training instrument shows actual elapsed time, finished result and interruption',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      let training={state:'armed',seconds:60,started_at:1000};
+      await isolated.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...live,target_mode:'trainTargets',battle_time_ms:training.state==='running'?42000:60000,rows:live.rows.map(r=>r.is_self?{...r,damage:training.state==='running'?2024400:3186000,dps:training.state==='running'?48200:53100}:r),training})}));
+      try {
+        await isolated.goto(base);await isolated.waitForFunction(()=>document.querySelector('#trainingResult').textContent.includes('Warte auf ersten Treffer'));
+        training={...training,state:'running',elapsed_ms:42000,target_id:9};
+        await isolated.waitForFunction(()=>document.querySelector('#trainingResult').textContent.includes('0:42'));
+        assert.equal(await isolated.getByRole('progressbar',{name:'Trainingsfortschritt'}).getAttribute('aria-valuenow'),'70');
+        for(const width of [1440,320]){await isolated.setViewportSize({width,height:1000});await isolated.evaluate(()=>scrollTo(0,0));assert.equal(await isolated.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-training-running-'+width+'.png'),fullPage:true});}
+        training={...training,state:'finished',elapsed_ms:60000,target:'Trainingsziel (synthetisch)',character:'FeroxTOO',personal_best:true,best_dps:53100,rows:[{name:'FeroxTOO',is_self:true,damage:3186000,dps:53100}]};
+        await isolated.waitForFunction(()=>document.querySelector('#trainingResult').textContent.includes('Neuer persönlicher Bestwert'));
+        assert.match(await isolated.locator('.training-rate').textContent(),/53,1K/);
+        await isolated.setViewportSize({width:1440,height:1000});await isolated.evaluate(()=>scrollTo(0,0));
+        if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-training-record.png'),fullPage:true});
+        training={...training,state:'interrupted',rows:undefined,best_dps:undefined};
+        await isolated.waitForFunction(()=>document.querySelector('#trainingResult').textContent.includes('Kein abgeschlossenes Ergebnis'));
+        assert.equal(await isolated.locator('.training-rate').count(),0);
+      } finally{await isolated.close();}
+    });
+    await check('populated combat instrument fits all themes and keeps its selected observed peak',async()=>{
+      const data=telemetryFight();await page.route('**/api/fights/telemetry',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
+      await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>openFight('telemetry'));
+      await page.locator('#fightContent [data-story-peak]').click();assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      assert.match(await page.locator('.fight-story').textContent(),/31,4%/);
+      for(const theme of ['midnight','aether','ember']){
+        settings.theme=theme;await page.waitForFunction(t=>document.documentElement.dataset.theme===t,theme);
+        for(const width of [1440,320]){
+          await page.setViewportSize({width,height:1000});await page.locator('#fightDialog').evaluate(e=>e.scrollTop=0);
+          await page.waitForFunction(()=>Math.abs(document.querySelector('#fightDamageChart').drawnWidth-document.querySelector('#fightDamageChart').clientWidth)<1);
+          assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
+          if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,`telemetry-report-${theme}-${width}.png`),fullPage:true});
+        }
+      }
+      settings.theme='midnight';await page.setViewportSize({width:1440,height:1000});await page.locator('#closeDialog').click();await page.unroute('**/api/fights/telemetry');await page.evaluate(()=>scrollTo(0,0));
     });
     await check('live hierarchy, themes and reduced motion remain readable at desktop and 320px',async()=>{
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.selectOption('#liveMetric','damage');
@@ -759,7 +804,7 @@ const server = http.createServer((req,res) => {
       }
       settings.theme='midnight';await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({reducedMotion:'no-preference'});
       const obs=await context.newPage();obs.on('pageerror',e=>errors.push(e.message));settings.compact=true;settings.show_dps=true;settings.scale=1;
-      await obs.goto(base+'/overlay');await obs.locator('#rows .row').first().waitFor();assert.equal(await obs.locator('#box').evaluate(e=>Math.round(e.getBoundingClientRect().width)),314);
+      await obs.goto(base+'/overlay');await obs.locator('#rows .row').first().waitFor();assert.equal(await obs.locator('#box').evaluate(e=>Math.round(e.getBoundingClientRect().width)),312);
       assert.match(await obs.locator('#rows .n strong').first().textContent(),/\/s/);
       if(process.env.SCREENSHOT_DIR)await obs.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'premium-obs.png')});await obs.close();
     });

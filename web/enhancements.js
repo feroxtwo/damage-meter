@@ -115,14 +115,18 @@ function renderLiveMetrics(l) {
   const me=rows.find(r=>r.is_self);
   $('#selfRank').textContent=me?'#'+(rows.indexOf(me)+1):'—';
   $('#selfContext').textContent=me?pct(me.share)+' Anteil · '+rows.length+' Spieler':'Warte auf eigene Kampfdaten';
-  $('#selfBurst').hidden=metric!=='damage';
+  $('#selfBurst').hidden=metric!=='damage'||l.numeric_limited;
 }
+const liveRanks={key:null,positions:new Map()};
 function updateLiveRows(l) {
   const box=$('#liveRows'),focused=document.activeElement?.closest('#liveRows [data-player-id]')?.dataset.playerId;
   const rows=metricRows(l.rows),top=Math.max(1,...rows.map(r=>r.damage));
   const unit=metricKey()==='heal'?'HPS':metricKey()==='damage_received'?'erlitten/s':'DPS';
+  const rankKey=JSON.stringify([l.target_id,l.target_started_at,metricKey()]);if(liveRanks.key!==rankKey){liveRanks.key=rankKey;liveRanks.positions.clear();}
+  const changed=new Set(rows.filter((r,i)=>liveRanks.positions.has(r.id)&&liveRanks.positions.get(r.id)!==i).map(r=>r.id));
+  liveRanks.positions=new Map(rows.map((r,i)=>[r.id,i]));
   const html=rows.length?rows.map((r,i)=>`<div class="bar telemetry-row ${r.is_self?'me':''}" style="--class-color:${color(r.class_key)}">
-    <span class="rank-badge">${String(i+1).padStart(2,'0')}</span><div class="ranking-identity">${classIcon(r)}<div><b>${deathMark(r)}${esc(r.name)}</b><small>${esc(localizedClass(r))}${r.is_self?' · DU':''}</small></div></div>
+    <span class="rank-badge ${changed.has(r.id)?'rank-change':''}">${String(i+1).padStart(2,'0')}</span><div class="ranking-identity">${classIcon(r)}<div><b>${deathMark(r)}${esc(r.name)}</b><small>${esc(localizedClass(r))}${r.is_self?' · DU':''}</small></div></div>
     <div class="ranking-value"><strong>${num(r.dps)}<small> ${unit}</small></strong><span>${num(r.damage)} gesamt · ${pct(r.share)}</span></div>
     <div class="ranking-track"><div class="fill" style="width:${(r.damage/top*100).toFixed(1)}%;background:${color(r.class_key)}"></div></div></div>`).join(''):
     '<div class="empty"><b>Bereit für den nächsten Kampf</b><p>Deine Gruppe erscheint mit Kampfdaten. Für normale Gegner „Höchster Schaden“, zum Üben „Trainingspuppe“ wählen.</p></div>';
@@ -150,13 +154,14 @@ function renderLiveSignal(l) {
   const points=appendLiveSignal(liveSignalState,l),root=$('#liveSignal');
   $('#livePhase').textContent=l.numeric_limited?'Zahlengrenze erkannt':l.rows.length?'Erfasste Kampfdaten':'Warte auf Daten';
   $('#liveHpValue').textContent=l.target_hp==null?'HP unbekannt':(l.hp_estimated?'~':'')+pct(l.target_hp*100)+' HP';
-  const damage=metricKey()==='damage';root.parentElement.hidden=!damage;
+  const damage=metricKey()==='damage';root.parentElement.hidden=!damage;$('.performance-hero').classList.toggle('without-signal',!damage);
   if(!damage)return;
-  if(points.length<2){root.innerHTML='<span class="signal-empty">Verlauf entsteht mit neuen Live-Beobachtungen.</span>';return;}
+  if(points.length<2){root.setAttribute('aria-label','Noch keine zusammenhängenden lokalen Burst-Beobachtungen.');root.innerHTML='<span class="signal-empty">Verlauf entsteht mit neuen Live-Beobachtungen.</span>';return;}
   const end=points.at(-1).ms,start=Math.max(0,end-60000),max=Math.max(1,...points.map(p=>p.value));
   // A missing polling interval is a visible break, never a connecting fabricated trend.
   const segments=[];let segment=[];
   for(const p of points){if(segment.length&&p.ms-segment.at(-1).ms>3000){segments.push(segment);segment=[];}segment.push(p);}segments.push(segment);
+  root.setAttribute('aria-label',`Eigener beobachteter Burst von ${dur(start)} bis ${dur(end)}, höchster empfangener Wert ${num(max)} pro Sekunde. Nur lokale Live-Beobachtungen.`);
   const paths=segments.filter(v=>v.length>1).map(v=>'M'+v.map(p=>`${((p.ms-start)/Math.max(1,end-start)*600).toFixed(1)},${(108-p.value/max*88).toFixed(1)}`).join(' L'));
   root.innerHTML=`<svg viewBox="0 0 600 130" aria-hidden="true" preserveAspectRatio="none"><path class="signal-grid" d="M0 20H600 M0 64H600 M0 108H600"/>${paths.map(d=>`<path class="signal-line" d="${d}"/>`).join('')}</svg><div class="signal-scale"><span>${dur(start)}</span><span>${num(max)}/s beobachtet</span><span>${dur(end)}</span></div>`;
 }
@@ -182,6 +187,27 @@ function updateSavedMoment(l) {
   }).catch(()=>{});
 }
 
+let trainingRecordKey=null;
+function renderTraining(l) {
+  const t=l.training?.state&&l.training.state!=='idle'?l.training:lastTraining,root=$('#trainingResult');
+  if(!t||t.state==='idle'){root.innerHTML='<p class="training-ready">Wähle ein Zeitfenster.<br>Der erste Treffer startet die Messung.</p>';return;}
+  const state={armed:'Warte auf ersten Treffer',running:'Training läuft',interrupted:'Training unterbrochen',finished:t.personal_best&&!l.numeric_limited?'Neuer persönlicher Bestwert':'Training abgeschlossen'}[t.state]||'Training';
+  const me=t.state==='running'?l.rows.find(r=>r.is_self):t.rows?.find(r=>r.is_self);
+  const rate=t.state==='running'&&me?Number(me.damage)*1000/Math.max(t.elapsed_ms||0,1000):me?.dps;
+  const progress=Math.min(100,Math.max(0,Number(t.elapsed_ms||0)/Math.max(1,t.seconds*1000)*100));
+  const result=['running','finished'].includes(t.state)&&Number.isFinite(rate);
+  let html=`<span class="training-state">${state}</span>`;
+  if(t.elapsed_ms!=null)html+=`<div class="training-clock"><strong>${dur(t.elapsed_ms)}</strong><span>/ ${dur(t.seconds*1000)}</span></div><div class="training-progress" role="progressbar" aria-label="Trainingsfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress)}"><i style="width:${progress}%"></i></div>`;
+  if(result)html+=`<div class="training-rate"><strong>${num(rate)}</strong><span>ERFASSTE DPS</span></div>`;
+  if(t.best_dps!=null&&Number.isFinite(Number(t.best_dps)))html+=`<div class="training-best"><span>Bestwert · ${esc(t.character||'')} · ${esc(t.target||'')} · ${dur(t.seconds*1000)}</span><strong>${num(t.best_dps)}/s</strong></div>`;
+  if(l.numeric_limited)html+='<p class="analysis-note">Parser-Zahlengrenze: Ergebnis nicht als exakte Referenz verwenden.</p>';
+  if(t.state==='interrupted')html+='<p class="analysis-note">Zielwechsel, Reset oder Verbindung beendet. Kein abgeschlossenes Ergebnis.</p>';
+  if(t.rows?.length)html+=`<details><summary>Gruppenergebnis</summary>${t.rows.map(r=>`<div>${esc(r.name)}: <b>${num(r.dps)}/s</b> · ${num(r.damage)} Schaden</div>`).join('')}</details>`;
+  if(root.innerHTML!==html)root.innerHTML=html;
+  const key=JSON.stringify([t.started_at,t.character,t.target,t.seconds]);
+  if(t.state==='finished'&&t.personal_best&&!l.numeric_limited&&trainingRecordKey!==key){trainingRecordKey=key;root.classList.add('record-highlight');setTimeout(()=>root.classList.remove('record-highlight'),600);}
+}
+
 function renderEnhancedLive(l) {
   latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);updateSavedMoment(l);
   $('#numericWarning').hidden=!l.numeric_limited;
@@ -189,18 +215,14 @@ function renderEnhancedLive(l) {
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";
   $('#metricHint').textContent=metricKey()==='heal' ? 'Heilung seit Parser-Reset. HPS nutzt die angezeigte Kampfdauer. Overheal wird nicht abgezogen.' : metricKey()==='damage_received' ? 'Erlittener Schaden aus erfassten NPC-Treffern.' : 'Spieler anklicken für Skilldetails. Burst-DPS: gleitende 5 Sekunden, Beobachtung alle 500 ms.';
   if(window.applyAppearance)applyAppearance(l.overlay);
-  const t=l.training?.state && l.training.state!=='idle' ? l.training : lastTraining;
-  if(t) {
-    const state={armed:'Bereit. Warte auf ersten Treffer.',running:`Training läuft: ${dur(t.elapsed_ms)} / ${dur(t.seconds*1000)}`,interrupted:'Training unterbrochen: Zielwechsel, Reset oder Verbindung beendet.',finished:`Training abgeschlossen: ${esc(t.target||'')} · ${dur(t.elapsed_ms)}${t.personal_best?' · Neuer persönlicher Bestwert':''}`}[t.state] || '';
-    $('#trainingResult').innerHTML=`<p>${state}</p>${(t.rows||[]).map(r=>`<div>${esc(r.name)}: <b>${num(r.dps)}/s</b> · ${num(r.damage)} Schaden</div>`).join('')}${t.best_dps!=null?`<p class="muted">Persönlicher Bestwert: ${num(t.best_dps)}/s</p>`:''}`;
-  }
+  renderTraining(l);
   if(l.reset_notice && l.reset_notice!==window.lastResetNotice){window.lastResetNotice=l.reset_notice;toast(l.reset_notice);}
   const player=new URLSearchParams(location.search).get('player');
   if(player && l.rows.some(r=>String(r.id)===player)) { history.replaceState(null,'',location.pathname+location.hash);task(openLivePlayer(Number(player))); }
 }
 window.renderEnhancedLive=renderEnhancedLive;
 $('#liveMetric').onchange=()=>{if(latestLive){renderEnhancedLive(latestLive);updateLiveRows(latestLive);}};
-$('#startTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON.stringify({seconds:Number($('#trainingDuration').value)})}).then(()=>toast('Training wartet auf den ersten Treffer.')));
+$('#startTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON.stringify({seconds:Number($('#trainingDuration input:checked').value)})}).then(()=>toast('Training wartet auf den ersten Treffer.')));
 $('#stopTraining').onclick=()=>task(api('/api/training',{method:'POST',body:JSON.stringify({seconds:0})}));
 api('/api/training').then(t=>{lastTraining=t;if(latestLive)renderEnhancedLive(latestLive);}).catch(()=>{});
 
