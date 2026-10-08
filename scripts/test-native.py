@@ -105,6 +105,10 @@ try:
             assert footer[:3]!=(0xe8,0xdd,0xbf),f'Scale {scale}: window bottom shows the backdrop, not the footer'
             frame.crop((0,0,int(g['WIDTH'])+90,int(g['HEIGHT'])+90)).save(output/f'native-24-rows-{scale}.png')
         s=get();s.update(compact=True,scale=1,max_rows=5);post(s);wait_geometry(312,compact_height)
+        # Locked combat mode with a healthy capture paints no footer; unlocking brings it back.
+        s=get();s.update(locked=True);post(s);g=wait_geometry(312,compact_height-18);settle()
+        ImageGrab.grab(xdisplay=env['DISPLAY']).crop((0,0,312+90,compact_height+90)).save(output/'native-locked-combat.png')
+        s=get();s.update(locked=False);post(s);wait_geometry(312,compact_height)
         subprocess.run(['hsetroot','-solid','black'],env=env,check=True)
     s=get();s.update(visible=False,locked=True);post(s);time.sleep(.5)
     g=geometry(); hidden=ImageGrab.grab(xdisplay=env['DISPLAY']).crop((int(g['X']),int(g['Y']),int(g['X'])+int(g['WIDTH']),int(g['Y'])+int(g['HEIGHT'])))
