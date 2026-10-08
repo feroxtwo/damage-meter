@@ -143,3 +143,6 @@ th {letter-spacing:.5px} td {font-variant-numeric:tabular-nums} tbody tr:hover {
 .live-console>.hp {grid-column:1/-1;grid-row:2}.live-console>.live-metrics {grid-column:1/-1;grid-row:3}
 @media(max-width:850px) {.live-console{grid-template-columns:1fr}.live-console>.live-controls{grid-column:1;grid-row:4;margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}}
 @media(max-width:360px) {header nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}header nav button{padding:7px 2px;font-size:10px;min-height:50px}}
+
+.story-link {all:unset;cursor:pointer;color:var(--accent);border-bottom:1px dotted var(--edge)}
+.story-link:hover {color:var(--text)}.story-link:focus-visible {outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}

@@ -53,7 +53,7 @@ function fightStory(f) {
   const me=f.players.find(p=>p.is_self),actor=me?.actor_id??null,peak=observedPeak(f,actor);
   const top=me?.skills?.reduce((a,b)=>Number(b.damage)>Number(a?.damage||0)?b:a,null);
   const parts=[];
-  if(peak)parts.push(`<div><strong>${num(peak.dps)} DPS</strong><span>Stärkstes beobachtetes 5s-Fenster${peak.partial?' im Ausschnitt':''} · ${dur(peak.start)}–${dur(peak.end)}</span></div>`);
+  if(peak)parts.push(`<div><strong><button type="button" class="story-link" data-story-peak title="Dieses Fenster im Schadensverlauf anzeigen">${num(peak.dps)} DPS ↗</button></strong><span>Stärkstes beobachtetes 5s-Fenster${peak.partial?' im Ausschnitt':''} · ${dur(peak.start)}–${dur(peak.end)}</span></div>`);
   if(top&&me.damage>0&&top.damage>0&&top.damage<=me.damage)parts.push(`<div><strong>${skillLabel(top)}</strong><span>${pct(top.damage*100/me.damage)} deines Schadens${top.is_dot?' · DoT':''}</span></div>`);
   if(!parts.length)return '';
   return `<div class="performance-story fight-story" aria-label="Kampfzusammenfassung"><div class="story-intro"><span class="eyebrow">Kampf im Fokus</span><strong>${me?'Deine Leistung':'Gruppenleistung'}</strong><small>Aus erfassten Daten</small></div>${parts.join('')}</div>`;
@@ -369,7 +369,7 @@ function bindFightChart(f) {
     };
     const clearInterval=()=>{interval=null;plot.querySelector('[data-curve-highlight]')?.remove();detail.replaceChildren();};
     show(selected<0?points.length-1:selected);range.oninput=()=>{clearInterval();show(Number(range.value));};
-    peakButton.textContent=all?'Stärkstes Gruppen-5s-Fenster':'Stärkstes 5s-Fenster';
+    peakButton.textContent=all||scope.value==='group'?'Stärkstes Gruppen-5s-Fenster':'Stärkstes 5s-Fenster';
     peakButton.onclick=()=>{
       if(!peak)return;clearInterval();interval=peak;
       show(points.reduce((best,p,i)=>Math.abs(p.ms-peak.end)<Math.abs(points[best].ms-peak.end)?i:best,0));
@@ -391,6 +391,11 @@ function bindFightChart(f) {
   }
   scope.onchange=metric.onchange=smooth.onchange=render;
   root.renderCurve=render;render();
+  const storyButton=$('[data-story-peak]');
+  if(storyButton)storyButton.onclick=()=>{
+    scope.value=String(f.players.find(p=>p.is_self)?.actor_id??'group');metric.value='dps';smooth.value='5000';
+    render();root.querySelector('[data-curve-peak]').click();root.scrollIntoView({block:'nearest'});
+  };
 }
 function hitTimeline(skills,ms,W=900) {
   const rows=(skills||[]).filter(s=>s.hit_timestamps?.length);if(!rows.length)return '<p class="muted">Keine Trefferzeitpunkte gespeichert. Ältere Kämpfe enthalten diese Daten nicht.</p>';

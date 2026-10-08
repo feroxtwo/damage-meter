@@ -675,9 +675,9 @@ const server = http.createServer((req,res) => {
       await page.route('**/api/fights/insight',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(focused)}));
       await page.evaluate(()=>openFight('insight'));await page.locator('[data-curve-peak]').waitFor();
       assert.match(await page.locator('.fight-story').textContent(),/200.*5s-Fenster.*100,0%/);
-      await page.locator('[data-curve-peak]').click();assert.equal(await page.locator('[data-curve-highlight]').count(),1);
+      await page.locator('[data-story-peak]').click();assert.equal(await page.locator('#fightChartScope').inputValue(),'1');assert.equal(await page.locator('[data-curve-highlight]').count(),1);
       assert.match(await page.locator('[data-curve-readout]').textContent(),/5 s/);
-      await page.locator('[data-curve-hits]').click();assert.equal(await page.locator('.window-hits li').count(),2);
+      await page.locator('[data-curve-hits]').click();assert.equal(await page.locator('.window-hits li').count(),1);
       assert.match(await page.locator('.curve-detail').textContent(),/3 Treffer\/Ticks/);
       await page.selectOption('#fightChartScope','1');await page.locator('[data-curve-peak]').click();await page.locator('[data-curve-hits]').click();
       assert.equal(await page.locator('.window-hits li').count(),1);
