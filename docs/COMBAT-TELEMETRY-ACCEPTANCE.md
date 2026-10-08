@@ -33,7 +33,7 @@ Für Peaks, Skill-Treffer/Ticks und persönliche Bossvergleiche gelten unveränd
 
 Kompakt bleibt 312 logische Pixel breit, normal 360. Kompakte Zeilen sind 28 Pixel hoch; normale Zeilen 40. Bei fünf Zeilen ergibt das 312 × 198 bzw. 360 × 266 Pixel. Die zusätzliche Zeilenhöhe trennt Namen, Werte und Balken besser. Das normale Layout behält Summe und Anteil; im Kompaktmodus bleibt der Anteil im Tooltip verfügbar. Namen werden weiterhin passend gekürzt und sind entsperrt per Tooltip lesbar. Eigener Rang, eigene Zeile/Pinning, Klassenicon, Tot-Status und echte Balkenverhältnisse bleiben erhalten.
 
-Der Zielheader erhält eine kleine A2-Marke, die eigene Zeile einen goldenen Rangakzent. Dunkle Unterlagen unmittelbar hinter Zahlen verbessern den Kontrast auf hellen und farbigen Untergründen, ohne die gesamte Fläche undurchsichtig zu machen. Kritische Capture-/Berechtigungszustände und Zahlengrenzen bleiben im Footer sichtbar. Recording zeigt nur den REC-Status, keinen Dateipfad. Lock/Hide/Reset/Record erscheinen bei Hover im entsperrten Footer; Einstellungen und Kontextbedienung bleiben erhalten.
+Der Zielheader erhält eine kleine A2-Marke, die eigene Zeile einen goldenen Rangakzent. Nach der Gegenprüfung (siehe unten) tragen eine dunkle Glyphenkontur statt Zahlenunterlagen die Lesbarkeit auf hellen und farbigen Untergründen, ohne die gesamte Fläche undurchsichtig zu machen. Der Footer erscheint nur noch entsperrt (Bedienmodus) oder wenn Capture, Berechtigung, Zahlengrenze, fehlende Verbindung oder ein laufender Mitschnitt Aufmerksamkeit brauchen. Lock/Hide/Reset/Record erscheinen bei Hover im entsperrten Footer; Einstellungen und Kontextbedienung bleiben erhalten.
 
 OBS übernimmt offene Zeilen, dominante Raten, eigenen Akzent und vereinfachten Header. Kompakte Breite ohne den entfernten äußeren Rahmen: 312 Pixel. Es bleibt eine Browserquelle und wird nicht als natives Ingame-Fenster beschrieben.
 
@@ -125,3 +125,20 @@ Die zeitweise in CI genutzte automatische Rustformatierung war nur eine Arbeitsu
 **Technisch freigabefähiger Release-Kandidat; reale Ingame-Abnahme offen.** In den überprüften Softwarepfaden bleiben keine bekannten offenen P0-/P1-Fehler, die ohne reale Kampfdaten reproduzierbar und noch lösbar wären. Der PR wird zur Prüfung veröffentlicht und nicht automatisch gemergt.
 
 Die [separate reale Ingame-Abnahme](INGAME-PREMIUM-ACCEPTANCE.md) bleibt offen. Reale Protokollgenauigkeit, Spiel-/Vollbild-/KDE-/Wayland-Verhalten, menschliche Lesbarkeit während eines Kampfes und lange echte Sitzungen benötigen unabhängige Nachweise. Parser-Zahlengrenzen, fehlende Pakete und gekürzte Verläufe sind weiterhin Einschränkungen. Eine kurze synthetische History-Probe ist keine garantierte Latenz und kein Langzeitbeweis.
+
+## Unabhängige Gegenprüfung und Nachbesserung
+
+Nach dem dokumentierten Stand `14547d6` wurde der PR unabhängig gegengeprüft und auf demselben Branch ergänzt. Vergleichsbilder links PR-Stand, rechts nach der Gegenprüfung, identische synthetische Daten:
+
+- **Leistungsblock live:** goldener Rang-Chip, Anteilsband der ganzen Gruppe mit markiertem eigenem Segment, Abstand zum Nachbarrang, Burst-Signal mit Fläche, Peak-Markierung und gestrichelter eigener Kampf-DPS. Steuerung in die Kopfzeile verlegt, Gruppenrate nicht mehr in Akzentfarbe.
+- **Rangliste:** eine Zeile je Spieler mit Rang, Identität, Proportionsbalken, Rate und Anteilsspalte; lange Namen enden mit „…“.
+- **Nachkampf und Kampfbericht:** Vergleich mit früheren Versuchen desselben Bosses, derselben Schwierigkeit, desselben Charakters und derselben Klasse (ohne Training, ohne Parser-Zahlengrenze, nur zeitlich frühere Versuche): Ø, vorheriger Versuch, Bestwert oder neuer Bestwert. Peak-Zelle mit Mini-Verlauf und markiertem Fenster, Zeiten einheitlich als m:ss,s, Peak im Diagramm beschriftet.
+- **Statistik:** Trendaussage (Ø der letzten 3 gegenüber den 3 davor) nur unter den bestehenden Vergleichbarkeitsregeln, Skala über den Bereich der Versuche, gleitender Ø über 3 Versuche, Kennzahlen als ruhige Leiste.
+- **Natives Overlay und OBS:** Glyphenkontur statt Zahlenplatten, goldener Rang-Chip und auslaufende Goldspur für die eigene Zeile, Klassenbalken mit kurzem Schein, Klassensymbole auf dunkler Scheibe, HP-Leiste an der Kopfkante, REC-Punkt im Kopf, Footer nur bei Bedarf. Themes unterscheiden sich in Grund, Akzent und Eckform. OBS mit deutschem Dezimalkomma.
+
+![Live](telemetry-images/review-live.png)
+![Nachkampf](telemetry-images/review-post-fight.png)
+![Kampfbericht](telemetry-images/review-report.png)
+![Statistik](telemetry-images/review-statistics.png)
+![Natives Overlay, weiß](telemetry-images/review-native-white.png)
+![Natives Overlay, farbige Effekte](telemetry-images/review-native-effects.png)
