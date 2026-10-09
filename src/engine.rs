@@ -536,8 +536,17 @@ impl Engine {
     fn snapshot(&self) -> (DpsData, DetailsContext) {
         self.sync_group();
         let names = self.storage.get_nicknames();
+        let local_named = |me: &str| {
+            self.storage
+                .local_player_id()
+                .and_then(|id| names.get(&(id as i32)))
+                .is_some_and(|name| name.trim() == me.trim())
+        };
+        // Rebind only when the current id no longer carries your name, so a
+        // normal tick does not copy every target's combat data.
         if let Some(me) = self.storage.local_profile().name
             && self.storage.local_identity_from_self_record()
+            && !local_named(&me)
         {
             let newest = self
                 .storage
@@ -838,28 +847,30 @@ impl Engine {
         let trusted = self.trusted_names();
         let local = self.storage.local_player_id().map(|id| id as i32);
         let mut audiences = self.audiences.lock();
+        let open_world_others =
+            self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others;
+        let trusted_ids: Vec<i32> = self
+            .storage
+            .get_nicknames()
+            .into_iter()
+            .filter(|(_, name)| trusted.contains(name.trim()))
+            .map(|(id, _)| id)
+            .collect();
         for target in &context.targets {
             if now - target.last_damage_time > 10_000 {
                 continue;
             }
             let start = target.last_damage_time - target.battle_time;
             let audience = audiences.entry((target.target_id, start)).or_default();
-            audience.extend(target.actor_damage.keys().copied().filter(|id| {
-                (self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others)
-                    || Some(*id) == local
-                    || self
-                        .storage
-                        .get_nickname(*id)
-                        .is_some_and(|n| trusted.contains(n.trim()))
-            }));
-            // Healing-only party members may have no damage-context actor yet.
             audience.extend(
-                self.storage
-                    .get_nicknames()
-                    .into_iter()
-                    .filter(|(_, name)| trusted.contains(name.trim()))
-                    .map(|(id, _)| id),
+                target
+                    .actor_damage
+                    .keys()
+                    .copied()
+                    .filter(|id| open_world_others || Some(*id) == local),
             );
+            // Also covers healing-only party members with no damage-context actor yet.
+            audience.extend(trusted_ids.iter().copied());
             audience.extend(
                 context
                     .actors
@@ -1150,6 +1161,7 @@ impl Engine {
         let audiences = self.audiences.lock();
         for record in &mut records {
             if let Some(allowed) = audiences.get(&(record.target_id, record.start_time_ms)) {
+                let before = record.details.skills.len();
                 record.actors.retain(|a| allowed.contains(&a.actor_id));
                 record
                     .details
@@ -1159,13 +1171,17 @@ impl Engine {
                     .details
                     .heal_skills
                     .retain(|skill| allowed.contains(&skill.actor_id));
-                record.total_damage = record
-                    .details
-                    .skills
-                    .iter()
-                    .map(|s| i64::from(s.dmg))
-                    .sum::<i64>()
-                    .clamp(0, i64::from(i32::MAX)) as i32;
+                // Keep the parser's total unless someone was filtered out.
+                if record.details.skills.len() != before {
+                    record.total_damage = record
+                        .details
+                        .skills
+                        .iter()
+                        .map(|s| i64::from(s.dmg))
+                        .sum::<i64>()
+                        .clamp(0, i64::from(i32::MAX))
+                        as i32;
+                }
             }
         }
         drop(audiences);
@@ -1544,7 +1560,10 @@ impl Engine {
             self.storage.current_dungeon_id()
         };
         if dungeon_id > 0 || !self.overlay.read().open_world_others {
-            keep_own_rows(&mut rows, true, &self.trusted_names());
+            // Until you are known (meter started mid-session in the open world,
+            // no group), filtering would empty the meter; show everyone then.
+            let known = me.is_some() || self.storage.local_player_id().is_some();
+            keep_own_rows(&mut rows, known, &self.trusted_names());
         }
         rows.sort_by(|a, b| b.damage.total_cmp(&a.damage));
         let total: f64 = rows.iter().fold(0.0, |acc, r| acc + r.damage);

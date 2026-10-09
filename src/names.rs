@@ -1,6 +1,6 @@
 //! Display names: classes and dungeons.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
 
 use serde::Serialize;
@@ -100,7 +100,10 @@ pub fn dungeon_activity(id: i32) -> Option<&'static str> {
 }
 
 // Index once: live ticks and history queries must not rescan the NPC catalog.
-type BossIndex = HashMap<i32, (Vec<i32>, HashSet<String>)>;
+// One boss can have several NPC codes (Ultimate Berk has four in Krao Cave,
+// Kaldrix two in the raid); a run meets only one of them, so codes are grouped
+// by name.
+type BossIndex = HashMap<i32, (BTreeMap<String, Vec<i32>>, HashSet<String>)>;
 static BOSS_METADATA: LazyLock<BossIndex> = LazyLock::new(|| {
     let catalog: Value =
         serde_json::from_str(include_str!("../data/i18n/npcs/en.json")).expect("NPC catalog");
@@ -113,7 +116,8 @@ static BOSS_METADATA: LazyLock<BossIndex> = LazyLock::new(|| {
             continue;
         };
         let entry = index.entry(id as i32).or_default();
-        entry.0.push(code);
+        let name = npc["name"].as_str().unwrap_or_default().to_string();
+        entry.0.entry(name).or_default().push(code);
         if let Some(tier) = npc["tier"].as_str() {
             entry.1.insert(tier.to_string());
         }
@@ -121,10 +125,11 @@ static BOSS_METADATA: LazyLock<BossIndex> = LazyLock::new(|| {
     index
 });
 
-pub fn dungeon_bosses(id: i32) -> Vec<i32> {
+/// The bosses a run must kill, each as the NPC codes it can appear as.
+pub fn dungeon_bosses(id: i32) -> Vec<Vec<i32>> {
     BOSS_METADATA
         .get(&id)
-        .map(|entry| entry.0.clone())
+        .map(|entry| entry.0.values().cloned().collect())
         .unwrap_or_default()
 }
 
@@ -210,6 +215,9 @@ mod tests {
         assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 2)");
         assert_eq!(dungeon_difficulty(600063).as_deref(), Some("Stufe 1"));
         assert_eq!(dungeon_bosses(600063).len(), 3);
+        // Ultimate Berk has four codes; one kill of any of them counts.
+        assert_eq!(dungeon_bosses(600001).len(), 3);
+        assert!(dungeon_bosses(600001).iter().any(|b| b.len() == 4));
         assert_eq!(dungeon_label(0), "Offene Welt");
         assert_eq!(dungeon_label(123), "Instanz 123");
         assert_eq!(dungeon_activity(600093), Some("expedition"));

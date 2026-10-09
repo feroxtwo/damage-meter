@@ -216,6 +216,23 @@ const NUMERIC_LIMITED_SQL: &str = "CASE WHEN record_json IS NULL THEN NULL
                   WHERE json_extract(value, '$.dmg') = 2147483647)
       ELSE NULL END";
 
+/// A run's outcome: `active`, `unknown` (no boss catalog for the instance),
+/// `completed` (every catalogued boss has a confirmed kill, under any of its
+/// NPC codes) or `incomplete`. Expects the run as `r`. Only completed runs set
+/// a fastest time.
+macro_rules! run_outcome {
+    () => {
+        "CASE WHEN r.ended_at IS NULL THEN 'active'
+              WHEN json_array_length(required_bosses(r.dungeon_id)) = 0 THEN 'unknown'
+              WHEN NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) boss
+                WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id = f.id
+                  WHERE f.run_id = r.id AND f.is_train = 0 AND f.numeric_limited = 0
+                    AND f.mob_code IN (SELECT value FROM json_each(boss.value))
+                    AND json_extract(a.data, '$.outcome') = 'kill'))
+              THEN 'completed' ELSE 'incomplete' END"
+    };
+}
+
 /// SQLite's `lower()` folds ASCII only, so a search for "kälte" would miss
 /// "Kälte"; `fold()` lowercases with Rust's Unicode rules instead.
 fn register_functions(conn: &Connection) -> Result<()> {
@@ -978,14 +995,11 @@ impl Db {
         let conn = self.conn.lock();
         let filter = dungeon.unwrap_or("");
         let mut stmt = conn.prepare(
-            "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
-                    r.character, r.note, r.favorite,
-                    CASE WHEN r.ended_at IS NULL THEN 'active'
-                         WHEN json_array_length(required_bosses(r.dungeon_id)) > 0
-    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
-        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
-            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
-              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill')) THEN 'completed' ELSE 'incomplete' END AS outcome,
+            concat!(
+                "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
+                    r.character, r.note, r.favorite, ",
+                run_outcome!(),
+                " AS outcome,
                     (SELECT COUNT(*) FROM fights f WHERE f.run_id = r.id AND f.is_train = 0) AS fights,
                     (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
@@ -994,7 +1008,8 @@ impl Db {
              FROM runs r
              WHERE (?3 = '' OR r.dungeon_name = ?3) AND (?4 = '' OR r.character = ?4)
                AND (?5 = 0 OR r.favorite = 1)
-             ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2",
+             ORDER BY r.started_at DESC LIMIT ?1 OFFSET ?2"
+            ),
         )?;
         let mut rows = rows_to_json(
             &mut stmt,
@@ -1028,19 +1043,12 @@ impl Db {
         let Some(mut run) = rows_to_json(&mut stmt, params![run_id])?.into_iter().next() else {
             return Ok(None);
         };
-        let complete: bool = conn.query_row("SELECT json_array_length(required_bosses(r.dungeon_id)) > 0
-    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
-        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
-            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
-              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill')) FROM runs r WHERE r.id=?1",
-            params![run_id], |row| row.get(0))?;
-        run["outcome"] = json!(if run["ended_at"].is_null() {
-            "active"
-        } else if complete {
-            "completed"
-        } else {
-            "incomplete"
-        });
+        let outcome: String = conn.query_row(
+            concat!("SELECT ", run_outcome!(), " FROM runs r WHERE r.id = ?1"),
+            params![run_id],
+            |row| row.get(0),
+        )?;
+        run["outcome"] = json!(outcome);
         let mut stmt = conn.prepare(
             "SELECT name, job, server_id, level, gear_score, combat_power, is_self FROM run_members
              WHERE run_id = ?1 ORDER BY is_self DESC, name",
@@ -2074,17 +2082,14 @@ impl Db {
             params![c],
             |r| r.get(0),
         )?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(concat!(
             "SELECT dungeon_name, difficulty, COUNT(*) AS runs,
-                    MIN(CASE WHEN r.ended_at IS NOT NULL AND json_array_length(required_bosses(r.dungeon_id)) > 0
-    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
-        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
-            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
-              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill'))
-                        THEN r.ended_at - r.started_at END) AS fastest_ms
+                    MIN(CASE WHEN ",
+            run_outcome!(),
+            " = 'completed' THEN r.ended_at - r.started_at END) AS fastest_ms
              FROM runs r WHERE (?1 = '' OR character = ?1)
-             GROUP BY dungeon_name, difficulty ORDER BY runs DESC",
-        )?;
+             GROUP BY dungeon_name, difficulty ORDER BY runs DESC"
+        ))?;
         let per_dungeon = rows_to_json(&mut stmt, params![c])?;
         let mut stmt = conn.prepare(
             "SELECT f.boss_name, f.dungeon_id, fp.name, MAX(fp.dps) AS best_dps, fp.job, COUNT(*) AS attempts
@@ -2137,9 +2142,9 @@ mod tests {
             let conn = db.conn.lock();
             conn.execute_batch("INSERT INTO runs(id,dungeon_id,dungeon_name,difficulty,started_at,ended_at)
                 VALUES (1,600063,'Test','Stufe 1',1000,2000), (2,600063,'Test','Stufe 1',3000,13000);").unwrap();
-            for (i, code) in names::dungeon_bosses(600063).iter().enumerate() {
+            for (i, codes) in names::dungeon_bosses(600063).iter().enumerate() {
                 conn.execute("INSERT INTO fights(id,run_id,mob_code,started_at,duration_ms,is_train,numeric_limited)
-                    VALUES (?1,2,?2,3000,1000,0,0)", params![format!("boss{i}"), code]).unwrap();
+                    VALUES (?1,2,?2,3000,1000,0,0)", params![format!("boss{i}"), codes[0]]).unwrap();
                 conn.execute("INSERT INTO fight_analytics(fight_id,data) VALUES (?1,'{\"outcome\":\"kill\"}')",
                     params![format!("boss{i}")]).unwrap();
             }
@@ -2159,6 +2164,45 @@ mod tests {
             .unwrap();
         assert!(db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"].is_null());
         assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "incomplete");
+    }
+
+    #[test]
+    fn a_boss_with_several_npc_codes_needs_one_kill() {
+        let db = Db::in_memory().unwrap();
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch(
+                "INSERT INTO runs(id,dungeon_id,dungeon_name,difficulty,started_at,ended_at)
+                 VALUES (1,600001,'Krao Cave','Normal',0,600000), (2,999999,'Unbekannt',NULL,0,1000);",
+            )
+            .unwrap();
+            // Krao Cave lists Ultimate Berk under four codes; a run meets one.
+            for (i, codes) in names::dungeon_bosses(600001).iter().enumerate() {
+                let id = format!("krao{i}");
+                conn.execute(
+                    "INSERT INTO fights(id,run_id,mob_code,started_at,duration_ms,is_train,numeric_limited)
+                     VALUES (?1,1,?2,0,1000,0,0)",
+                    params![id, codes.last().unwrap()],
+                )
+                .unwrap();
+                conn.execute(
+                    "INSERT INTO fight_analytics(fight_id,data) VALUES (?1,'{\"outcome\":\"kill\"}')",
+                    params![id],
+                )
+                .unwrap();
+            }
+        }
+        assert_eq!(db.run_detail(1).unwrap().unwrap()["outcome"], "completed");
+        // No boss catalog: the meter cannot tell, so it does not claim an abort.
+        assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "unknown");
+        let runs = db.list_runs(10, 0, None, "", false).unwrap();
+        let outcomes: Vec<_> = runs["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["outcome"].clone())
+            .collect();
+        assert!(outcomes.contains(&json!("completed")) && outcomes.contains(&json!("unknown")));
     }
 
     fn member(name: &str, is_self: bool) -> Member {
