@@ -1583,7 +1583,8 @@ impl Db {
                AND (r.class_key=?4 OR r.class_key='all')
                AND r.cp_min<=?5 AND r.cp_max>=?5
                AND s.from_ms<=?6 AND s.until_ms>=?6
-             ORDER BY CASE WHEN r.region=?3 THEN 0 ELSE 1 END,
+             ORDER BY CASE WHEN r.class_key=?4 THEN 0 ELSE 1 END,
+                      CASE WHEN r.region=?3 THEN 0 ELSE 1 END,
                       r.cp_max-r.cp_min, r.samples DESC, s.captured_at DESC",
         )?;
         let candidates = rows_to_json(
