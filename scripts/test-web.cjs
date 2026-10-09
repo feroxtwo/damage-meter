@@ -38,7 +38,7 @@ let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -60,6 +60,11 @@ const server = http.createServer((req,res) => {
     else if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
     else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
     else if (u.pathname === '/api/live') data = live;
+    else if(u.pathname==='/api/references/sources') data={providers:[{id:'a2tools',name:'A2 Tools',status:'permission_required',detail:'Nur mit Lizenz',url:'https://a2tools.app/stats'}],imports:[],automatic_fetch:false};
+    else if(u.pathname==='/api/references/import')data={source:'community',balance:'test',imported:1,local_only:true};
+    else if(u.pathname.endsWith('/community-index'))data={status:'insufficient',reason:'no_matching_reference',region:u.searchParams.get('region')||'ALL',comparisons:[]};
+    else if(u.pathname.endsWith('/skill-index'))data={status:'insufficient',reason:'few_peers',combat_power:0,overall:{status:'insufficient',peer_count:0},same_class:null};
+
     else if(u.pathname==='/api/fights'){
       fightLimits.add(u.searchParams.get('limit'));
       fightKinds.add(u.searchParams.get('kind'));

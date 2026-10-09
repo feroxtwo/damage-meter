@@ -1595,12 +1595,12 @@ impl Db {
         let mut used = HashSet::new();
         let mut comparisons = Vec::new();
         for mut row in candidates {
-            let source = row["source_id"].as_str().unwrap_or_default();
-            let class = row["class_key"].as_str().unwrap_or_default();
+            let source = row["source_id"].as_str().unwrap_or_default().to_string();
+            let class = row["class_key"].as_str().unwrap_or_default().to_string();
             if class_key == "unknown" && class != "all" {
                 continue;
             }
-            if !used.insert((source.to_string(), class.to_string())) {
+            if !used.insert((source, class.clone())) {
                 continue;
             }
             let reference = row["reference_dps"].as_f64().unwrap_or(0.0);
