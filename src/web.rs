@@ -775,6 +775,23 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(list.status(), StatusCode::OK);
+        let dataset = json!({
+            "schema": "a2m-community-v1",
+            "source": {
+                "id": "community", "url": "https://example.org/statistics",
+                "captured_at": 1_790_000_000_000_i64,
+                "rights_confirmed": true
+            },
+            "balance": {
+                "id": "period-1", "from_ms": 1_780_000_000_000_i64,
+                "until_ms": 1_792_000_000_000_i64
+            },
+            "rows": [{
+                "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                "median_dps": 14500.0, "samples": 30
+            }]
+        }).to_string();
         let blocked = app
             .clone()
             .oneshot(request(
@@ -782,11 +799,23 @@ mod tests {
                 "/api/references/import",
                 "localhost:8787",
                 false,
-                "{}",
+                &dataset,
             ))
             .await
             .unwrap();
         assert_eq!(blocked.status(), StatusCode::FORBIDDEN);
+        let imported = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/references/import",
+                "localhost:8787",
+                true,
+                &dataset,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(imported.status(), StatusCode::OK);
         let missing = app
             .clone()
             .oneshot(request(
