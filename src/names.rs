@@ -100,10 +100,11 @@ pub fn dungeon_activity(id: i32) -> Option<&'static str> {
 }
 
 // Index once: live ticks and history queries must not rescan the NPC catalog.
-static BOSS_METADATA: LazyLock<HashMap<i32, (Vec<i32>, HashSet<String>)>> = LazyLock::new(|| {
+type BossIndex = HashMap<i32, (Vec<i32>, HashSet<String>)>;
+static BOSS_METADATA: LazyLock<BossIndex> = LazyLock::new(|| {
     let catalog: Value =
         serde_json::from_str(include_str!("../data/i18n/npcs/en.json")).expect("NPC catalog");
-    let mut index: HashMap<i32, (Vec<i32>, HashSet<String>)> = HashMap::new();
+    let mut index: BossIndex = HashMap::new();
     for (code, npc) in catalog.as_object().unwrap() {
         if npc["isBoss"] != true {
             continue;
