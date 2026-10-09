@@ -1866,7 +1866,7 @@ mod tests {
                  VALUES ('confirmed','{\"outcome\":\"kill\",\"partial\":false}');",
             ).unwrap();
         }
-        let dataset: crate::community::CommunitySnapshot=serde_json::from_value(json!({
+        let dataset: crate::community::CommunitySnapshot = serde_json::from_value(json!({
             "schema": "a2m-community-v2",
             "source": {
                 "id": "community", "url": "https://example.org/authorized",
@@ -1885,31 +1885,40 @@ mod tests {
                 "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
                 "median_dps": 10000.0, "samples": 50
             }]
-        })).unwrap();
+        }))
+        .unwrap();
         db.import_community(dataset.validate().unwrap()).unwrap();
-        let result=db.community_index("confirmed","EU").unwrap().unwrap();
-        assert_eq!(result["status"],"ready");
-        assert_eq!(result["comparisons"][0]["score"],200.0);
-        assert_eq!(result["comparisons"][0]["comparison_quality"],"structured");
-        assert_eq!(db.community_sources().unwrap()["imports"][0]["metric"],"fight_dps");
+        let result = db.community_index("confirmed", "EU").unwrap().unwrap();
+        assert_eq!(result["status"], "ready");
+        assert_eq!(result["comparisons"][0]["score"], 200.0);
+        assert_eq!(result["comparisons"][0]["comparison_quality"], "structured");
+        assert_eq!(
+            db.community_sources().unwrap()["imports"][0]["metric"],
+            "fight_dps"
+        );
 
         let conn = db.conn.lock();
         conn.execute(
             "UPDATE fight_analytics SET data=?1 WHERE fight_id='confirmed'",
             params![r#"{"outcome":"wipe","partial":false}"#],
-        ).unwrap();
+        )
+        .unwrap();
         drop(conn);
-        let wiped=db.community_index("confirmed","EU").unwrap().unwrap();
-        assert_eq!(wiped["status"],"insufficient");
-        assert_eq!(wiped["comparisons"].as_array().unwrap().len(),0);
+        let wiped = db.community_index("confirmed", "EU").unwrap().unwrap();
+        assert_eq!(wiped["status"], "insufficient");
+        assert_eq!(wiped["comparisons"].as_array().unwrap().len(), 0);
 
         let conn = db.conn.lock();
         conn.execute(
             "UPDATE fight_analytics SET data=?1 WHERE fight_id='confirmed'",
             params![r#"{"outcome":"kill","partial":true}"#],
-        ).unwrap();
+        )
+        .unwrap();
         drop(conn);
-        assert_eq!(db.community_index("confirmed","EU").unwrap().unwrap()["status"],"insufficient");
+        assert_eq!(
+            db.community_index("confirmed", "EU").unwrap().unwrap()["status"],
+            "insufficient"
+        );
     }
 
     #[test]
