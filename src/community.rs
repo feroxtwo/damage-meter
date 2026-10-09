@@ -95,9 +95,10 @@ impl CommunitySnapshot {
                 || method.aggregation != "median_unique_players"
                 || method.patch_id.is_empty()
                 || method.patch_id.len() > 64
-                || !method.patch_id.bytes().all(|b| {
-                    b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')
-                })
+                || !method
+                    .patch_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
             {
                 return Err("invalid_methodology");
             }
@@ -276,13 +277,13 @@ mod tests {
         });
         let good: CommunitySnapshot = serde_json::from_value(data.clone()).unwrap();
         assert!(good.validate().is_ok());
-        let mut missing=data.clone();
+        let mut missing = data.clone();
         missing.as_object_mut().unwrap().remove("methodology");
-        let invalid: CommunitySnapshot=serde_json::from_value(missing).unwrap();
+        let invalid: CommunitySnapshot = serde_json::from_value(missing).unwrap();
         assert_eq!(invalid.validate().unwrap_err(), "methodology_required");
-        let mut false_metric=data;
-        false_metric["methodology"]["metric"]=json!("active_dps");
-        let invalid: CommunitySnapshot=serde_json::from_value(false_metric).unwrap();
+        let mut false_metric = data;
+        false_metric["methodology"]["metric"] = json!("active_dps");
+        let invalid: CommunitySnapshot = serde_json::from_value(false_metric).unwrap();
         assert_eq!(invalid.validate().unwrap_err(), "invalid_methodology");
     }
 

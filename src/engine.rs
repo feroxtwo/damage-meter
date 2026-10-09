@@ -1849,7 +1849,10 @@ mod tests {
         assert_eq!(live.target_id, 50_000);
         assert_eq!(live.combat_state, "paused");
         assert!(live.target_idle_ms.unwrap_or(0) >= 15_000);
-        assert_eq!(e.storage.get_combat_snapshot_light()[&50_000].total_damage, 300);
+        assert_eq!(
+            e.storage.get_combat_snapshot_light()[&50_000].total_damage,
+            300
+        );
         // Another target is still active, so the global parser must not reset yet.
         assert_eq!(e.db.fight_detail("auto_50000_1000").unwrap(), None);
         a2tools_dps_meter_lib::clock::set_override(Some(34_000));

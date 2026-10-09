@@ -158,10 +158,26 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("runs", "favorite", "INTEGER NOT NULL DEFAULT 0"),
     // NULL: no verifiable record. Stored so history never re-parses record_json.
     ("fights", "numeric_limited", "INTEGER"),
-    ("community_snapshots", "metric", "TEXT NOT NULL DEFAULT 'unknown'"),
-    ("community_snapshots", "outcome", "TEXT NOT NULL DEFAULT 'unknown'"),
-    ("community_snapshots", "aggregation", "TEXT NOT NULL DEFAULT 'unknown'"),
-    ("community_snapshots", "patch_id", "TEXT NOT NULL DEFAULT ''"),
+    (
+        "community_snapshots",
+        "metric",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    ),
+    (
+        "community_snapshots",
+        "outcome",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    ),
+    (
+        "community_snapshots",
+        "aggregation",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    ),
+    (
+        "community_snapshots",
+        "patch_id",
+        "TEXT NOT NULL DEFAULT ''",
+    ),
 ];
 
 /// Derives `fights.numeric_limited` from a saved record. `instr` skips the JSON
@@ -1449,8 +1465,17 @@ impl Db {
         let tx = conn.transaction()?;
         let source = &snapshot.source;
         let balance = &snapshot.balance;
-        let (metric, outcome, aggregation, patch_id) = snapshot.methodology.as_ref()
-            .map(|m| (m.metric.as_str(), m.outcome.as_str(), m.aggregation.as_str(), m.patch_id.as_str()))
+        let (metric, outcome, aggregation, patch_id) = snapshot
+            .methodology
+            .as_ref()
+            .map(|m| {
+                (
+                    m.metric.as_str(),
+                    m.outcome.as_str(),
+                    m.aggregation.as_str(),
+                    m.patch_id.as_str(),
+                )
+            })
             .unwrap_or(("unknown", "unknown", "unknown", ""));
         tx.execute(
             "INSERT INTO community_snapshots(
@@ -1566,11 +1591,13 @@ impl Db {
         let dungeon = fight["dungeon_id"].as_i64().unwrap_or(0);
         let started_at = fight["started_at"].as_i64().unwrap_or(0);
         let duration = fight["duration_ms"].as_i64().unwrap_or(0);
-        let analytics: Option<String> = conn.query_row(
-            "SELECT data FROM fight_analytics WHERE fight_id=?1",
-            params![fight_id],
-            |r| r.get(0),
-        ).optional()?;
+        let analytics: Option<String> = conn
+            .query_row(
+                "SELECT data FROM fight_analytics WHERE fight_id=?1",
+                params![fight_id],
+                |r| r.get(0),
+            )
+            .optional()?;
         let analytics = analytics.and_then(|v| serde_json::from_str::<Value>(&v).ok());
         let confirmed_kill = analytics.as_ref().is_some_and(|a| a["outcome"] == "kill");
         let capture_partial = analytics.as_ref().is_none_or(|a| a["partial"] == true);
