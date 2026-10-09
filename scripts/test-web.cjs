@@ -1059,8 +1059,12 @@ const server = http.createServer((req,res) => {
       assert.ok(bars.length>=3&&bars.every(b=>b.height>=4&&b.opacity>=.7)&&Math.abs(bars[1].width/bars[0].width-2/3)<.02,JSON.stringify(bars));
       await page.selectOption('#liveMetric','heal');assert.equal(await page.locator('#selfBurst').isVisible(),false);assert.match(await page.locator('#selfDpsLabel').textContent(),/HPS/);
       await page.selectOption('#liveMetric','damage');
-      await page.evaluate(()=>{for(let i=0;i<2;i++)renderLiveSignal({...latestLive,target_started_at:777,battle_time_ms:1000+i*1000,rows:latestLive.rows.map(r=>({...r,burst_dps:0}))});});
-      assert.match(await page.locator('#liveSignal').getAttribute('aria-label'),/höchster empfangener Wert 0 pro Sekunde/);assert.match(await page.locator('.signal-scale').textContent(),/0\/s beobachtet/);
+      // Read the synthetic signal in the same browser task: a live poll may reset it between awaits.
+      const zeroSignal=await page.evaluate(()=>{
+        for(let i=0;i<2;i++)renderLiveSignal({...latestLive,target_started_at:777,battle_time_ms:1000+i*1000,rows:latestLive.rows.map(r=>({...r,burst_dps:0}))});
+        return {label:document.querySelector('#liveSignal').getAttribute('aria-label'),scale:document.querySelector('.signal-scale')?.textContent};
+      });
+      assert.match(zeroSignal.label,/höchster empfangener Wert 0 pro Sekunde/);assert.match(zeroSignal.scale,/0\/s beobachtet/);
       await page.emulateMedia({reducedMotion:'reduce'});
       for(const theme of ['midnight','aether','ember']){
         settings.theme=theme;await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,theme);
