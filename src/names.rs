@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct ClassInfo {

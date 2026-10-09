@@ -524,7 +524,7 @@ impl Engine {
         self.process_reset();
         let (dps, context) = self.snapshot();
         self.observe(&context);
-        self.track_run();
+        self.track_run(now_ms());
         let live = self.build_live(&dps, &context);
         self.automatic_reset(&live, &context);
         *self.live.write() = live;

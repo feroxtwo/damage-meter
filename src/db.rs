@@ -2118,6 +2118,28 @@ impl Db {
 mod tests {
     use super::*;
 
+    #[test]
+    fn aborted_runs_never_beat_confirmed_complete_runs() {
+        let db = Db::in_memory().unwrap();
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch("INSERT INTO runs(id,dungeon_id,dungeon_name,difficulty,started_at,ended_at)
+                VALUES (1,600063,'Test','Stufe 1',1000,2000), (2,600063,'Test','Stufe 1',3000,13000);").unwrap();
+            for (i, code) in names::dungeon_bosses(600063).iter().enumerate() {
+                conn.execute("INSERT INTO fights(id,run_id,mob_code,started_at,duration_ms,is_train,numeric_limited)
+                    VALUES (?1,2,?2,3000,1000,0,0)", params![format!("boss{i}"), code]).unwrap();
+                conn.execute("INSERT INTO fight_analytics(fight_id,data) VALUES (?1,'{\"outcome\":\"kill\"}')",
+                    params![format!("boss{i}")]).unwrap();
+            }
+        }
+        assert_eq!(db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"], 10000);
+        assert_eq!(db.run_detail(1).unwrap().unwrap()["outcome"], "incomplete");
+        assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "completed");
+        db.conn.lock().execute("UPDATE fight_analytics SET data='{\"outcome\":\"wipe\"}' WHERE fight_id='boss0'", []).unwrap();
+        assert!(db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"].is_null());
+        assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "incomplete");
+    }
+
     fn member(name: &str, is_self: bool) -> Member {
         Member {
             name: name.into(),
