@@ -15,7 +15,7 @@ Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die a
 
 ## Community Skill Index (experimentell)
 
-Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich gegen eigene beobachtete Mitspieler bei ähnlicher Kampfkraft. Zusätzlich können berechtigte, aggregierte Community-Referenzwerte über **Statistik → Datenquellen** freiwillig als JSON importiert werden. Alle Vergleichswerte sind explizit nach Herkunft gekennzeichnet, bleiben lokal und benötigen exakt passende Boss-/Schwierigkeits-/Klassen-/KP-/Region-/Balance-Daten. Ohne passende Stichproben wird kein Index erfunden. **Keine automatische Fremd-API, kein Webscraping, kein Upload.** [Quellen, Schema und Grenzen](docs/COMMUNITY_DATA_SOURCES.md).
+Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich gegen eigene beobachtete Mitspieler bei ähnlicher Kampfkraft. Zusätzlich können berechtigte, aggregierte Community-Referenzwerte über **Statistik → Community-Daten und Vergleichsregion verwalten** freiwillig als JSON importiert werden. Alle Vergleichswerte sind explizit nach Herkunft gekennzeichnet, bleiben lokal und benötigen exakt passende Boss-/Schwierigkeits-/Klassen-/KP-/Region-/Balance-Daten. Ohne passende Stichproben wird kein Index erfunden. **Keine automatische Fremd-API, kein Webscraping, kein Upload.** [Quellen, Schema und Grenzen](docs/COMMUNITY_DATA_SOURCES.md).
 
 ## Kampfqualität & Performance Coach
 
@@ -121,24 +121,34 @@ ohne Bosskill), gibt es im Live-Tab **Neuer Run** oder `~/.local/bin/aion2-meter
 
 **Open World:** Außerhalb von Instanzen zeigt der Meter nur dich und deine Gruppe; fremde Spieler am selben Mob
 blendet er aus. Die Gruppe liest der Meter aus der Gruppenliste, die das Spiel bei jeder Änderung und jedem Zonenwechsel schickt.
-*Overlay → Open World: andere Spieler anzeigen* holt die Fremden zurück. In Dungeons und Expeditionen
+*Einstellungen → Open World: andere Spieler anzeigen* holt die Fremden zurück. In Dungeons und Expeditionen
 erscheint immer die ganze Gruppe.
 
 `~/.local/bin/aion2-meter ctl status` zeigt, ob das Overlay sichtbar und gesperrt ist und ob der Meter mit dem
 Spiel verbunden ist, ohne etwas umzuschalten.
 
 **Mehrere Charaktere:** Jeder Run merkt sich, mit welchem Charakter du gespielt hast. Oben im Dashboard
-filtert eine Auswahl Runs und Statistik (Top-Mitspieler, DPS-Verlauf, Bestwerte) auf einen Charakter oder
+filtert eine Auswahl im Verlauf und in der Statistik (Top-Mitspieler, DPS-Verlauf, Bestwerte) auf einen Charakter oder
 zeigt alle zusammen. Deine eigenen Charaktere zählen nie als Mitspieler.
+
+### Schnell zur richtigen Auswertung
+
+- **Live:** aktueller Kampf; Spieler anklicken für dessen Skills.
+- **Verlauf → Dungeon-Runs:** Dungeon öffnen für Gesamtwerte, Skill-Summen und Schadensverlauf über den Run. **Zurück zu Dungeon-Runs** führt zur vorherigen Listenseite.
+- **Verlauf → Einzelkämpfe:** Bosse, Training und Welt-Mobs suchen und einen Kampfbericht öffnen. **Meine Skills** und **Schadensverlauf** springen direkt zur jeweiligen Auswertung.
+- **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und importierte Community-Referenzen. **Vergleichen** öffnet Kampf- und Spielervergleiche.
+- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Community-Dateien und Vergleichsregion stehen unter **Community-Daten und Vergleichsregion verwalten**.
+- **Skill-Katalog:** Namen und IDs nachschlagen; gemessene Skills stehen in Live und Verlauf.
+- **Einstellungen:** Overlay, Messung, Sprache und Profile. Änderungen werden automatisch gespeichert.
 
 ### Buffs, Debuffs und Mitschnitt
 
-Bei jedem gespeicherten Bosskampf (Runs → Kampf → Skills) steht, wie lange jeder Spieler welche Buffs hatte
+Bei jedem gespeicherten Bosskampf (Verlauf → Einzelkämpfe → Kampf öffnen → Spieler öffnen) steht, wie lange jeder Spieler welche Buffs hatte
 und welche Debuffs wie lange auf dem Boss lagen, jeweils in Prozent der Kampfzeit. Das Buff-Paket ist aus den
 offenen Metern NOIA2 und AIon2-Dps-Meter übernommen.
 
 Ausweichen und nDPS sind hier noch nicht implementiert. Für weitere Parserarbeit schneidet
-der Haken „Pakete mitschneiden“ (Overlay-Menü per Rechtsklick oder Dashboard-Tab „Overlay“, alternativ
+der Haken „Pakete mitschneiden“ (Overlay-Menü per Rechtsklick oder Dashboard-Tab „Einstellungen“, alternativ
 `~/.local/bin/aion2-meter ctl record`) die Spielverbindung mit. Der Haken bleibt nach einem Neustart gesetzt,
 bis du ihn entfernst; über 2 GB werden die ältesten Mitschnitte gelöscht. Die Dateien (`*.a2mcap`, rohe TCP-Daten der Spielverbindung
 mit Zeitstempel) landen in `~/.local/share/aion2-meter/captures/`. Sie enthalten alles, was der Server
@@ -148,10 +158,10 @@ deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zei
 
 - **Overlay:** Einstellungen und Position bleiben nach Neustarts erhalten. Benannte Profile, eigene Zeile trotz Top-N-Limit, Auswahl Schaden/Heilung/erlittener Schaden und „Overlay zurückholen“ im Dashboard. Klick auf einen Spieler im entsperrten nativen Overlay öffnet dessen Details im Browser.
 - **Live:** Schadens- und Heilungsranglisten, Spielerdetails und eigene 5s-Burst-DPS. Heilung wird seit dem letzten Parser-Reset erfasst, einschließlich Selbstheilung. HPS teilt diese erfasste Heilung durch die angezeigte Kampfdauer. Es ist keine effektive Heilung und kein Overheal-Abzug.
-- **Kampfbibliothek:** Unter Runs nach Boss, Notiz, Tags, Datum und Charakter suchen. Kämpfe als Favoriten markieren. Auch Trainingskämpfe und Kämpfe ohne Run-Zuordnung erscheinen hier.
+- **Kampfbibliothek:** Unter Verlauf → Einzelkämpfe nach Boss, Notiz, Tags, Datum und Charakter suchen. Kämpfe als Favoriten markieren. Auch Trainingskämpfe und Kämpfe ohne Run-Zuordnung erscheinen hier.
 - **Vergleich:** Zwei Kämpfe desselben Bosses und derselben Schwierigkeit vergleichen. Eigene DPS, Dauer, Skill-Schaden, Kritrate und Buff-Uptime werden bei gleichem Charakter und gleicher Klasse gegenübergestellt.
 - **Zeitlinien:** Trefferzeitpunkte, Buff-Intervalle, Ping und beobachtete DPS-Kurven. Schaden wird alle 500 ms beobachtet, nicht künstlich auf einzelne Treffer verteilt. Alte Kämpfe ohne gespeicherte Zeitdaten bleiben lesbar.
-- **Teilen:** Rangliste kopieren, CSV/JSON herunterladen, Kopieren, JSON, CSV, PNG und Chatzeile wahlweise für die ganze Gruppe oder einen einzelnen Spieler. Kampffile-Exporte anonymisieren die Namen der anderen Spieler standardmäßig (dein eigener Charakter bleibt benannt) und enthalten keine Notizen, Netzwerkadressen oder internen Charakter-IDs.
+- **Teilen:** Im Kampfbericht **Export** öffnen, Umfang (Gruppe/Spieler) und Format (Text, Chatzeile, PNG, CSV, JSON) wählen, dann **Exportieren**. Text und Chatzeile landen in der Zwischenablage, Dateien werden heruntergeladen. Live bietet denselben Einstieg für Text und Chatzeile. Kampffile-Exporte anonymisieren die Namen der anderen Spieler standardmäßig (dein eigener Charakter bleibt benannt) und enthalten keine Notizen, Netzwerkadressen oder internen Charakter-IDs.
 - **Training:** 1/3/5 Minuten, Start beim ersten Treffer nach dem Reset, Abschlussbericht und persönliche Bestwerte je Charakter, Ziel und Testdauer. Die tatsächlich beobachtete Dauer wird angezeigt. Zielwechsel, Reset oder Verbindungsende unterbrechen das Training.
 
 **Offline-Replay**, ohne Spiel, Overlay oder Capture-Berechtigung:

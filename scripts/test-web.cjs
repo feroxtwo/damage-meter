@@ -5,6 +5,15 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function openDisclosure(page,selector) {
+  const details=page.locator(selector);
+  if(!await details.evaluate(d=>d.open))await details.locator(':scope > summary').click();
+}
+async function exportFightFormat(page,format) {
+  await openDisclosure(page,'#fightExportMenu');
+  await page.selectOption('#fightExportFormat',format);
+  await page.locator('#exportFight').click();
+}
 const settings = {theme:"midnight",compact:false,idle_reset_seconds:0,wipe_reset:false,visible:true, locked:false, opacity:.72, scale:1, max_rows:8, show_dps:true, hide_names:false,pin_self:true,metric:"damage"};
 const live = {
   target_id:9,target_started_at:1000,target_name:'Kargos', dungeon:'Ferocious Horn Den', character:'FeroxTOO',
@@ -162,9 +171,42 @@ const server = http.createServer((req,res) => {
     await check('unknown URL tab falls back to live',async()=>{
       await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
     });
-    await page.getByRole('button',{name:'Runs',exact:true}).click();
+    await page.getByRole('button',{name:'Verlauf',exact:true}).click();
     await page.locator('#runRows tr.click').first().waitFor();
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'runs-desktop.png'),fullPage:true});
+    await check('history starts with dungeons and separates fight filters from run filters',async()=>{
+      assert.equal(await page.locator('#showRunHistory').getAttribute('aria-pressed'),'true');
+      assert.equal(await page.locator('#runList').isVisible(),true);
+      assert.equal(await page.locator('#fightLibrary').isVisible(),false);
+      assert.equal(await page.locator('#mobLibrary').isVisible(),false);
+      await page.locator('#showFightHistory').click();
+      assert.equal(await page.locator('#runList').isVisible(),false);
+      assert.equal(await page.locator('#fightLibrary').isVisible(),true);
+      assert.equal(await page.locator('#mobLibrary').isVisible(),true);
+      await page.locator('#showRunHistory').click();
+    });
+    await check('a delayed run cannot replace the chosen single-fight view',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      await isolated.route('**/api/runs/1',async route=>{await delay(350);await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...run,totals:[],fights:[]})});});
+      try {
+        await isolated.goto(base+'/#runs');await isolated.locator('#runRows tr.click').first().click();await isolated.locator('#showFightHistory').click();await delay(450);
+        assert.equal(await isolated.locator('#runDetail').isVisible(),false);assert.equal(await isolated.locator('#fightLibrary').isVisible(),true);
+      } finally {await isolated.close();}
+    });
+    await check('coach and skill indexes remain accessible without covering the fight analysis',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      await isolated.route('**/api/fights?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({fights:[],more:false})}));
+      try {
+        await isolated.goto(base+'/#live');await isolated.waitForFunction(()=>typeof fillCommunityIndex==='function');await isolated.evaluate(()=>openFight('f1'));
+        assert.equal(await isolated.locator('#fightPerformanceTools').evaluate(d=>d.open),false);
+        await openDisclosure(isolated,'#fightPerformanceTools');await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor();
+        assert.match(await isolated.locator('#skillIndexPanel').textContent(),/Deine Leistung/);
+        await isolated.locator('[data-community-settings]').click();
+        assert.equal(await isolated.locator('#stats').evaluate(e=>e.classList.contains('active')),true);
+        assert.equal(await isolated.locator('#communitySourcesCard').evaluate(d=>d.open),true);
+        assert.equal(await isolated.locator('#communityFile').isVisible(),true);
+      } finally {await isolated.close();}
+    });
     await check('run history shows ten runs per page and pages without skipping',async()=>{
       assert.equal(await page.locator('#runRows tr.click').count(),10);
       assert.equal(await page.locator('#runPage').textContent(),'1–10 von 12');
@@ -176,6 +218,7 @@ const server = http.createServer((req,res) => {
       await page.locator('#runRows tr.click').first().click();
       await page.locator('#backBtn').click();
       await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='11–12 von 12');
+      await page.waitForFunction(()=>document.activeElement.dataset.id==='11');
       await page.locator('#runPrev').click();
       await page.waitForFunction(()=>document.querySelector('#runPage').textContent==='1–10 von 12');
     });
@@ -195,6 +238,7 @@ const server = http.createServer((req,res) => {
       assert.equal(runQueries.at(-1),'false');
     });
     await check('fight library pages separately from the run history',async()=>{
+      await page.locator('#showFightHistory').click();
       await page.waitForFunction(()=>document.querySelector('#fightPage').textContent==='Seite 1 · 1–3');
       await page.locator('#fightNext').click();
       await page.waitForFunction(()=>document.querySelector('#fightResults').textContent.includes('Älterer Boss'));
@@ -234,7 +278,7 @@ const server = http.createServer((req,res) => {
       await page.locator('#resetBtn').click();
       await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Aktion fehlgeschlagen'));
     });
-    await page.getByRole('button',{name:'Overlay',exact:true}).click();
+    await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='1.00×');
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'overlay-settings.png'),fullPage:true});
     await check('settings writes stay ordered during rapid edits',async()=>{
@@ -297,7 +341,7 @@ const server = http.createServer((req,res) => {
       await page.setViewportSize({width:390,height:844});
       for(const width of [320,390]) {
       await page.setViewportSize({width,height:844});
-      for(const tab of ['Live','Runs','Statistik','Fähigkeiten','Overlay']) {
+      for(const tab of ['Live','Verlauf','Statistik','Skill-Katalog','Einstellungen']) {
         await page.getByRole('button',{name:tab,exact:true}).click(); await delay(100);
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab);
       }
@@ -350,30 +394,53 @@ const server = http.createServer((req,res) => {
       await page.waitForFunction(()=>latestLive.rows[1].heal===3000000);
       await page.evaluate(()=>{window.copyText=async text=>{window.copiedRanking=text;};});
       await page.locator('#anonymousExport').check();
-      await page.selectOption('#liveMetric','heal');await page.locator('#copyLive').click();
+      await page.selectOption('#liveMetric','heal');await openDisclosure(page,'#liveExport');await page.selectOption('#liveExportFormat','text');await page.locator('#exportLive').click();
       let text=await page.evaluate(()=>window.copiedRanking);
       assert.match(text.split('\n')[1],/Spieler 1 \| 3,00M Heilung \| 33,3K HPS/);
       assert.ok(text.includes('FeroxTOO')&&!text.includes('Moon'),'own character stays named, others are anonymized');
       await page.locator('#anonymousExport').uncheck();
-      await page.selectOption('#liveMetric','damage_received');await page.locator('#copyLive').click();
+      await page.selectOption('#liveMetric','damage_received');await openDisclosure(page,'#liveExport');await page.selectOption('#liveExportFormat','text');await page.locator('#exportLive').click();
       text=await page.evaluate(()=>window.copiedRanking);
       assert.match(text.split('\n')[1],/90,0K Erlittener Schaden \| 1,0K pro Sekunde/);
-      await page.selectOption('#liveMetric','damage');await page.locator('#copyLive').click();
+      await page.selectOption('#liveMetric','damage');await openDisclosure(page,'#liveExport');await page.selectOption('#liveExportFormat','text');await page.locator('#exportLive').click();
       assert.match((await page.evaluate(()=>window.copiedRanking)).split('\n')[1],/FeroxTOO \| 4,50M Schaden \| 50,0K DPS/);
       live.rows[1].heal=oldHeal;live.rows[1].hps=oldHps;live.rows[1].damage_received=0;
       await page.locator('#anonymousExport').check();
     });
+    await check('live export has one entry and routes the selected format',async()=>{
+      await openDisclosure(page,'#liveExport');await page.selectOption('#liveExportFormat','chat');await page.locator('#exportLive').click();
+      const text=await page.evaluate(()=>window.copiedRanking);assert.equal(text.includes('\n'),false);assert.ok(text.includes('DPS:'));assert.ok(!text.includes('Moon'));
+      await page.selectOption('#liveExportFormat','text');
+      assert.equal(await page.locator('#charSel').isVisible(),false,'historical character filter is not presented as a live filter');
+    });
+    await check('fight report leads with analysis and keeps secondary tools collapsed',async()=>{
+      await page.evaluate(()=>openFight('f1'));
+      for(const selector of ['#fightExportMenu','#fightCompareTools','#fightAnnotation','#fightPerformanceTools'])assert.equal(await page.locator(selector).evaluate(d=>d.open),false);
+      assert.equal(await page.locator('#exportFight').count(),1);
+      assert.equal(await page.locator('#copyFight,#jsonFight,#csvFight,#pngFight,#chatFight').count(),0);
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'fight-analysis-first.png'),fullPage:true});
+      await page.locator('#jumpMySkills').click();await page.locator('.player-report[data-actor="1"] .skill-browser').first().waitFor();
+      assert.equal(await page.locator('.player-report[data-actor="1"]').evaluate(d=>d.open),true);
+      assert.equal(await page.evaluate(()=>document.activeElement.closest('.player-report').dataset.actor),'1');
+      await page.locator('#jumpDamageChart').click();assert.equal(await page.evaluate(()=>document.activeElement.id),'fightChartScope');
+      await openDisclosure(page,'#fightExportMenu');await page.selectOption('#fightExportFormat','chat');await page.locator('#exportFight').click();
+      const text=await page.evaluate(()=>window.copiedRanking);assert.equal(text.includes('\n'),false);assert.ok(!text.includes('Moon'));
+      await page.selectOption('#fightExportFormat','csv');assert.match(await page.locator('#fightExportHint').textContent(),/Tabelle/);
+      if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'unified-export.png'),fullPage:true});
+      await page.locator('#closeDialog').click();
+    });
     await check('fight search, comparison, notes and timeline render',async()=>{
-      await page.getByRole('button',{name:'Runs',exact:true}).click();
+      await page.getByRole('button',{name:'Verlauf',exact:true}).click();
       await page.locator('[data-open-fight="f1"]').click();
       await page.locator('#fightDialog[open]').waitFor();
+      await openDisclosure(page,'#fightCompareTools');
       await page.locator('#compareFight option[value="f2"]').waitFor({state:'attached'});
       await page.selectOption('#compareFight','f2');await page.locator('#compareBtn').click();
       await page.waitForFunction(()=>document.querySelector('#comparison').textContent.includes('10,0K'));
       assert.match(await page.locator('#comparison').textContent(),/25.0%/);
       assert.equal(await page.locator('#fightDamageChart svg.curve-chart').count(),1);
       assert.equal(await page.locator('svg[aria-label="ms Ping"]').count(),1);
-      await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
+      await openDisclosure(page,'#fightAnnotation');await page.locator('#favoriteFight').check();await page.fill('#fightNote','neues Gear');await page.fill('#fightTags','rotation');await page.locator('#saveFightNote').click();
       await delay(100);assert.deepEqual(annotations.at(-1),{id:'f1',favorite:true,note:'neues Gear',tags:'rotation'});
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'combat-analysis.png'),fullPage:true});
     });
@@ -390,7 +457,7 @@ const server = http.createServer((req,res) => {
       const exp=await page.evaluate(()=>fightExport(currentFight,true));
       assert.equal(exp.players[0].name,'FeroxTOO','own character stays named');assert.ok(!JSON.stringify(exp).includes('Moon'));assert.equal(exp.players[1].name,'Spieler 2');
       assert.equal(await page.evaluate(()=>csvCell('=HYPERLINK("evil")')),'"\'=HYPERLINK(""evil"")"');
-      const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
+      const [download]=await Promise.all([page.waitForEvent('download'),exportFightFormat(page,'csv')]);
       assert.equal(download.suggestedFilename(),'aion2-kampf.csv');
       await page.setViewportSize({width:320,height:844});
       assert.equal(await page.evaluate(()=>document.querySelector('#fightDialog').scrollWidth<=document.querySelector('#fightDialog').clientWidth),true);
@@ -406,7 +473,7 @@ const server = http.createServer((req,res) => {
       live.rows[0].damage=original;await overlay.close();
     });
     await check('appearance, idle reset and update controls persist with settings',async()=>{
-      await page.getByRole('button',{name:'Overlay',exact:true}).click();
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
       await page.selectOption('[data-k="theme"]','ember');await page.locator('[data-k="compact"]').check();
       await page.selectOption('[data-k="idle_reset_seconds"]','30');await page.locator('[data-k="wipe_reset"]').check();
       await delay(900);assert.equal(settings.theme,'ember');assert.equal(settings.compact,true);assert.equal(settings.idle_reset_seconds,30);
@@ -425,13 +492,13 @@ const server = http.createServer((req,res) => {
       await page.locator('#closeDialog').click();
     });
     await check('pair comparison, all-player chart and PNG report include hidden skill rows',async()=>{
-      await page.evaluate(()=>openFight('f1'));await page.locator('#pairCompare').click();
+      await page.evaluate(()=>openFight('f1'));await openDisclosure(page,'#fightCompareTools');await page.locator('#pairCompare').click();
       assert.equal(await page.locator('#playerPair .player-pair>div').count(),2);
       await page.selectOption('#fightChartScope','players');
       assert.equal(await page.locator('svg[aria-label="DPS-Verlauf aller Spieler"] path[stroke-width="2"]').count(),3);
       assert.deepEqual(await page.evaluate(()=>reportBuffs([{name:'Wachtschild',uptime:11.5},{name:'Wachtschild',uptime:9},{name:'Fury',uptime:99}]).map(b=>b.name+' '+b.uptime)),['Fury 99','Wachtschild 11.5']);
       assert.equal(await page.evaluate(()=>reportCurves({players:[{actor_id:1}],analytics:{points:[{ms:500,damage:{1:0}},{ms:1000,damage:{1:500}},{ms:1500,damage:{1:1000}}]}},[{name:'A'}]).series[0].values[2]),2000/3);
-      await page.locator('#anonFight').check();
+      await openDisclosure(page,'#fightExportMenu');await page.locator('#anonFight').check();
       assert.equal(await page.locator('#exportScope').inputValue(),'','exports default to the whole group');
       const pngTexts=async value=>{await page.selectOption('#exportScope',value);return page.evaluate(async actor=>{
         const original=CanvasRenderingContext2D.prototype.fillText,texts=[],keep=window.download;window.download=()=>{};
@@ -444,16 +511,16 @@ const server = http.createServer((req,res) => {
       assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,1);assert.ok(texts.some(t=>t.startsWith('Moon · ')));
       texts=await pngTexts('');assert.equal(texts.filter(t=>t==='Schaden nach Skill').length,3);
       await page.selectOption('#exportScope','2');
-      const [single]=await Promise.all([page.waitForEvent('download'),page.locator('#jsonFight').click()]);
+      const [single]=await Promise.all([page.waitForEvent('download'),exportFightFormat(page,'json')]);
       assert.equal(single.suggestedFilename(),'aion2-kampf-spieler-2.json');const one=JSON.parse(fs.readFileSync(await single.path(),'utf8'));
       assert.equal(one.players.length,1);assert.equal(one.players[0].name,'Moon');
       await page.locator('#anonFight').check();
-      const [csv]=await Promise.all([page.waitForEvent('download'),page.locator('#csvFight').click()]);
+      const [csv]=await Promise.all([page.waitForEvent('download'),exportFightFormat(page,'csv')]);
       const csvText=fs.readFileSync(await csv.path(),'utf8');assert.match(csvText,/"Spieler 2"/);assert.ok(!csvText.includes('Moon'));assert.match(csvText,/"Skill";"Art"/);assert.ok(!csvText.includes('FeroxTOO'));
-      await page.locator('#copyFight').click();
+      await exportFightFormat(page,'text');
       assert.equal((await page.evaluate(()=>window.copiedRanking)).split('\n').length,2);
       await page.selectOption('#exportScope','');
-      const [png]=await Promise.all([page.waitForEvent('download'),page.locator('#pngFight').click()]);
+      const [png]=await Promise.all([page.waitForEvent('download'),exportFightFormat(page,'png')]);
       const file=await png.path();const bytes=fs.readFileSync(file);assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.ok(bytes.length>5000);
       if(process.env.SCREENSHOT_DIR) {await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'player-comparison.png'),fullPage:true});fs.copyFileSync(file,path.join(process.env.SCREENSHOT_DIR,'fight-report.png'));}
       await page.selectOption('#pairB','1');await page.locator('#pairCompare').click();assert.match(await page.locator('#playerPair').textContent(),/unterschiedliche/);
@@ -741,7 +808,7 @@ const server = http.createServer((req,res) => {
     });
     await check('diagnostics exclude character names raw errors and network identifiers',async()=>{
       Object.assign(live.capture,{error:'secret file /home/PrivateName/capture',device:'secret-device',packets:42,last_packet_ms:Date.now()});
-      await page.waitForFunction(()=>latestLive.capture.packets===42);await page.locator('#copyDiagnostics').click();
+      await page.waitForFunction(()=>latestLive.capture.packets===42);await openDisclosure(page,'.ranking-tools .secondary-tools');await page.locator('#copyDiagnostics').click();
       await page.waitForFunction(()=>window.copiedRanking?.startsWith('{'));const text=await page.evaluate(()=>window.copiedRanking);const data=JSON.parse(text);
       assert.equal(data.packets,42);assert.equal(data.capture_error,true);assert.ok(!text.includes('PrivateName')&&!text.includes('secret-device')&&!text.includes('FeroxTOO'));
       delete live.capture.error;
@@ -779,7 +846,7 @@ const server = http.createServer((req,res) => {
       await page.locator('#closeDialog').click();await page.evaluate(()=>show('settings'));await page.locator('[data-k="skill_language"]').selectOption('de');await page.waitForFunction(()=>!settingsDirty&&!settingsSaving);
     });
     await check('catalog view survives reload and empty filters can be reset',async()=>{
-      await page.getByRole('button',{name:'Fähigkeiten',exact:true}).click();await page.locator('#catalogRows tr').first().waitFor();
+      await page.getByRole('button',{name:'Skill-Katalog',exact:true}).click();await page.locator('#catalogRows tr').first().waitFor();
       await page.locator('#catalogReset').click();await page.locator('#catalogVariants').check();await page.locator('#catalogNext').click();
       assert.equal(await page.locator('#catalogPage').textContent(),'81–160');
       await page.reload();await page.waitForFunction(()=>document.querySelector('#catalogPage').textContent==='81–160');
@@ -793,10 +860,10 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#catalogEmpty').isVisible(),false);assert.equal(await page.locator('#catalogReset').isDisabled(),true);
     });
     await check('search shortcuts preserve typing and Escape clears before closing a dialog',async()=>{
-      await page.getByRole('button',{name:'Fähigkeiten',exact:true}).click();await page.keyboard.press('/');
+      await page.getByRole('button',{name:'Skill-Katalog',exact:true}).click();await page.keyboard.press('/');
       assert.equal(await page.evaluate(()=>document.activeElement.id),'catalogSearch');
       await page.keyboard.type('no-match/');assert.equal(await page.locator('#catalogSearch').inputValue(),'no-match/');await page.keyboard.press('Escape');assert.equal(await page.locator('#catalogSearch').inputValue(),'');
-      await page.getByRole('button',{name:'Runs',exact:true}).click();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.id),'fightSearch');
+      await page.getByRole('button',{name:'Verlauf',exact:true}).click();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.id),'fightSearch');
       await page.keyboard.type('boss');await page.keyboard.press('Escape');assert.equal(await page.locator('#fightSearch').inputValue(),'');
       await page.getByRole('button',{name:'Live',exact:true}).click();await page.locator('#liveRows .bar').first().waitFor();await page.locator('#liveRows .bar').first().click();await page.locator('#fightDialog[open] #refreshPlayer').waitFor();
       await page.locator('#refreshPlayer').focus();await page.keyboard.press('/');assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('skill-search')),true);
@@ -855,7 +922,7 @@ const server = http.createServer((req,res) => {
     await check('personal progression requires a character and a comparable class',async()=>{
       const data=[{boss:'Kargos',dungeon_id:1,attempts:[10000,10000,20000].map((dps,i)=>({dps,job:'cleric',numeric_limited:0,started_at:run.started_at+i*1000,duration_ms:90000,fight_id:'f1'}))}];
       await page.route('**/api/stats/boss-history**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)}));
-      await page.selectOption('#charSel','FeroxTOO');await page.getByRole('button',{name:'Statistik',exact:true}).click();
+      await page.getByRole('button',{name:'Statistik',exact:true}).click();await page.selectOption('#charSel','FeroxTOO');
       await page.waitForFunction(()=>document.querySelector('#bossSummary').textContent.includes('+100,0 %'));
       const summary=await page.locator('#bossSummary').textContent();
       assert.match(summary,/Rang 1 von 3/);assert.match(summary,/Ø der 2 vorherigen Versuche \(10,0K DPS\)/);assert.match(summary,/Ø aller 3 Versuche/);

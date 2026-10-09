@@ -92,7 +92,7 @@ Urteil der Gegenprüfung: **PR #18 MIT KLEINEN KORREKTUREN GUT**. Reale Protokol
 
 ## Dungeon-Gesamtstatistik mit Skills und Damageverlauf
 
-In der Run-Auswertung ergänzt **Dungeon-Gesamtstatistik** die bestehenden Gesamtranglisten und Einzelberichte. Einstieg: **Runs → Run öffnen**, oder **Statistik → Gesamte Expedition → Run öffnen**. Die Ansicht zeigt wahlweise die gesamte Gruppe oder einen einzelnen Spieler; bei genau einem passenden eigenen Spieler startet sie mit dessen Auswertung.
+In der Run-Auswertung ergänzt **Dungeon-Gesamtstatistik** die bestehenden Gesamtranglisten und Einzelberichte. Einstieg: **Verlauf → Dungeon-Runs → Run öffnen**, oder **Statistik → Gesamte Expedition → Run öffnen**. Die Ansicht zeigt wahlweise die gesamte Gruppe oder einen einzelnen Spieler; bei genau einem passenden eigenen Spieler startet sie mit dessen Auswertung.
 
 - **Schaden, DPS, Kampfzeit und Kampfzahl** gelten für alle gespeicherten Kämpfe des ausgewählten Runs ohne Training. Erfasste Mobs und wiederholte Bossversuche gehören ebenfalls dazu. Fehlende Teilnahme bedeutet 0 Schaden über das gemeinsame Zeitfenster, mindestens eine Sekunde je Kampf. Wege/Pausen gehören nicht zur Kampfzeit. Nicht gespeicherte Kämpfe werden nicht ergänzt.
 - **Schadensskills** werden über Skill-ID und DoT-Typ summiert. Suchbare/sortierbare Tabellen behalten Namen, Sprache und Icons. Skill-DPS verwendet die gesamte gemeinsame Kampfzeit; Trefferquoten werden mit Trefferzahlen gewichtet. Unbekannte Skill-IDs werden nicht anhand gleicher Namen zusammengelegt. Unbekannte Quoten, Min/Max und optionale Zähler bleiben unbekannt. Heilung seit Parser-Reset wird nicht zu einer vermeintlich gesicherten Dungeon-Heilsumme addiert.
@@ -103,3 +103,22 @@ In der Run-Auswertung ergänzt **Dungeon-Gesamtstatistik** die bestehenden Gesam
 Ergänzte Tests prüfen API/Decoder, Training-Ausschluss und andere Runs, leere/fehlende Runs, alte Datensätze ohne Skill-/Zeitreihen, gemeinsame Zeitfenster, null/fehlende Teilnahme, wechselnde Actor-IDs, gleiche Namen auf unterschiedlichen Servern, Skill-IDs/DoT/gewichtete Quoten, Messdaten-Unveränderlichkeit, Teilaufzeichnungen/Datenlücken und unterbrochene Kurven. Browserprüfungen decken Auswahl, Suche, Damage-/DPS-Verlauf, Berichtssprung, verspätete Antworten und 1440/768/320 px ab. Der neue Rechentest `scripts/test-run-analysis.cjs` läuft in `npm test` und damit in CI.
 
 Lokale Prüfung der Dungeon-Erweiterung: 99 Rust-Tests, 60 Browserprüfungen, 30 numerische Run-Assertions, 58 Insight-Assertions, 8 Skill- und 9 Chart-Prüfungen sowie fmt/Clippy, Release und API-/Persistenz-/Dashboard-Integration. Die nachfolgende CI-Abnahme gehört zum neuen Feature-Head; die vorherige Abnahme bleibt als historischer Stand dokumentiert.
+
+
+## Bedienungsprüfung auf aktuellem main
+
+Die Vereinfachung basiert auf `8149886` und berücksichtigt die seit PR #18 ergänzten Identitätskorrekturen, Skill Index, Community-Referenzen und Performance Coach sowie Parser 2.0.54. PR #18 ist bereits gemergt; diese Änderungen werden separat zur Prüfung bereitgestellt.
+
+| Hürde | Neuer Ablauf |
+|---|---|
+| Drei Listen unter „Runs“, unterschiedliche Filter ohne klaren Einstieg | „Verlauf“ mit „Dungeon-Runs“ und „Einzelkämpfe“. Run-Auswertung startet mit Dungeon-Gesamtstatistik. |
+| „Fähigkeiten“ lässt eine persönliche Skill-Auswertung erwarten | „Skill-Katalog“ erklärt den Nachschlagezweck und nennt die Wege zur gemessenen Auswertung. |
+| Viele Exportknöpfe vor der Analyse | Ein Einstieg „Export“, dann Umfang, Format und „Exportieren“. Live: Text/Chat; Kampfbericht: Text/Chat/PNG/CSV/JSON. |
+| Coach, Index, Community und manuelle Vergleiche drängen Skills nach unten | Auswertung zuerst; „Meine Skills“ und „Schadensverlauf“ als direkte Sprünge. Coach/Index unter „Leistung einordnen“, manuelle Vergleiche unter „Vergleichen“. |
+| Datenimport unterbricht den Statistikablauf | Community-Verwaltung am Ende der Statistik, aufklappbar. Der Einstieg aus dem Kampfbericht öffnet sie und setzt den Fokus. |
+| Nach dem Run unklarer Rückweg | „Zurück zu Dungeon-Runs“, gleiche Listenseite und Fokus auf dem zuvor geöffneten Run. |
+| Charakterfilter suggeriert Einfluss auf Live | Sichtbar im Verlauf und in Statistik, dort ausdrücklich beschriftet. |
+
+Alle vorhandenen Formate, Anonymisierung, Gruppennummern beim Einzelexport, CSV-Formelschutz, PNG-Seitenaufteilung, Notizen, Favoriten und Messwerte bleiben erhalten. Einschränkungen der Aufzeichnung stehen weiterhin sichtbar vor der Analyse; vollständige Messdetails sind aufklappbar. Native und OBS-Anzeige sowie Parser-/Datenbankberechnungen werden durch diese Bedienungsänderung nicht verändert. Die Hauptseiten-CSS-Regel gilt jetzt nur für direkte Seiten unter main; der als section gerenderte Performance Coach wird dadurch nicht mehr versehentlich ausgeblendet. Die neue Regression prüft die sichtbaren Coach-Zellen, nicht lediglich deren Vorhandensein im DOM.
+
+Browserregressionen prüfen getrennte Listen/Filter, verspätete Run-Antworten nach einem Ansichtswechsel, Fokus beim Zurückgehen, den einzelnen Export-Einstieg mit allen bisherigen Formatprüfungen und den Weg zu Coach/Index/Community-Verwaltung. Die Bildschirmprüfung verwendet synthetische Kampfdaten. Sie belegt funktionierende Abläufe und Layout, keine menschliche Ingame-Abnahme der Intuitivität.

@@ -33,7 +33,7 @@ nav button:hover { color: var(--text); background: var(--panel2); }
 #status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; max-width: 280px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; flex-shrink: 0; }
 main { max-width: 1280px; margin: 0 auto; padding: 32px; }
-section { display: none; } section.active { display: block; }
+main > section { display: none; } main > section.active { display: block; }
 .page-title { margin-bottom: 24px; display: flex; justify-content: space-between; gap: 12px; align-items: end; }
 .eyebrow { color: var(--accent); font-size: 10px; letter-spacing: 2px; font-weight: 700; text-transform: uppercase; }
 .page-title h2 { margin: 6px 0 4px; font-size: 28px; letter-spacing: -.7px; font-weight: 650; }
@@ -142,12 +142,12 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   <div class="brand"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg></span><div><h1>AION2 METER</h1><small>KAMPFANALYSE</small></div></div>
   <nav aria-label="Hauptnavigation">
     <button data-tab="live" class="active"><svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg>Live</button>
-    <button data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#icon-runs"/></svg>Runs</button>
+    <button data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#icon-runs"/></svg>Verlauf</button>
     <button data-tab="stats"><svg class="icon" aria-hidden="true"><use href="#icon-stats"/></svg>Statistik</button>
-    <button data-tab="skills"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg>Fähigkeiten</button>
-    <button data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Overlay</button>
+    <button data-tab="skills"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg>Skill-Katalog</button>
+    <button data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Einstellungen</button>
   </nav>
-  <select id="charSel" title="Runs und Statistik für einen Charakter" style="display:none"><option value="">Alle Charaktere</option></select>
+  <select id="charSel" aria-label="Charakter für Verlauf und Statistik" title="Filtert Verlauf und Statistik; Live zeigt den aktuellen Kampf" style="display:none"><option value="">Alle Charaktere</option></select>
   <div id="status" role="status"><span class="dot" id="statusDot"></span><span id="statusText">…</span></div>
 </header>
 <main id="main">
@@ -175,21 +175,26 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
     </div>
     <div id="postFight" hidden></div>
     <div class="live-workspace">
-    <div class="ranking-panel"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div class="ranking-tools"><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><button class="btn" id="copyLive">Ergebnis kopieren</button><button class="btn" id="copyChat">Chatzeile</button><button class="btn" id="copyDiagnostics">Diagnose kopieren</button><label><input type="checkbox" id="anonymousExport" checked> Andere Namen anonymisieren</label></div></div><div id="livePlayer"></div></div>
+    <div class="ranking-panel"><div class="ranking-head"><h2>Gruppenleistung</h2><span>Schaden · DPS · Anteil</span></div><p class="muted" id="metricHint"></p><div id="captureHelp" role="status" hidden></div><p id="numericWarning" class="muted" role="status" hidden>Parser-Zahlengrenze erreicht. Einzelne Skillwerte können begrenzt sein; Gesamtschaden und DPS nicht als exakte Referenz verwenden.</p><div id="liveRows"></div><div class="ranking-tools"><div class="row"><select id="liveMetric" aria-label="Kennzahl"><option value="damage">Schaden / DPS</option><option value="heal">Erfasste Heilung / HPS</option><option value="damage_received">Erlittener Schaden</option></select><details class="export-menu" id="liveExport"><summary>Export</summary><div class="row"><label>Format <select id="liveExportFormat"><option value="text">Text · Zwischenablage</option><option value="chat">Chatzeile · Zwischenablage</option></select></label><label><input type="checkbox" id="anonymousExport" checked> Andere Namen anonymisieren</label><button class="btn" id="exportLive">Exportieren</button></div><p class="analysis-note">Exportiert die gerade ausgewählte Kennzahl der Gruppe.</p></details><details class="secondary-tools"><summary>Diagnose</summary><button class="btn" id="copyDiagnostics">Diagnose kopieren</button></details></div></div><div id="livePlayer"></div></div>
     <div class="training-panel"><div class="eyebrow">Dein Trainingslabor</div><h2>Training</h2><div class="row"><fieldset id="trainingDuration" class="training-duration"><legend>Trainingsdauer</legend><label><input type="radio" name="trainingSeconds" value="60" checked><span>1 MIN</span></label><label><input type="radio" name="trainingSeconds" value="180"><span>3 MIN</span></label><label><input type="radio" name="trainingSeconds" value="300"><span>5 MIN</span></label></fieldset><button class="btn" id="startTraining">Training starten</button><button class="btn" id="stopTraining">Abbrechen</button></div><p class="muted">Startet mit dem ersten Treffer nach dem Reset. Messauflösung 500 ms. Persönliche Bestwerte je Charakter, Ziel und Testdauer.</p><div id="trainingResult">Noch kein Training.</div></div>
     </div>
   </section>
 
-  <section id="runs">
-    <div class="page-title"><div><div class="eyebrow">Deine Sessions</div><h2>Run-Verlauf</h2><p>Jede Expedition. Jeder Boss. Dein Fortschritt.</p></div><span class="tag">AION 2 · LINUX</span></div>
+  <section id="runs" data-archive="runs">
+    <div class="page-title"><div><div class="eyebrow">Gespeicherte Kämpfe</div><h2>Verlauf</h2><p>Dungeon-Runs mit Gesamtstatistik oder einzelne Kämpfe ansehen.</p></div></div>
+    <div class="archive-switch" id="archiveSwitch" role="group" aria-label="Verlauf anzeigen">
+      <button class="btn" id="showRunHistory" aria-pressed="true">Dungeon-Runs</button>
+      <button class="btn" id="showFightHistory" aria-pressed="false">Einzelkämpfe</button>
+    </div>
+    <p class="analysis-note" id="archiveHint">Öffne einen Run für Gesamtwerte, Skills und Schadensverlauf des Dungeons.</p>
     <div class="card" id="fightLibrary"><h2>Kampfbibliothek</h2><div class="row"><input id="fightSearch" type="search" placeholder="Boss, Notiz oder Tag" aria-label="Kämpfe suchen"><label>Von <input id="fightFrom" type="date"></label><label>Bis <input id="fightTo" type="date"></label><label><input id="fightFavorites" type="checkbox"> Nur Favoriten</label><button class="btn" id="searchFights">Suchen</button><button class="btn" id="clearFightFilters">Filter zurücksetzen</button></div><p class="muted">Auch Trainingskämpfe und Kämpfe außerhalb eines Runs.</p><div id="fightResults"></div><div class="row pager" id="fightPager" hidden><button class="btn" id="fightPrev">Zurück</button><span id="fightPage" role="status"></span><button class="btn" id="fightNext">Weiter</button></div></div>
     <div id="runList">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:10px">
-          <h2 style="margin:0">Expeditionen</h2>
+          <h2 style="margin:0">Dungeon-Runs</h2>
           <div class="row"><label><input id="runFavorites" type="checkbox"> Nur Favoriten</label><select id="dungeonFilter" aria-label="Dungeon filtern"><option value="">Alle Dungeons</option></select></div>
         </div>
-        <div class="table-scroll"><table><thead><tr><th>Datum</th><th>Dungeon</th><th>Dauer</th><th>Bosse</th><th>Gruppe</th><th>Meine DPS</th></tr></thead>
+        <p class="analysis-note">Dungeon anklicken, um den Run zu öffnen.</p><div class="table-scroll"><table><thead><tr><th>Datum</th><th>Dungeon</th><th>Dauer</th><th>Kämpfe</th><th>Gruppe</th><th>Meine Ø DPS</th></tr></thead>
         <tbody id="runRows"></tbody></table></div><p class="analysis-note">Meine DPS: arithmetischer Mittelwert der eigenen gespeicherten Kampf-DPS.</p>
         <div class="row pager" id="runPager" hidden><button class="btn" id="runPrev">Zurück</button><span id="runPage" role="status"></span><button class="btn" id="runNext">Weiter</button></div>
       </div>
@@ -211,7 +216,13 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
         <p class="analysis-note" id="bossNote"></p>
         <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details></div>
-      <div class="card community-sources-card" id="communitySourcesCard" style="grid-column:1 / -1">
+      <div class="grid" id="kpis"></div>
+      <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
+      <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
+      <div class="card"><h2>Meine beste DPS pro Boss</h2><div id="myBest"></div></div>
+
+      <div class="card"><h2>Runs der letzten 30 Tage</h2><div class="spark" id="perDay"></div><div class="muted" id="perDayLbl" style="font-size:12px;margin-top:6px"></div></div>
+      <details class="card community-sources-card secondary-tools" id="communitySourcesCard" style="grid-column:1 / -1"><summary>Community-Daten und Vergleichsregion verwalten</summary>
         <div class="reference-heading"><div><div class="eyebrow">DATENQUELLEN · COMMUNITY PERFORMANCE</div><h2>Leistungsvergleich mit externen Daten</h2><p class="analysis-note">Lokale Messwerte bleiben privat. Online-Anbieter werden nicht automatisch abgefragt. Berechtigte, aggregierte Referenzdaten kannst du als JSON importieren.</p></div></div>
         <div class="reference-actions">
           <label>Vergleichsregion (manuell wählen)
@@ -226,24 +237,18 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
         </div>
         <p role="status" id="communityImportStatus" class="analysis-note" aria-live="polite"></p>
         <div id="communitySources" aria-live="polite"><p class="analysis-note">Datenquellen werden geladen …</p></div>
-      </div>
-      <div class="grid" id="kpis"></div>
-      <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
-      <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
-      <div class="card"><h2>Meine beste DPS pro Boss</h2><div id="myBest"></div></div>
-
-      <div class="card"><h2>Runs der letzten 30 Tage</h2><div class="spark" id="perDay"></div><div class="muted" id="perDayLbl" style="font-size:12px;margin-top:6px"></div></div>
+      </details>
     </div>
   </section>
 
   <section id="skills">
-    <div class="card"><h2>Fähigkeiten · Skills</h2><p class="muted">Offline-Katalog mit deutschen und englischen Namen. Suche auch nach Skill-ID oder Varianten-ID. Quelle: Wakayashi / Questlog, Stand 07.10.2026.</p>
+    <div class="card"><h2>Skill-Katalog</h2><p class="muted">Namen und IDs aller bekannten Fähigkeiten nachschlagen. Deine gemessenen Skills findest du unter Live → Spieler anklicken oder im Verlauf → Kampf bzw. Run öffnen.</p><p class="analysis-note">Offline-Katalog: Wakayashi / Questlog, Stand 07.10.2026.</p>
     <div class="row"><input id="catalogSearch" type="search" maxlength="200" placeholder="Name / Skill-ID" aria-label="Fähigkeiten suchen" title="/: Suche fokussieren · Esc: Suche leeren"><select id="catalogClass" aria-label="Klasse filtern"><option value="">Alle Klassen</option><option value="gladiator">Gladiator</option><option value="templar">Templer</option><option value="assassin">Assassine</option><option value="ranger">Jäger</option><option value="sorcerer">Zauberer</option><option value="elementalist">Beschwörer</option><option value="cleric">Kleriker</option><option value="chanter">Kantor</option><option value="fighter">Faustkämpfer</option></select><label><input id="catalogVariants" type="checkbox"> Weitere Paket-IDs / Effekte</label><button id="catalogReset" class="btn" title="Suche, Klassenfilter und Seite zurücksetzen" disabled>Zurücksetzen</button></div>
     <p id="catalogCount" class="analysis-note" role="status">Katalog wird geladen …</p><p id="catalogEmpty" class="muted" hidden>Keine passenden Fähigkeiten. Ändere die Suche oder setze die Filter zurück.</p><div class="table-scroll"><table><thead><tr><th>Fähigkeit</th><th>Deutsch</th><th>English</th><th>Klasse</th><th>ID / Varianten</th></tr></thead><tbody id="catalogRows"></tbody></table></div><div class="row"><button id="catalogPrev" class="btn">Zurück</button><span id="catalogPage"></span><button id="catalogNext" class="btn">Weiter</button></div>
     <p class="analysis-note">Unbekannte IDs bleiben sichtbar. Ein zugeordnetes Symbol bestätigt keine Ingame-Messgenauigkeit.</p></div>
   </section>
   <section id="settings">
-    <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Overlay anpassen</h2><p>So kompakt und dezent, wie du es im Spiel brauchst.</p></div><span class="tag">AION 2 · LINUX</span></div>
+    <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Einstellungen</h2><p>Overlay, Messung, Sprache und Profile anpassen. Änderungen werden automatisch gespeichert.</p></div></div>
     <div class="card">
       <h2>Natives Ingame-Overlay</h2><p class="analysis-note">Das Linux-Fenster läuft parallel zum Dashboard. Die Browser-/OBS-Ansicht ist separat unter <a href="/overlay">/overlay</a> erreichbar.</p><fieldset class="settings-group"><legend>Design und Lesbarkeit</legend>
       <label class="set">Design <select data-k="theme"><option value="midnight">Midnight</option><option value="aether">Aether</option><option value="ember">Ember</option></select></label>
@@ -328,7 +333,8 @@ function show(t) {
   if (!['live', 'runs', 'stats', 'settings', 'skills'].includes(t)) t = 'live';
   tab = t; location.hash = t;
   document.querySelectorAll('nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === t));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('active', s.id === t));
+  $('#charSel').hidden=!['runs','stats'].includes(t);
   if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
   if (t === 'stats') { task(loadStats()); task(loadBossHistory()); if(window.loadCommunitySources)task(loadCommunitySources()); }
   if (t === 'settings') task(loadSettings());
@@ -452,6 +458,16 @@ async function toggleRunFavorite(button, run) {
   } finally { button.disabled = false; }
 }
 
+let archiveView='runs',archiveSwitchRequest=0;
+function setArchiveView(view) {
+  archiveView=view==='fights'?'fights':'runs';
+  $('#runs').dataset.archive=archiveView;
+  $('#showRunHistory').setAttribute('aria-pressed',String(archiveView==='runs'));
+  $('#showFightHistory').setAttribute('aria-pressed',String(archiveView==='fights'));
+  $('#archiveHint').textContent=archiveView==='runs'?'Öffne einen Run für Gesamtwerte, Skills und Schadensverlauf des Dungeons.':'Suche nach Gegner, Notiz oder Tag. Die Filter gelten für Bosse, Training und Welt-Mobs.';
+}
+$('#showRunHistory').onclick=()=>{archiveSwitchRequest++;setArchiveView('runs');};
+$('#showFightHistory').onclick=()=>{archiveSwitchRequest++;setArchiveView('fights');};
 async function loadRuns(reset) {
   $('#runs').classList.remove('run-open');
   $('#runDetail').style.display = 'none'; $('#runList').style.display = 'block';
@@ -490,27 +506,30 @@ $('#runPrev').onclick = () => { runPage = Math.max(0, runPage - 1); task(loadRun
 $('#runNext').onclick = () => { runPage++; task(loadRuns(false)); };
 
 async function openRun(id) {
-  const request = ++runsRequest;
+  const request = ++runsRequest,archiveRequest=archiveSwitchRequest;
   const r = await api('/api/runs/' + id);
-  if (request !== runsRequest || tab !== 'runs') return;
+  if (request !== runsRequest || archiveRequest!==archiveSwitchRequest || tab !== 'runs') return;
+  setArchiveView('runs');
   $('#runs').classList.add('run-open');
   $('#runList').style.display = 'none';
   const el = $('#runDetail'); el.style.display = 'block';
-  el.innerHTML = `<button class="btn back" id="backBtn">← Zurück</button>
+  el.innerHTML = `<button class="btn back" id="backBtn">← Zurück zu Dungeon-Runs</button>
   <div class="card"><div class="row" style="justify-content:space-between">
     <div><div style="font-size:20px;font-weight:700">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
     <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} erfasste Kämpfe${r.character ? ' · ' + esc(r.character) : ''}</div></div>
-    <div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Speichern</button>
-    <button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Löschen</button></div></div>
+    </div>
     <div style="margin-top:10px">${r.members.map(chip).join('')}</div></div>
-  <div class="card"><h2>Gesamt über erfasste Kämpfe</h2><p class="analysis-note">${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}</p>${bars(r.totals)}</div>
   <div class="card" id="runAnalysis"><h2>Dungeon-Gesamtstatistik</h2><p class="muted">Skills und Damageverlauf werden geladen …</p></div>
+  <details class="card secondary-tools"><summary>Gruppenrangliste über den Run</summary><p class="analysis-note">${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}</p>${bars(r.totals)}</details>
+  <details class="card secondary-tools"><summary>Run-Notiz bearbeiten oder Run löschen</summary><div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Notiz speichern</button><button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Run löschen</button></div></details>
+  <h2>Einzelkämpfe in diesem Run</h2>
   ${r.fights.map(f => `<div class="card"><details><summary><b>${esc(f.boss_name || 'Unbekannter Gegner')}</b>${f.is_train ? '<span class="badge">Training</span>' : ''}
     <span class="muted"> · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden · ${date(f.started_at)}</span>
-    <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Skills</button></summary>
+    <button class="btn" style="float:right;padding:2px 10px" data-fight="${esc(f.id)}">Kampfbericht öffnen</button></summary>
     ${bars(f.players)}<div class="skills" id="sk-${esc(f.id)}"></div></details></div>`).join('')}`;
   if(window.loadRunAnalysis)task(loadRunAnalysis(id,request));
-  $('#backBtn').onclick = () => loadRuns(false);
+  $('#backBtn').focus(); window.scrollTo({top:0,behavior:'instant'});
+  $('#backBtn').onclick = () => task(loadRuns(false).then(()=>{const row=[...$('#runRows').querySelectorAll('tr.click')].find(tr=>tr.dataset.id===String(id));if(row)row.focus();else $('#showRunHistory').focus();}));
   const star = el.querySelector('[data-fav-run]'); star.onclick = () => task(toggleRunFavorite(star, r));
   $('#noteBtn').onclick = async () => { await api(`/api/runs/${id}/note`, { method: 'POST', body: JSON.stringify({ note: $('#noteIn').value }) }); toast('Notiz gespeichert.'); };
   $('#delBtn').onclick = async () => { if (confirm('Diesen Run wirklich löschen?')) { await api('/api/runs/' + id, { method: 'DELETE' }); loadRuns(false); } };

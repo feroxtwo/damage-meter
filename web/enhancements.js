@@ -337,7 +337,11 @@ function rankingText(title,players,ms,metric='damage') {
   const rate=metric==='heal'?'HPS':metric==='damage_received'?'pro Sekunde':'DPS';
   return [title+' · '+dur(ms),...players.map((p,i)=>`${i+1}. ${p.name} | ${num(p.damage)} ${label} | ${num(p.dps)} ${rate}${metric==='damage'?' | '+num(p.heal||0)+' Heilung':''}`)].join('\n');
 }
-$('#copyLive').onclick=()=>{if(latestLive)task(copyText(rankingText(latestLive.target_name||'Kampf',exportPlayers(metricRows(latestLive.rows),$('#anonymousExport').checked),latestLive.battle_time_ms,metricKey())));};
+$('#exportLive').onclick=()=>{
+  if(!latestLive)return;
+  const format=$('#liveExportFormat').value,players=exportPlayers(metricRows(latestLive.rows),$('#anonymousExport').checked);
+  task(copyText((format==='chat'?chatLine:rankingText)(latestLive.target_name||'Kampf',players,latestLive.battle_time_ms,metricKey())));
+};
 function download(name,body,type) {
   const url=URL.createObjectURL(new Blob([body],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -345,7 +349,7 @@ function download(name,body,type) {
 function csvCell(value) {let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
 // Export scope in the fight dialog: the whole group, or one player picked by actor id.
 function exportScopeOptions(f) {
-  return `<option value="">Export: ganze Gruppe</option>${f.players.map(p=>`<option value="${Number(p.actor_id)}">Export: nur ${esc(p.name)}</option>`).join('')}`;
+  return `<option value="">Ganze Gruppe</option>${f.players.map(p=>`<option value="${Number(p.actor_id)}">Nur ${esc(p.name)}</option>`).join('')}`;
 }
 function exportScopeIndex(f) {
   const v=$('#exportScope')?.value;if(!v)return null;
@@ -616,31 +620,41 @@ async function openFight(id) {
   const request=++detailRequest;const f=await api('/api/fights/'+encodeURIComponent(id));if(request!==detailRequest)return;
   currentFight=f;$('#dialogTitle').textContent=(f.boss_name||'Kampf')+' · '+(f.difficulty||'');
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
-    <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
+    ${f.numeric_limited||f.analytics?.partial||f.analytics?.effects_partial?'<p class="analysis-note" role="status">Aufzeichnung eingeschränkt: '+[f.numeric_limited?'Zahlengrenze erreicht':'',f.analytics?.partial?'Schadensverlauf unvollständig':'',f.analytics?.effects_partial?'Effektdaten unvollständig':''].filter(Boolean).join(' · ')+'. Details unter „Erfassung und Datenqualität“.</p>':''}
     ${fightStory(f)}
-    <section id="performanceCoachPanel" class="skill-index-panel coach-panel" aria-label="Persönlicher Performance Coach">
-      <div class="eyebrow">PERFORMANCE COACH</div><h3>Was hat sich verändert?</h3>
-      <p class="analysis-note">Deine aufgezeichneten Kampfwerte werden ausgewertet …</p>
-    </section>
-    <div id="skillIndexPanel" class="skill-index-panel" aria-label="Lokaler Skill Index"><p class="analysis-note">Skill Index wird geladen …</p></div>
-    <div id="communityIndexPanel" class="skill-index-panel community-index-panel" aria-label="Community Skill Index"><p class="analysis-note">Community-Referenzen werden geladen …</p></div>
-    <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
-    <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
-    ${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
+    <div class="row report-jumps">${f.players.some(p=>p.is_self)?'<button class="btn" id="jumpMySkills">Meine Skills</button>':''}<button class="btn" id="jumpDamageChart">Schadensverlauf</button></div>
+    <details class="export-menu" id="fightExportMenu"><summary>Export</summary><div class="row fight-tools"><label>Umfang <select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select></label><label>Format <select id="fightExportFormat"><option value="text">Text · Zwischenablage</option><option value="chat">Chatzeile · Zwischenablage</option><option value="png">PNG · Bildbericht</option><option value="csv">CSV · Tabelle</option><option value="json">JSON · Daten</option></select></label><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label><button class="btn" id="exportFight">Exportieren</button></div><p class="analysis-note" id="fightExportHint">Kopiert das Ergebnis für den gewählten Umfang.</p></details>
+    ${fightChartControls(f)}
+    <h3>Skills und Details pro Spieler</h3><p class="analysis-note">Spieler öffnen, um Schadensskills, Heilung und Zeitlinien zu sehen.</p>${f.players.map(p=>playerReport(p,f)).join('')}
+    <details class="secondary-tools" id="fightPerformanceTools"><summary>Leistung einordnen · Coach und Skill Index</summary>
+      <section id="performanceCoachPanel" class="skill-index-panel coach-panel" aria-label="Persönlicher Performance Coach"><p class="analysis-note">Deine aufgezeichneten Kampfwerte werden ausgewertet …</p></section>
+      <div id="skillIndexPanel" class="skill-index-panel" aria-label="Lokaler Skill Index"><p class="analysis-note">Skill Index wird geladen …</p></div>
+      <div id="communityIndexPanel" class="skill-index-panel community-index-panel" aria-label="Community Skill Index"><p class="analysis-note">Community-Referenzen werden geladen …</p></div>
+    </details>
+    <details class="secondary-tools" id="fightCompareTools"><summary>Vergleichen</summary><h3>Mit einem anderen Kampf vergleichen</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div></details>
+    <details class="secondary-tools" id="fightAnnotation"><summary>Favorit, Notiz und Tags bearbeiten</summary><div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div></details>
+    <details class="secondary-tools"><summary>Erfassung und Datenqualität</summary><p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p></details>
+
     <details><summary>Verbindung · Ping-Verlauf</summary>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}</details>
-    ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
+    ${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);fillAttemptContext($('#fightContent'),f);
   fillSkillIndex(id,$('#skillIndexPanel'),request);
   if(window.fillPerformanceCoach)fillPerformanceCoach(f,$('#performanceCoachPanel'),request);
   if (window.fillCommunityIndex) fillCommunityIndex(id, $('#communityIndexPanel'), request);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights(false));}));
-  $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,scopedPlayers(f,exportPlayers(f.players,$('#anonFight').checked)),f.duration_ms)));
-  $('#jsonFight').onclick=()=>download(`aion2-kampf${exportSuffix(f)}.json`,JSON.stringify(scopedExport(f,$('#anonFight').checked),null,2),'application/json');
-  $('#csvFight').onclick=()=>{const exp=scopedExport(f,$('#anonFight').checked),rows=[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])];
-    // A single-player export also lists that player's skills below the summary row.
-    if(exportScopeIndex(f)!=null){const p=exp.players[0];rows.push([],['Skill','Art','Wert','Treffer/Ticks','Krit %','Min','Max']);for(const [kind,list] of [['Schaden',p.skills],['Heilung',p.heal_skills]])for(const sk of list||[])rows.push([sk.name,kind,sk.damage,sk.hits,sk.crit_rate,sk.min,sk.max]);}
-    download(`aion2-kampf${exportSuffix(f)}.csv`,'\uFEFF'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');};
+  const exportButton=$('#exportFight');
+  $('#fightExportFormat').onchange=()=>{
+    const format=$('#fightExportFormat').value;
+    $('#fightExportHint').textContent={text:'Kopiert das Ergebnis für den gewählten Umfang.',chat:'Kopiert eine kurze Chatzeile (maximal 200 Zeichen).',png:'Speichert einen Bildbericht; lange Berichte werden in mehrere Bilder aufgeteilt.',csv:'Speichert eine Tabelle. Bei einem einzelnen Spieler sind dessen Skills enthalten.',json:'Speichert die aufgezeichneten Auswertungsdaten für den gewählten Umfang.'}[format];
+  };
+  exportButton.onclick=()=>task((async()=>{
+    if(exportButton.disabled)return;exportButton.disabled=true;
+    try {await exportFightResult(f,$('#fightExportFormat').value,$('#anonFight').checked);}
+    finally {if(exportButton.isConnected)exportButton.disabled=false;}
+  })());
+  $('#jumpDamageChart').onclick=()=>{$('#fightDamageChart').scrollIntoView({block:'start'});$('#fightChartScope').focus({preventScroll:true});};
+  const jump=$('#jumpMySkills');if(jump)jump.onclick=()=>{const me=f.players.find(p=>p.is_self),report=[...$('#fightContent').querySelectorAll('.player-report')].find(el=>el.dataset.actor===String(me.actor_id));report.open=true;report.scrollIntoView({block:'start'});report.querySelector('summary').focus({preventScroll:true});};
   if(window.installFightQol)installFightQol(f);
   bindFightChart(f);
   $('#compareBtn').onclick=()=>task(compareFight());
@@ -649,6 +663,16 @@ async function openFight(id) {
     const candidates=(data.fights||[]).filter(c=>c.id!==id&&c.boss_name===f.boss_name&&c.dungeon_id===f.dungeon_id&&(!f.mob_code||!c.mob_code||Number(c.mob_code)===Number(f.mob_code)));
     $('#compareFight').innerHTML='<option value="">Vergleichskampf wählen</option>'+candidates.map(c=>`<option value="${esc(c.id)}">${date(c.started_at)} · ${dur(c.duration_ms)} · ${num(c.my_dps)}/s</option>`).join('');
   }catch(e){if(request===detailRequest)$('#compareFight').innerHTML='<option value="">Vergleiche nicht erreichbar</option>';}
+}
+async function exportFightResult(f,format,anonymous) {
+  if(format==='text'||format==='chat')return copyText((format==='chat'?chatLine:rankingText)(f.boss_name,scopedPlayers(f,exportPlayers(f.players,anonymous)),f.duration_ms));
+  if(format==='png')return exportPng(f,anonymous,$('#exportScope').value||null,exportSuffix(f));
+  const exp=scopedExport(f,anonymous),name=`aion2-kampf${exportSuffix(f)}`;
+  if(format==='json')return download(name+'.json',JSON.stringify(exp,null,2),'application/json');
+  if(format!=='csv')return;
+  const rows=[['Spieler','Klasse','Schaden','DPS','Heilung','HPS','Erlittener Schaden'],...exp.players.map(p=>[p.name,p.class_name,p.damage,p.dps,p.heal,p.hps,p.damage_received])];
+  if(exportScopeIndex(f)!=null){const p=exp.players[0];rows.push([],['Skill','Art','Wert','Treffer/Ticks','Krit %','Min','Max']);for(const [kind,list] of [['Schaden',p.skills],['Heilung',p.heal_skills]])for(const sk of list||[])rows.push([sk.name,kind,sk.damage,sk.hits,sk.crit_rate,sk.min,sk.max]);}
+  download(name+'.csv','\uFEFF'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n'),'text/csv;charset=utf-8');
 }
 window.openFight=openFight;
 function delta(a,b){const d=(Number(a)||0)-(Number(b)||0);return `<span class="${d>=0?'compare-positive':'compare-negative'}">${d>=0?'+':''}${num(d)}${b?' ('+(d/b*100).toFixed(1)+'%)':''}</span>`;}

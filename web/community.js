@@ -68,7 +68,7 @@ async function fillCommunityIndex(id, root, request) {
   if (button) button.onclick = () => {
     if ($('#fightDialog').open) $('#fightDialog').close();
     show('stats');
-    $('#communitySourcesCard').scrollIntoView({ behavior: 'smooth' });
+    const sources=$('#communitySourcesCard');sources.open=true;sources.scrollIntoView({block:'start'});sources.querySelector('summary').focus({preventScroll:true});
   };
 }
 window.fillCommunityIndex = fillCommunityIndex;

@@ -357,3 +357,19 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 .coach-cell strong{font-size:22px;color:var(--text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 @media(max-width:850px){.coach-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:450px){.coach-grid{grid-template-columns:1fr}}
+/* Show the task the user chose, with secondary actions available on demand. */
+.archive-switch{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 10px}
+.archive-switch [aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:#6ce4d812}
+#runs[data-archive="runs"] #fightLibrary,#runs[data-archive="runs"] #mobLibrary{display:none}
+#runs[data-archive="fights"] #runList{display:none!important}
+#runs.run-open #archiveSwitch,#runs.run-open #archiveHint{display:none}
+.export-menu summary,.secondary-tools summary{cursor:pointer;font-weight:600;list-style-position:inside}
+.export-menu[open]>summary,.secondary-tools[open]>summary{margin-bottom:16px}
+.export-menu label{min-width:0}.export-menu label:has(select){display:flex;flex-direction:column;gap:6px}
+.export-menu select{max-width:100%}.export-menu .row{align-items:end}
+.ranking-tools .export-menu[open]{flex-basis:100%;padding-block:12px}
+#fightContent .export-menu{margin:14px 0;border-color:var(--accent)}
+.report-jumps{margin:14px 0}.report-jumps .btn{font-size:13px}
+#fightDamageChart,.player-report{scroll-margin-top:16px}
+#charSel[hidden]{display:none!important}
+@media(max-width:600px){.archive-switch .btn{flex:1;min-width:0}.export-menu .row{align-items:stretch}.export-menu label:has(select){flex:1 1 140px}.export-menu .btn{flex:1 1 100px}.report-jumps .btn{flex:1}}
