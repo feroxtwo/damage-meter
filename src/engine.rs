@@ -818,7 +818,7 @@ impl Engine {
             let start = target.last_damage_time - target.battle_time;
             let audience = audiences.entry((target.target_id, start)).or_default();
             audience.extend(target.actor_damage.keys().copied().filter(|id|
-                Some(*id) == local || self.storage.get_nickname(*id).is_some_and(|n| trusted.contains(n.trim()))));
+                (self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others) || Some(*id) == local || self.storage.get_nickname(*id).is_some_and(|n| trusted.contains(n.trim()))));
             let entry = series.entry((target.target_id, start)).or_default();
             entry.observe(
                 now - start,
@@ -907,6 +907,9 @@ impl Engine {
     fn sync_group(&self) {
         if !self.group_known.load(Ordering::Relaxed) { return; }
         let group = self.group.read().clone();
+        // The upstream complete-solo setter flushes combat and clears the
+        // instance. Membership filtering belongs here; preserve the last fight.
+        if group.len() <= 1 { return; }
         let roster = self.storage.get_party_members();
         if roster.keys().cloned().collect::<HashSet<_>>() == group { return; }
         let members = group.into_iter().enumerate().map(|(i, name)| {
@@ -1735,6 +1738,30 @@ pub fn metric_value(row: &LiveRow, metric: &str) -> f64 {
 mod tests {
     use super::*;
     #[test]
+    fn dungeon_membership_and_dead_target_switch_do_not_reset_damage() {
+        let e = short_attempt();
+        e.storage.set_current_dungeon(600063);
+        *e.group.write() = HashSet::from(["Me".into()]);
+        e.group_known.store(true, Ordering::Relaxed);
+        hit(&e, 2500, 3000, "Stranger", 50000);
+        e.replay_tick();
+        assert_eq!(e.live().rows.len(), 1);
+        assert_eq!(e.live().total_damage, 300.0);
+        e.storage.mark_entity_dead(50000);
+        e.replay_tick();
+        assert_eq!(e.live().total_damage, 300.0);
+        hit(&e, 3000, 2259, "Me", 50001);
+        e.replay_tick();
+        assert_eq!(e.live().target_id, 50001);
+        assert_eq!(e.live().total_damage, 100.0);
+        assert!(e.save_fights(true));
+        let old = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        assert_eq!(old["players"].as_array().unwrap().len(), 1);
+        assert_eq!(old["total_damage"], 300);
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
     fn combat_activity_distinguishes_pauses_from_finished_encounters() {
         assert_eq!(combat_activity(15_000, 0, 0.0, None), ("ready", None));
         assert_eq!(combat_activity(15_000, 42, 200.0, None), ("unknown", None));
@@ -2283,7 +2310,7 @@ mod tests {
             ],
             true,
         );
-        assert_eq!(names(&e), ["Friend", "Me"]);
+        assert_eq!(names(&e), ["Me"]); // authoritative solo beats a stale roster
         e.modify_overlay(|s| s.open_world_others = true).unwrap();
         assert_eq!(names(&e), ["Friend", "Me", "Stranger"]);
         a2tools_dps_meter_lib::clock::set_override(None);
