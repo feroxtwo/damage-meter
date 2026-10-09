@@ -11,6 +11,7 @@ mod engine;
 mod instances;
 mod names;
 mod overlay;
+mod reference_bundle;
 mod replay;
 mod skills;
 mod tcp;
@@ -39,6 +40,9 @@ struct Cli {
     /// SQLite database [default: ~/.local/share/aion2-meter/meter.db]
     #[arg(long)]
     db: Option<PathBuf>,
+    /// Load an offline community reference database (built with build-references).
+    #[arg(long)]
+    reference_db: Option<PathBuf>,
     /// Language of skill and monster names.
     #[arg(long, value_enum, default_value_t = Lang::De)]
     lang: Lang,
@@ -64,6 +68,13 @@ enum Lang {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Build an offline SQLite reference database from provider JSON snapshots.
+    BuildReferences {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(required = true)]
+        snapshots: Vec<PathBuf>,
+    },
     /// Decode an offline capture. No game, packet privileges or dashboard required.
     Replay {
         file: PathBuf,
@@ -160,6 +171,18 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+    if let Some(Command::BuildReferences {
+        ref output,
+        ref snapshots,
+    }) = cli.command
+    {
+        let count = reference_bundle::build(output, snapshots)?;
+        println!(
+            "{count} Referenzdatensätze gespeichert: {}",
+            output.display()
+        );
+        return Ok(());
+    }
     if cli.x11 {
         // winit picks Wayland whenever this is set. SAFETY: no other thread
         // exists yet.
@@ -224,6 +247,14 @@ fn main() -> anyhow::Result<()> {
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
+    // Reference data must never keep the meter from starting; a broken local
+    // file is ignored. No provider data ships with the meter.
+    if let Some(path) = cli.reference_db.as_deref() {
+        match reference_bundle::load(&database, path) {
+            Ok(result) => tracing::info!("Offline reference data: {result}"),
+            Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
+        }
+    }
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {
         Lang::De => "de",

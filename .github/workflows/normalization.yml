@@ -1,0 +1,20 @@
+name: Provider normalization
+on:
+  push:
+    paths:
+      - 'scripts/normalize-community.py'
+      - 'scripts/test-normalize-community.py'
+      - '.github/workflows/normalization.yml'
+  pull_request:
+    paths:
+      - 'scripts/normalize-community.py'
+      - 'scripts/test-normalize-community.py'
+      - '.github/workflows/normalization.yml'
+permissions:
+  contents: read
+jobs:
+  normalization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/test-normalize-community.py

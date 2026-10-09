@@ -147,6 +147,31 @@ CREATE TABLE IF NOT EXISTS fight_effects (
 );
 "#;
 
+/// Offline provider observations: reference information only, never a score
+/// cohort. A local cache of `--reference-db`, so an older layout is rebuilt.
+const PROVIDER_SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS provider_archives (
+    source_id       TEXT PRIMARY KEY,
+    source_url      TEXT NOT NULL,
+    captured_at     INTEGER NOT NULL,
+    detail          TEXT NOT NULL,
+    evidence        TEXT NOT NULL,
+    row_count       INTEGER NOT NULL,
+    rights_confirmed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS provider_observations (
+    source_id  TEXT NOT NULL REFERENCES provider_archives(source_id) ON DELETE CASCADE,
+    row_id     INTEGER NOT NULL,
+    class_key  TEXT NOT NULL,
+    dungeon_id INTEGER,
+    mob_code   INTEGER,
+    payload    TEXT NOT NULL,
+    PRIMARY KEY (source_id, row_id)
+);
+CREATE INDEX IF NOT EXISTS provider_observations_mob ON provider_observations(mob_code);
+CREATE INDEX IF NOT EXISTS provider_observations_dungeon ON provider_observations(dungeon_id);
+"#;
+
 /// Columns added after the first release, for databases created by it.
 const MIGRATIONS: &[(&str, &str, &str)] = &[
     (
@@ -276,6 +301,19 @@ pub struct FightSearch {
 }
 
 fn migrate(conn: &Connection) -> Result<()> {
+    let outdated: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='provider_observations')
+            AND NOT EXISTS(SELECT 1 FROM pragma_table_info('provider_observations')
+                           WHERE name='mob_code')",
+        [],
+        |r| r.get(0),
+    )?;
+    if outdated {
+        conn.execute_batch(
+            "DROP TABLE provider_observations; DROP TABLE IF EXISTS provider_archives;",
+        )?;
+    }
+    conn.execute_batch(PROVIDER_SCHEMA)?;
     for (table, column, decl) in MIGRATIONS {
         let exists: bool = conn.query_row(
             &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
@@ -489,6 +527,40 @@ impl Db {
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    /// A saved boss fight with only the self row, for comparison tests.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_test_fight(
+        &self,
+        id: &str,
+        mob: i64,
+        dungeon: i64,
+        job: &str,
+        combat_power: i64,
+        dps: f64,
+        analytics: &str,
+    ) {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO fights(id,boss_name,mob_code,dungeon_id,started_at,duration_ms,
+                                is_train,numeric_limited)
+             VALUES (?1,'Boss',?2,?3,1785000000000,30000,0,0)",
+            params![id, mob, dungeon],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO fight_players(fight_id,actor_id,name,job,damage,dps,combat_power,is_self)
+             VALUES (?1,1,'Me',?2,?3,?4,?5,1)",
+            params![id, job, (dps * 30.0) as i64, dps, combat_power],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO fight_analytics(fight_id,data) VALUES (?1,?2)",
+            params![id, analytics],
+        )
+        .unwrap();
     }
 
     #[cfg(test)]
@@ -1550,6 +1622,163 @@ impl Db {
         Ok(deleted > 0)
     }
 
+    /// Import normalized observations as observations, never as comparable score
+    /// cohorts. An identical data state is not rewritten on every start; an older
+    /// capture never replaces a newer one, so generations are not mixed.
+    pub fn import_provider_archives(
+        &self,
+        archives: &[crate::reference_bundle::ProviderArchive],
+    ) -> Result<Value> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        let mut outcome = serde_json::Map::new();
+        for archive in archives {
+            let source = &archive.source;
+            let evidence = serde_json::to_string(&archive.evidence)?;
+            let current: Option<(i64, i64, String, String, String)> = tx
+                .query_row(
+                    "SELECT captured_at, row_count, source_url, detail, evidence
+                     FROM provider_archives WHERE source_id=?1",
+                    params![source.id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+                .optional()?;
+            if let Some((captured, rows, url, detail, stored)) = current {
+                if captured > source.captured_at {
+                    outcome.insert(source.id.clone(), json!("newer_kept"));
+                    continue;
+                }
+                if captured == source.captured_at
+                    && rows == archive.rows.len() as i64
+                    && url == source.url
+                    && detail == archive.detail
+                    && stored == evidence
+                {
+                    outcome.insert(source.id.clone(), json!("unchanged"));
+                    continue;
+                }
+            }
+            tx.execute(
+                "INSERT INTO provider_archives(source_id, source_url, captured_at, detail,
+                    evidence, row_count, rights_confirmed) VALUES (?1,?2,?3,?4,?5,?6,?7)
+                 ON CONFLICT(source_id) DO UPDATE SET source_url=excluded.source_url,
+                    captured_at=excluded.captured_at, detail=excluded.detail,
+                    evidence=excluded.evidence, row_count=excluded.row_count,
+                    rights_confirmed=excluded.rights_confirmed",
+                params![
+                    source.id,
+                    source.url,
+                    source.captured_at,
+                    archive.detail,
+                    evidence,
+                    archive.rows.len(),
+                    source.rights_confirmed
+                ],
+            )?;
+            tx.execute(
+                "DELETE FROM provider_observations WHERE source_id=?1",
+                params![source.id],
+            )?;
+            let mut stmt = tx.prepare(
+                "INSERT INTO provider_observations(source_id, row_id, class_key, dungeon_id,
+                    mob_code, payload) VALUES (?1,?2,?3,?4,?5,?6)",
+            )?;
+            for (id, row) in archive.rows.iter().enumerate() {
+                stmt.execute(params![
+                    source.id,
+                    id,
+                    row.class_key,
+                    row.dungeon_id,
+                    row.mob_code,
+                    serde_json::to_string(row)?
+                ])?;
+            }
+            outcome.insert(source.id.clone(), json!("imported"));
+        }
+        tx.commit()?;
+        Ok(Value::Object(outcome))
+    }
+
+    /// One page of a provider archive. Bounded: at most 200 rows per request.
+    pub fn provider_observations(
+        &self,
+        source: &str,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Option<Value>> {
+        let limit = limit.clamp(1, 200);
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_id,source_url,captured_at,detail,row_count,evidence,rights_confirmed
+            FROM provider_archives WHERE source_id=?1",
+        )?;
+        let mut sources = rows_to_json(&mut stmt, params![source])?;
+        let Some(mut result) = sources.pop() else {
+            return Ok(None);
+        };
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM provider_observations WHERE source_id=?1
+             ORDER BY row_id LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt
+            .query_map(params![source, limit, offset], |r| r.get::<_, String>(0))?
+            .map(|r| Ok(serde_json::from_str::<Value>(&r?)?))
+            .collect::<Result<Vec<_>>>()?;
+        let total = result["row_count"].as_u64().unwrap_or(0);
+        let next = u64::from(offset) + rows.len() as u64;
+        result["evidence"] = serde_json::from_str(result["evidence"].as_str().unwrap_or("[]"))?;
+        result["rights_confirmed"] = json!(result["rights_confirmed"].as_i64() == Some(1));
+        result["rows"] = json!(rows);
+        result["offset"] = json!(offset);
+        result["limit"] = json!(limit);
+        result["next_offset"] = json!((next < total).then_some(next));
+        // Structural: provider observations are never a score cohort.
+        result["score_eligible"] = json!(false);
+        Ok(Some(result))
+    }
+
+    /// Offline provider data about this boss or dungeon. Information only: the
+    /// caller reports why it is not comparable and never derives a score.
+    fn offline_observations(
+        conn: &Connection,
+        dungeon: i64,
+        mob: i64,
+        class_key: &str,
+    ) -> Result<Value> {
+        let mut stmt = conn.prepare(
+            "SELECT o.source_id, o.class_key, a.rights_confirmed,
+                    json_extract(o.payload, '$.compatibility') AS compatibility
+             FROM provider_observations o JOIN provider_archives a USING(source_id)
+             WHERE (o.mob_code=?1 AND ?1>0)
+                OR (o.mob_code IS NULL AND o.dungeon_id=?2 AND ?2>0)",
+        )?;
+        let mut sources = std::collections::BTreeSet::new();
+        let mut blockers = std::collections::BTreeSet::new();
+        let (mut rows, mut same_class) = (0, 0);
+        let mut query = stmt.query(params![mob, dungeon])?;
+        while let Some(row) = query.next()? {
+            rows += 1;
+            sources.insert(row.get::<_, String>(0)?);
+            if row.get::<_, String>(1)? == class_key {
+                same_class += 1;
+            }
+            if row.get::<_, i64>(2)? != 1 {
+                blockers.insert("rights_unconfirmed".to_string());
+            }
+            let flags: Vec<String> =
+                serde_json::from_str(&row.get::<_, String>(3).unwrap_or_default())
+                    .unwrap_or_default();
+            blockers.extend(flags);
+        }
+        Ok(json!({
+            "rows": rows,
+            "same_class": same_class,
+            "sources": sources,
+            "blockers": blockers,
+            "score_eligible": false
+        }))
+    }
+
     pub fn community_sources(&self) -> Result<Value> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -1563,7 +1792,14 @@ impl Db {
              ORDER BY s.imported_at DESC, s.source_id LIMIT 100",
         )?;
         let imports = rows_to_json(&mut stmt, [])?;
+        let mut archives = conn.prepare(
+            "SELECT source_id, source_url, captured_at, detail, row_count,
+                    rights_confirmed = 1 AS rights_confirmed, 0 AS score_eligible
+            FROM provider_archives ORDER BY source_id",
+        )?;
+        let offline_data = rows_to_json(&mut archives, [])?;
         Ok(json!({
+            "offline_data": offline_data,
             "providers": crate::community::provider_catalog(),
             "imports": imports,
             "automatic_fetch": false,
@@ -1664,62 +1900,71 @@ impl Db {
             &mut stmt,
             params![dungeon, mob, region, class_key, cp, started_at],
         )?;
+        // Fail closed: a score needs the exact region and class cohort, a
+        // declared full-fight method on confirmed kills and a complete local
+        // capture. Everything else is reported as withheld, never scored.
         let mut used = HashSet::new();
         let mut comparisons = Vec::new();
-        let mut structured_count = 0;
+        let mut withheld = Vec::new();
         for mut row in candidates {
             let source = row["source_id"].as_str().unwrap_or_default().to_string();
+            let balance = row["balance_id"].as_str().unwrap_or_default().to_string();
             let class = row["class_key"].as_str().unwrap_or_default().to_string();
-            if class_key == "unknown" && class != "all" {
-                continue;
-            }
-            if !used.insert((source, class.clone())) {
+            if !used.insert((source, balance, class.clone())) {
                 continue;
             }
             let method_claims_kill = row["outcome"] == "confirmed_kill";
-            if method_claims_kill && (!confirmed_kill || capture_partial) {
-                continue;
-            }
             let method_matches = method_claims_kill
                 && row["metric"] == "fight_dps"
                 && row["aggregation"] == "median_unique_players"
                 && !row["patch_id"].as_str().unwrap_or_default().is_empty();
-            if method_matches {
-                structured_count += 1;
-            }
-            row["comparison_quality"] = json!(if method_matches {
-                "structured"
-            } else {
-                "legacy_unspecified"
-            });
             let reference = row["reference_dps"].as_f64().unwrap_or(0.0);
-            if !reference.is_finite() || reference <= 0.0 {
+            let blocker = if class != class_key {
+                Some("other_class_cohort")
+            } else if row["region"] != region {
+                Some("pooled_region")
+            } else if !method_matches {
+                Some("methodology_unconfirmed")
+            } else if !confirmed_kill || capture_partial {
+                Some("kill_unconfirmed")
+            } else if !reference.is_finite() || reference <= 0.0 {
+                Some("invalid_reference")
+            } else {
+                None
+            };
+            if let Some(blocker) = blocker {
+                withheld.push(json!({
+                    "source_id": row["source_id"], "balance_id": row["balance_id"],
+                    "class_key": row["class_key"], "region": row["region"],
+                    "reason": blocker
+                }));
                 continue;
             }
             let score = dps / reference * 100.0;
             if !score.is_finite() {
                 continue;
             }
+            row["comparison_quality"] = json!("structured");
             row["score"] = json!(score);
-            row["scope"] = json!(if class == "all" {
-                "all_classes"
-            } else {
-                "same_class"
-            });
+            row["scope"] = json!("same_class");
             comparisons.push(row);
         }
+        let offline = Self::offline_observations(&conn, dungeon, mob, class_key)?;
+        let has_unscored = !withheld.is_empty() || offline["rows"].as_u64().unwrap_or(0) > 0;
         response["status"] = json!(if comparisons.is_empty() {
             "insufficient"
-        } else if structured_count > 0 {
+        } else {
             "ready"
-        } else {
-            "indicative"
         });
-        response["reason"] = json!(if comparisons.is_empty() {
-            Some("no_matching_reference")
-        } else {
+        response["reason"] = json!(if !comparisons.is_empty() {
             None
+        } else if has_unscored {
+            Some("comparison_withheld")
+        } else {
+            Some("no_matching_reference")
         });
+        response["withheld"] = json!(withheld);
+        response["offline_observations"] = offline;
         response["comparisons"] = json!(comparisons);
         Ok(Some(response))
     }
@@ -1983,9 +2228,28 @@ mod tests {
             .community_index("community-fight", "EU")
             .unwrap()
             .unwrap();
-        assert_eq!(result["status"], "indicative");
-        assert_eq!(result["comparisons"].as_array().unwrap().len(), 2);
-        assert_eq!(result["comparisons"][0]["score"], 200.0);
+        // A legacy snapshot declares no DPS method: rows are found, but withheld.
+        assert_eq!(result["status"], "insufficient");
+        assert_eq!(result["reason"], "comparison_withheld");
+        assert!(result["comparisons"].as_array().unwrap().is_empty());
+        let reasons: Vec<_> = result["withheld"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| {
+                (
+                    w["class_key"].as_str().unwrap(),
+                    w["reason"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            reasons,
+            [
+                ("gladiator", "methodology_unconfirmed"),
+                ("all", "other_class_cohort")
+            ]
+        );
         let empty = db
             .community_index("community-fight", "KR")
             .unwrap()

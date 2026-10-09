@@ -11,6 +11,45 @@ const communityReasons = {
   missing_dps: 'Es wurde keine DPS erfasst.',
   no_matching_reference: 'Keine importierten Referenzwerte für diese Boss-ID, Schwierigkeit, Klasse, Kampfkraft, Region und Balance-Periode.'
 };
+// Why existing data is not compared. Shown in words, never as raw flags.
+const communityBlockers = {
+  rights_unconfirmed: 'Nutzungsrechte der Quelle nicht bestätigt',
+  balance_period_unconfirmed: 'Patch- bzw. Balance-Zeitraum nicht belegt',
+  all_time_mixes_balance_periods: 'mischt mehrere Balance-Zeiträume',
+  methodology_not_a2m_v2: 'DPS-Berechnung des Anbieters nicht als gleichwertig bestätigt',
+  methodology_unconfirmed: 'DPS-Berechnung des Datensatzes nicht als gleichwertig bestätigt',
+  region_scope_unconfirmed: 'Region nicht eindeutig',
+  region_unspecified: 'Region nicht eindeutig',
+  KR_TW_combined: 'Region nicht eindeutig',
+  pooled_region: 'Region nicht eindeutig',
+  dungeon_scope_unconfirmed: 'Boss oder Schwierigkeit nicht eindeutig',
+  boss_and_difficulty_unspecified: 'Boss oder Schwierigkeit nicht eindeutig',
+  boss_id_ambiguous_or_aggregate: 'Boss oder Schwierigkeit nicht eindeutig',
+  cp_band_over_20000: 'Kampfkraftbereich zu breit',
+  other_class_cohort: 'nur für alle Klassen gemeinsam',
+  training: 'Trainingsdaten',
+  index_not_absolute_dps: 'Index statt absoluter DPS',
+  kill_unconfirmed: 'Kill oder vollständige Aufzeichnung nicht bestätigt',
+  invalid_reference: 'ungültiger Referenzwert'
+};
+function communityBlockerText(codes) {
+  const labels = [...new Set((codes || []).map(code => communityBlockers[code] || 'weitere unbestätigte Bedingung'))];
+  return labels.map(esc).join(' · ');
+}
+function withheldMarkup(response) {
+  const offline = response.offline_observations || {};
+  const withheld = response.withheld || [];
+  const parts = [];
+  if (offline.rows > 0) {
+    parts.push(num(offline.rows) + ' Anbieter-Datengruppen zu diesem Boss oder Dungeon (' +
+      (offline.sources || []).map(esc).join(', ') + '), davon ' + num(offline.same_class || 0) + ' für deine Klasse.');
+  }
+  if (withheld.length) parts.push(num(withheld.length) + ' importierte Referenzgruppen passen zu Boss und Kampfkraft.');
+  const reasons = communityBlockerText([...(offline.blockers || []), ...withheld.map(w => w.reason)]);
+  return '<p class="analysis-note community-withheld"><strong>Daten vorhanden, Vergleich nicht freigegeben.</strong> ' + parts.join(' ') +
+    (reasons ? ' Grund: ' + reasons + '.' : '') +
+    ' Ohne bestätigte Vergleichbarkeit wird kein Score berechnet.</p>';
+}
 const communitySourceStatuses = {
   active: 'Aktiv und lokal',
   permission_required: 'Schnittstelle / Nutzungsrechte offen',
@@ -34,11 +73,12 @@ function communityComparisonMarkup(response) {
   if (!response) return '<p class="analysis-note">Kein Community-Vergleich verfügbar.</p>';
   const region = response.region && response.region !== 'ALL' ? 'Region ' + esc(response.region) : 'Alle Regionen';
   const title = '<div class="skill-index-head"><div><span class="eyebrow">Community · importierte Daten</span><h3>Vergleich mit Community-Werten</h3></div><span>' + region + '</span></div>';
-  if (!['ready', 'indicative'].includes(response.status)) {
-    return title + '<p class="analysis-note">Noch kein Community-Vergleich: ' + esc(communityReasons[response.reason] || 'Keine passenden Community-Daten importiert.') +
-      ' Ohne importierten Referenzdatensatz wird kein Online-Score angezeigt.</p><button type="button" class="btn" data-community-settings>Community-Daten verwalten</button>';
+  if (response.status !== 'ready') {
+    const body = response.reason === 'comparison_withheld' ? withheldMarkup(response) :
+      '<p class="analysis-note">Noch kein Community-Vergleich: ' + esc(communityReasons[response.reason] || 'Keine passenden Community-Daten importiert.') +
+      ' Ohne importierten Referenzdatensatz wird kein Online-Score angezeigt.</p>';
+    return title + body + '<button type="button" class="btn" data-community-settings>Community-Daten verwalten</button>';
   }
-  const legacy=response.status==='indicative';
   const entries = (response.comparisons || []).map(row => {
     const score = Number(row.score);
     const sign = score >= 100 ? '+' : '−';
@@ -46,13 +86,13 @@ function communityComparisonMarkup(response) {
     return '<div class="community-reference">' +
       '<div><span class="eyebrow">' + esc(row.source_id) + ' · ' + (row.scope === 'same_class' ? 'Gleiche Klasse' : 'Alle Klassen') + '</span>' +
       '<strong class="' + (score >= 100 ? 'compare-positive' : 'compare-negative') + '">' + communityRatio(score) + '</strong>' +
-      '<span>' + sign + delta + ' % zum Median · ' + num(row.reference_dps) + ' Referenz-DPS' + (row.comparison_quality==='legacy_unspecified'?' · Richtwert, DPS-Methode unbekannt':' · dokumentierte Kampf-DPS') + '</span></div>' +
-      '<div class="community-ref-detail">' + num(row.samples) + (row.comparison_quality==='legacy_unspecified'?' Beobachtungen (Stichprobe unbestätigt)':' unabhängige Spieler laut Quelle') + ' · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
+      '<span>' + sign + delta + ' % zum Median · ' + num(row.reference_dps) + ' Referenz-DPS · dokumentierte Kampf-DPS</span></div>' +
+      '<div class="community-ref-detail">' + num(row.samples) + ' unabhängige Spieler laut Quelle · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
       ' · ' + esc(row.region) + ' · ' + esc(row.balance_id) + '<div><a href="' + esc(row.source_url) +
       '" target="_blank" rel="noopener noreferrer">Quelle ansehen ↗</a></div></div></div>';
   }).join('');
   return title + '<div class="community-comparisons">' + entries + '</div>' +
-    '<p class="analysis-note">'+(legacy?'Nur Richtwerte: bei älteren Datensätzen sind DPS-Methode, Killfilter und unabhängige Stichprobe nicht nachgewiesen. ':'100 = Median vergleichbarer Kampf-DPS nach importierter Methodendeklaration. ')+'Quelle und Berechtigung sind Selbstauskünfte des Importierenden, nicht unabhängig verifiziert. Kein offizieller Skill Index oder Perzentil. Kampfwerte bleiben lokal.</p>';
+    '<p class="analysis-note">100 = Median vergleichbarer Kampf-DPS nach importierter Methodendeklaration. Quelle und Berechtigung sind Selbstauskünfte des Importierenden, nicht unabhängig verifiziert. Kein offizieller Skill Index oder Perzentil. Kampfwerte bleiben lokal.</p>';
 }
 async function fillCommunityIndex(id, root, request) {
   const region = selectedCommunityRegion();
@@ -97,7 +137,14 @@ async function loadCommunitySources() {
       '<span>' + esc(entry.balance_id) + ' · ' + num(entry.rows) + ' Referenzgruppen · ' +
       date(entry.captured_at) + ' Datenstand · ' + esc(entry.metric==='fight_dps'?'Kampf-DPS / Kills':'Methode nicht bestätigt') + '</span><button type="button" class="btn" data-remove-community="' + esc(entry.source_id) + '" data-balance="' + esc(entry.balance_id) + '">Entfernen</button></div>'
     ).join('');
+    const offline = (result.offline_data || []).map(entry =>
+      '<div class="reference-imported"><strong>' + esc(entry.source_id) + '</strong><span>' +
+      num(entry.row_count) + ' Datengruppen vorhanden · Stand ' + date(entry.captured_at) +
+      '<br><b>Vergleich nicht freigegeben</b>' + (entry.rights_confirmed ? '' : ' · Nutzungsrechte nicht bestätigt') +
+      '<br>' + esc(entry.detail) + '</span><a href="/api/references/archive/' + encodeURIComponent(entry.source_id) +
+      '" target="_blank" rel="noopener">Rohdaten (JSON) ↗</a></div>').join('');
     root.innerHTML = '<h3>Verfügbare Quellen</h3><div class="reference-providers">' + providers + '</div>' +
+      (offline ? '<h3>Offline-Anbieterdaten (nur Referenz)</h3>' + offline + '<p class="analysis-note">Lokal geladene Anbieterwerte. Sie werden angezeigt, aber nie zu einem Score, Rang oder Perzentil verrechnet, solange Methode, Zeitraum, Region und Rechte nicht bestätigt sind.</p>' : '') +
       '<h3>Auf diesem Gerät importiert</h3>' +
       (imported || '<p class="analysis-note">Noch kein berechtigter Community-Datensatz importiert.</p>') +
       '<p class="analysis-note">Automatische Uploads und Abrufe von Drittanbietern sind deaktiviert. Ein öffentlicher Webauftritt ist keine bestätigte Import-Lizenz.</p>';
