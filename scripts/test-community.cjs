@@ -35,3 +35,16 @@ assert.equal(run('communityComparisonMarkup(response).includes("Nur Richtwerte")
 
 assert.equal(run('communityTemplate().rows.length'), 0, 'never ship fake online measurements');
 console.log('Community reference UI: 7 assertions passed');
+
+(async () => {
+  const root = {innerHTML: '', querySelectorAll: () => []};
+  context.$ = () => root;
+  context.api = async () => ({offline_data: [{source_id:'a2tools', row_count:16,
+    captured_at:1790000000000, detail:'Median <script>alert(1)</script>'}], providers:[], imports:[]});
+  await run('loadCommunitySources()');
+  assert.ok(root.innerHTML.includes('16 normalisierte Datengruppen'));
+  assert.ok(root.innerHTML.includes('/api/references/archive/a2tools'));
+  assert.ok(root.innerHTML.includes('&lt;script&gt;'));
+  assert.ok(!root.innerHTML.includes('<script>'));
+  console.log('Offline provider catalog: 4 assertions passed');
+})().catch(error => {console.error(error); process.exitCode = 1;});

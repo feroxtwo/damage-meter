@@ -1,13 +1,13 @@
 //! Strict schema for user-supplied, permissioned aggregate comparison snapshots.
 //! Never fetch community websites or send fight/character data automatically.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
 pub const SCHEMA: &str = "a2m-community-v1";
 pub const SCHEMA_V2: &str = "a2m-community-v2";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CommunitySnapshot {
     pub schema: String,
     pub source: ReferenceSource,
@@ -17,7 +17,7 @@ pub struct CommunitySnapshot {
     pub methodology: Option<ReferenceMethod>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReferenceMethod {
     /// The runtime and the comparison cohort must use the same full-fight DPS.
     pub metric: String,
@@ -28,7 +28,7 @@ pub struct ReferenceMethod {
     pub patch_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReferenceSource {
     pub id: String,
     pub url: String,
@@ -36,14 +36,14 @@ pub struct ReferenceSource {
     pub rights_confirmed: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BalancePeriod {
     pub id: String,
     pub from_ms: i64,
     pub until_ms: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReferenceRow {
     pub region: String,
     pub dungeon_id: i32,
@@ -53,6 +53,47 @@ pub struct ReferenceRow {
     pub cp_max: i64,
     pub median_dps: f64,
     pub samples: u32,
+}
+
+impl ReferenceSource {
+    pub fn validate_provenance(&self) -> Result<(), &'static str> {
+        if !matches!(
+            self.id.as_str(),
+            "a2tools" | "aiondps" | "abysslogs" | "questlog" | "jameter" | "notmeter" | "community"
+        ) {
+            return Err("unknown_source");
+        }
+        let url = reqwest::Url::parse(&self.url).map_err(|_| "invalid_source_url")?;
+        let host = url.host_str().ok_or("invalid_source_url")?;
+        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+            return Err("invalid_source_url");
+        }
+        match self.id.as_str() {
+            "a2tools" if host != "a2tools.app" && host != "www.a2tools.app" => {
+                return Err("source_url_mismatch");
+            }
+            "aiondps" if host != "aiondps.com" && host != "www.aiondps.com" => {
+                return Err("source_url_mismatch");
+            }
+            "abysslogs" if host != "abysslogs.com" && host != "www.abysslogs.com" => {
+                return Err("source_url_mismatch");
+            }
+            "questlog" if host != "questlog.gg" && host != "www.questlog.gg" => {
+                return Err("source_url_mismatch");
+            }
+            "jameter" if host != "jameter.net" && host != "www.jameter.net" => {
+                return Err("source_url_mismatch");
+            }
+            "notmeter" if host != "notmeter.com" && host != "www.notmeter.com" => {
+                return Err("source_url_mismatch");
+            }
+            _ => {}
+        }
+        if !(1_600_000_000_000..=2_500_000_000_000).contains(&self.captured_at) {
+            return Err("invalid_capture_time");
+        }
+        Ok(())
+    }
 }
 
 pub fn valid_region(value: &str) -> bool {
@@ -108,41 +149,7 @@ impl CommunitySnapshot {
         if !self.source.rights_confirmed {
             return Err("rights_confirmation_required");
         }
-        if !matches!(
-            self.source.id.as_str(),
-            "a2tools" | "aiondps" | "abysslogs" | "questlog" | "jameter" | "notmeter" | "community"
-        ) {
-            return Err("unknown_source");
-        }
-        let url = reqwest::Url::parse(&self.source.url).map_err(|_| "invalid_source_url")?;
-        let host = url.host_str().ok_or("invalid_source_url")?;
-        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
-            return Err("invalid_source_url");
-        }
-        match self.source.id.as_str() {
-            "a2tools" if host != "a2tools.app" && host != "www.a2tools.app" => {
-                return Err("source_url_mismatch");
-            }
-            "aiondps" if host != "aiondps.com" && host != "www.aiondps.com" => {
-                return Err("source_url_mismatch");
-            }
-            "abysslogs" if host != "abysslogs.com" && host != "www.abysslogs.com" => {
-                return Err("source_url_mismatch");
-            }
-            "questlog" if host != "questlog.gg" && host != "www.questlog.gg" => {
-                return Err("source_url_mismatch");
-            }
-            "jameter" if host != "jameter.net" && host != "www.jameter.net" => {
-                return Err("source_url_mismatch");
-            }
-            "notmeter" if host != "notmeter.com" && host != "www.notmeter.com" => {
-                return Err("source_url_mismatch");
-            }
-            _ => {}
-        }
-        if !(1_600_000_000_000..=2_500_000_000_000).contains(&self.source.captured_at) {
-            return Err("invalid_capture_time");
-        }
+        self.source.validate_provenance()?;
         let period = &self.balance;
         if period.id.is_empty()
             || period.id.len() > 64

@@ -92,3 +92,129 @@ Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erze
 - `GET /api/fights/{id}/skill-index`: unabhängiger, lokaler Vergleich.
 
 **Offen für einen echten automatischen Online-Datenfeed:** schriftlich bestätigte Lese-API oder Betreiberfreigabe, Rate Limits, Antwortschema, Balance-Kohorten, Lizenz, Versionsstrategien, Cache/TTL, Schutz vor übermittelten Spielerdaten und Einwilligungs-UX. Bis dahin **kein Scraping**.
+
+
+## Eigene Offline-Referenzdatenbank (#22)
+
+Anbieterwerte können einmalig als geprüfte JSON-Snapshots im oben beschriebenen
+Format zusammengetragen und zu einer eigenen, verteilbaren SQLite-Datei gebündelt
+werden. Der Meter benötigt beim Vergleich keine Verbindung zum Anbieter.
+
+```sh
+aion2-meter build-references --output community-references.sqlite a2tools-patch.json abysslogs-patch.json
+aion2-meter --reference-db community-references.sqlite --no-overlay
+```
+
+Der erste Befehl läuft ohne Spiel, Dashboard oder Capture-Rechte. Er prüft alle
+Eingaben vor dem Schreiben und verweigert das Überschreiben vorhandener Dateien.
+Die Datenbank enthält ausschließlich aggregierte Snapshots oder normalisierte
+Anbieterbeobachtungen mit Herkunft und belegbarer Methodik; keine Charakterprofile oder eigenen Kampfaufzeichnungen. Ein
+Anbieter/Balance-Paar darf je Datenbank nur einmal vorkommen. Bis zu 1000 Snapshots
+mit jeweils maximal 500 Referenzgruppen sowie maximal sieben Anbieterarchive
+mit jeweils maximal 20.000 Beobachtungen sind möglich (32 MiB Gesamtgrenze).
+
+Beim Start liest der Meter die Datei nur lesend, validiert sämtliche Snapshots
+und übernimmt sie in seine lokale Referenztabelle. Wiederholte Starts mit diesem
+Parameter ersetzen dieselben Anbieter/Balance-Paare; andere importierte Zeiträume
+und Kampfaufzeichnungen bleiben erhalten. Entfernte Snapshots werden bei einem
+weiteren Start mit demselben Parameter wieder eingelesen. Für eine einmalige
+Übernahme den Parameter bei späteren Starts weglassen. Neuere Referenzversionen
+werden als neue Datei erstellt und können mit dem gleichen Parameter geladen werden.
+
+Eine eigene Datenbank löst die Laufzeitabhängigkeit vom Anbieter. Sie ersetzt
+nicht die Prüfung der Herkunft und Vergleichbarkeit. Insbesondere werden aus
+einem Median der Kampfkraft keine KP-Grenzen und aus einer Rangliste keine
+Klassenmediane abgeleitet. Es wird kein Median aus mehreren Anbieter-Medianen
+gebildet. Die Datenbank übernimmt die Rechtebestätigung aus den Eingabedateien;
+sie bestätigt diese nicht selbst. Die Berechtigung muss auch die gewünschte
+Weitergabe der gebündelten Daten umfassen.
+
+## Mitgelieferter Anbieter-Datenstand: 9. Oktober 2026
+
+`data/community/community-references.sqlite` enthält **9.272 normalisierte
+Datengruppen aus allen sechs aufgeführten Community-Anbietern**. Sie wurde einmalig
+für diesen Auftrag aus öffentlichen Seiten bzw. den von diesen Seiten geladenen
+öffentlichen Datenantworten erstellt. Der laufende Meter ruft keinen Anbieter ab.
+Dies ist ein konkreter Ausschnitt, kein vollständiger Spiegel sämtlicher Anbieter,
+Regionen oder historischer Datenstände.
+
+| Anbieter | Datengruppen | Erfasster Umfang |
+| --- | ---: | --- |
+| A2 Tools | 16 | 8 Klassen in der Standardansicht sowie 8 Klassen für Vakron, EU, Dungeon 600072, Boss 2300812, KP 71000–76000 |
+| Aion DPS | 3 | Vakron-Ranglistenaggregate: Runzahl, beste Gruppen-iDPS, mittlere Dauer |
+| Abyss Logs | 25 | Vakron-Klassenmediane und Verteilungen nach Anbieter-KP-Bändern, All-Time, Build `global` |
+| Questlog | 8 | EU-Klassenübersicht, normalisierter Boss-DPS-Index |
+| JaMeter | 87 | Öffentliche KP/DPS-Referenztabellen aller neun Klassen |
+| NotMeter | 9.133 | Alle Klassenaggregate der veröffentlichten Kampf-Filteransichten der KR/TW-Cachegeneration `578d3695ce598fe2` |
+
+Die Anbieter-JSON-Dateien unter `data/community/providers/` enthalten Quellen-URLs,
+Erfassungszeitpunkte, SHA-256 der Eingabeantworten, Originalfilter und Zahlen. Der
+Questlog-Beleg stammt aus der im Browser gerenderten EU-Klassentabelle; sein Hash
+bezieht sich auf die daraus erfassten Tabellenwerte, nicht auf einen HTML-Download.
+Bei NotMeter wurden Spielerlisten, Namen, Charakterprofile und Rohkämpfe aus der
+Antwort ausgeschlossen. Anbieter-Datenstand und Erfassungszeit sind getrennt.
+Hashes dokumentieren die Eingabedateien; sie sind keine Anbieter-Signaturen.
+
+### Kompatibilität mit unserem Datenmodell
+
+Das Beobachtungsschema `a2m-provider-observations-v1` verwendet unsere neun
+`class_key`-Werte, normalisierte Regionen, numerische DPS und KP sowie optionale
+Spiel-IDs. `Brawler` wird `fighter`, `Spiritmaster` wird `elementalist`. Koreanische
+`만`-Werte werden mit 10.000 und `k`-Werte mit 1.000 multipliziert. Unterschiedliche
+regionale KP-Größen werden nicht durch eine erfundene Skalierung angeglichen.
+
+NotMeter-Dungeon-IDs werden aus den veröffentlichten `mapIds` übernommen, wenn
+sie eindeutig sind. Bossnamen werden exakt gegen den koreanischen NPC-Katalog des
+gepinnten Parsers (`82e53c1`) abgeglichen; mehrere passende IDs bleiben als
+Kandidaten erhalten, ohne willkürlich eine auszuwählen. Exklusive KP-Obergrenzen
+werden als inklusive Grenze minus 1 gespeichert. Bei nicht belegter
+Grenzkonvention bleibt die Originalangabe samt Unsicherheit erhalten.
+Aion-DPS-interne IDs werden ausdrücklich nicht als Spiel-IDs interpretiert.
+
+Jede Zeile enthält `scope`, `statistics` und `compatibility`. Fehlende Angaben
+bleiben `null`. Ein Index (Questlog), Gruppen-iDPS (Aion DPS), Training (NotMeter)
+und absolute Klassen-DPS bleiben getrennte Kennzahlen. Aus einem Quartil wird kein
+Median erzeugt; ein 50.000er-KP-Band wird nicht in erfundene 20.000er-Kohorten zerlegt.
+
+**Aktuell 0 freigegebene Kampf-Score-Kohorten:** Die Werte sind strukturell
+vereinheitlicht und lokal abrufbar. Keiner der erfassten Datensätze belegt jedoch
+alle für `a2m-community-v2` erforderlichen Vergleichsbedingungen. Unter anderem
+fehlen feste Balance-Zeitgrenzen, bestätigte Methodengleichheit oder die genaue
+regionale Kohorte. Das Archive enthält daher keine automatisch freigegebenen
+`snapshots`; `rights_confirmed` bleibt `false`. Eine Quellenkopie stellt keine
+Bestätigung von Weitergaberechten dar. Geprüfte V1/V2-Snapshots können zusätzlich
+in derselben SQLite-Datei gebündelt werden.
+
+### Nutzung und Prüfung
+
+```sh
+# Die mitgelieferte Datei lokal laden:
+aion2-meter --reference-db data/community/community-references.sqlite --no-overlay
+
+# Aus den enthaltenen Anbieter-JSON-Dateien reproduzierbar neu bauen:
+aion2-meter build-references --output /tmp/community-rebuilt.sqlite data/community/providers/*.json
+```
+
+Unter Community-Daten erscheint anschließend die eigene Offline-Anbieterdatenbank
+mit Quellennamen, Datengruppenzahl und Erfassungsdatum. `Daten ansehen` öffnet die
+lokale JSON-Ansicht. `GET /api/references/archive/{source}?offset=0&limit=50`
+liefert die normalisierten Werte paginiert (maximal 200 pro Anfrage).
+Der Quellenkatalog unter `/api/references/sources` ergänzt `offline_data`.
+Wiederholtes Laden ersetzt die jeweilige Anbieter-Beobachtungssammlung innerhalb
+einer Transaktion. Die Score-Referenztabellen und eigenen Kämpfe bleiben getrennt.
+
+In SQLite kann direkt auf die virtuelle Tabelle `observations` zugegriffen werden:
+
+```sql
+SELECT source_id, class_key, dungeon_id, mob_code, cp_min, cp_max,
+       median_dps, samples, metric, compatibility
+FROM observations
+WHERE source_id = 'a2tools' AND region = 'EU';
+```
+
+`scripts/normalize-community.py` normalisiert gespeicherte Rohantworten ohne
+Netzwerkzugriff. Es erwartet die im Skript bezeichneten Eingabedateien und den
+koreanischen NPC-Katalog des gepinnten Parsers. Für die gebündelte SQLite-Datei
+reichen die mitgelieferten normalisierten JSON-Dateien; Rohantworten und der
+152-MB-NotMeter-Gesamtdownload werden nicht mitgeliefert. Der Normalisierungslauf
+ist kein automatischer Updatefeed.

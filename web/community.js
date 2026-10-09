@@ -97,7 +97,13 @@ async function loadCommunitySources() {
       '<span>' + esc(entry.balance_id) + ' · ' + num(entry.rows) + ' Referenzgruppen · ' +
       date(entry.captured_at) + ' Datenstand · ' + esc(entry.metric==='fight_dps'?'Kampf-DPS / Kills':'Methode nicht bestätigt') + '</span><button type="button" class="btn" data-remove-community="' + esc(entry.source_id) + '" data-balance="' + esc(entry.balance_id) + '">Entfernen</button></div>'
     ).join('');
+    const offline = (result.offline_data || []).map(entry =>
+      '<div class="reference-imported"><strong>' + esc(entry.source_id) + '</strong><span>' +
+      num(entry.row_count) + ' normalisierte Datengruppen · ' + date(entry.captured_at) +
+      '<br>' + esc(entry.detail) + '</span><a href="/api/references/archive/' + encodeURIComponent(entry.source_id) +
+      '" target="_blank" rel="noopener">Daten ansehen ↗</a></div>').join('');
     root.innerHTML = '<h3>Verfügbare Quellen</h3><div class="reference-providers">' + providers + '</div>' +
+      (offline ? '<h3>Eigene Offline-Anbieterdatenbank</h3>' + offline + '<p class="analysis-note">Einheitlich normalisierte Anbieterwerte. Unbestätigte Vergleichsbedingungen stehen in den Datensätzen; daraus entsteht noch kein Kampf-Score.</p>' : '') +
       '<h3>Auf diesem Gerät importiert</h3>' +
       (imported || '<p class="analysis-note">Noch kein berechtigter Community-Datensatz importiert.</p>') +
       '<p class="analysis-note">Automatische Uploads und Abrufe von Drittanbietern sind deaktiviert. Ein öffentlicher Webauftritt ist keine bestätigte Import-Lizenz.</p>';

@@ -77,6 +77,20 @@ CREATE TABLE IF NOT EXISTS fights (
 CREATE INDEX IF NOT EXISTS fights_started ON fights(started_at);
 CREATE INDEX IF NOT EXISTS fights_run ON fights(run_id);
 CREATE INDEX IF NOT EXISTS fights_boss_index ON fights(dungeon_id, mob_code);
+CREATE TABLE IF NOT EXISTS provider_archives (
+    source_id TEXT PRIMARY KEY,
+    source_url TEXT NOT NULL,
+    captured_at INTEGER NOT NULL,
+    detail TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    row_count INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS provider_observations (
+    source_id TEXT NOT NULL REFERENCES provider_archives(source_id) ON DELETE CASCADE,
+    row_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (source_id, row_id)
+);
 CREATE TABLE IF NOT EXISTS community_snapshots (
     source_id     TEXT NOT NULL,
     balance_id    TEXT NOT NULL,
@@ -1550,6 +1564,62 @@ impl Db {
         Ok(deleted > 0)
     }
 
+    /// Import normalized observations as observations, never as comparable score cohorts.
+    pub fn import_provider_archives(
+        &self,
+        archives: &[crate::reference_bundle::ProviderArchive],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        for archive in archives {
+            tx.execute("INSERT INTO provider_archives VALUES (?1,?2,?3,?4,?5,?6)
+                ON CONFLICT(source_id) DO UPDATE SET source_url=excluded.source_url,
+                captured_at=excluded.captured_at, detail=excluded.detail, evidence=excluded.evidence,
+                row_count=excluded.row_count",
+                params![archive.source.id, archive.source.url, archive.source.captured_at,
+                    archive.detail, serde_json::to_string(&archive.evidence)?, archive.rows.len()])?;
+            tx.execute(
+                "DELETE FROM provider_observations WHERE source_id=?1",
+                params![archive.source.id],
+            )?;
+            let mut stmt = tx.prepare("INSERT INTO provider_observations VALUES (?1,?2,?3)")?;
+            for (id, row) in archive.rows.iter().enumerate() {
+                stmt.execute(params![archive.source.id, id, serde_json::to_string(row)?])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn provider_observations(
+        &self,
+        source: &str,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Option<Value>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_id,source_url,captured_at,detail,row_count,evidence
+            FROM provider_archives WHERE source_id=?1",
+        )?;
+        let mut sources = rows_to_json(&mut stmt, params![source])?;
+        let Some(mut result) = sources.pop() else {
+            return Ok(None);
+        };
+        let mut stmt = conn.prepare("SELECT payload FROM provider_observations WHERE source_id=?1 ORDER BY row_id LIMIT ?2 OFFSET ?3")?;
+        let rows = stmt
+            .query_map(params![source, limit.clamp(1, 200), offset], |r| {
+                r.get::<_, String>(0)
+            })?
+            .map(|r| Ok(serde_json::from_str::<Value>(&r?)?))
+            .collect::<Result<Vec<_>>>()?;
+        result["evidence"] = serde_json::from_str(result["evidence"].as_str().unwrap_or("[]"))?;
+        result["rows"] = json!(rows);
+        result["offset"] = json!(offset);
+        result["score_eligible"] = json!(false);
+        Ok(Some(result))
+    }
+
     pub fn community_sources(&self) -> Result<Value> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -1563,7 +1633,13 @@ impl Db {
              ORDER BY s.imported_at DESC, s.source_id LIMIT 100",
         )?;
         let imports = rows_to_json(&mut stmt, [])?;
+        let mut archives = conn.prepare(
+            "SELECT source_id, source_url, captured_at, detail, row_count
+            FROM provider_archives ORDER BY source_id",
+        )?;
+        let offline_data = rows_to_json(&mut archives, [])?;
         Ok(json!({
+            "offline_data": offline_data,
             "providers": crate::community::provider_catalog(),
             "imports": imports,
             "automatic_fetch": false,
