@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "a2tools-dps-meter"
-version = "2.0.52"
-source = "git+https://github.com/taengu/A2Tools-DPS-Meter.git?rev=d3cf6f92533721939f4b4454d163c6d1dd820666#d3cf6f92533721939f4b4454d163c6d1dd820666"
+version = "2.0.54"
+source = "git+https://github.com/taengu/A2Tools-DPS-Meter.git?rev=82e53c1008ac4c2974446cc703703f473bbbed81#82e53c1008ac4c2974446cc703703f473bbbed81"
 dependencies = [
  "chrono",
  "lz4_flex",

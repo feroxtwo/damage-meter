@@ -1,7 +1,7 @@
 //! Opt-in release lookup. No startup requests, telemetry or downloaded executables.
 use serde_json::{Value, json};
 const RELEASES: &str = "https://github.com/feroxtwo/damage-meter/releases";
-pub const PARSER_REV: &str = "d3cf6f92533721939f4b4454d163c6d1dd820666";
+pub const PARSER_REV: &str = "82e53c1008ac4c2974446cc703703f473bbbed81";
 fn version(s: &str) -> Option<(u64, u64, u64)> {
     let values: Vec<_> = s
         .trim_start_matches('v')
@@ -18,7 +18,7 @@ fn version(s: &str) -> Option<(u64, u64, u64)> {
     ))
 }
 pub fn info() -> Value {
-    json!({"version":env!("CARGO_PKG_VERSION"),"parser_version":"2.0.52","parser_rev":PARSER_REV})
+    json!({"version":env!("CARGO_PKG_VERSION"),"parser_version":"2.0.54","parser_rev":PARSER_REV})
 }
 pub fn release_status(tag: &str) -> Value {
     let newer = version(tag)
