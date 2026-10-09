@@ -688,7 +688,10 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/fights/{id}/community-index", get(community_index))
         .route("/api/references/sources", get(community_sources))
         .route("/api/references/import", post(import_community))
-        .route("/api/references/{source}/{balance}", axum::routing::delete(delete_community))
+        .route(
+            "/api/references/{source}/{balance}",
+            axum::routing::delete(delete_community),
+        )
         .route("/api/fights/{id}/annotation", post(annotate))
         .route("/api/players/{id}", get(player))
         .route("/api/overlay/profile", post(profile))

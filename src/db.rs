@@ -1843,10 +1843,17 @@ mod tests {
         assert!(db.delete_community("community", "patch-1").unwrap());
         assert!(!db.delete_community("community", "patch-1").unwrap());
         assert_eq!(
-            db.community_index("community-fight", "EU").unwrap().unwrap()["status"],
+            db.community_index("community-fight", "EU")
+                .unwrap()
+                .unwrap()["status"],
             "insufficient"
         );
-        assert!(db.community_sources().unwrap()["imports"].as_array().unwrap().is_empty());
+        assert!(
+            db.community_sources().unwrap()["imports"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         assert!(db.community_index("missing", "EU").unwrap().is_none());
     }
 
