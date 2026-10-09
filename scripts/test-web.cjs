@@ -193,6 +193,59 @@ const server = http.createServer((req,res) => {
         assert.equal(await isolated.locator('#runDetail').isVisible(),false);assert.equal(await isolated.locator('#fightLibrary').isVisible(),true);
       } finally {await isolated.close();}
     });
+    await check('report navigation exposes every analysis and opens its destination in one action',async()=>{
+      const reportPage=await context.newPage();
+      await reportPage.route('**/api/fights?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({fights:[],more:false})}));
+      await reportPage.goto(base+'/#live');await reportPage.waitForFunction(()=>typeof openFight==='function');
+      await reportPage.evaluate(()=>openFight('f1'));
+      assert.equal(await reportPage.getByRole('navigation',{name:'Kampfbericht durchsuchen'}).isVisible(),true);
+      for(const target of ['fightDamageChart','fightPerformanceTools','fightCompareTools','fightAnnotation','fightMeasurement','reportGroupTitle']) {
+        const button=reportPage.locator(`[data-report-target="${target}"]`);
+        await button.click();
+        assert.equal(await reportPage.locator('#'+target).isVisible(),true);
+        assert.equal(await reportPage.evaluate(()=>document.activeElement.id),target);
+        assert.equal(await button.getAttribute('aria-current'),'location');
+      }
+      assert.equal(await reportPage.locator('section.report-section').getAttribute('aria-labelledby'),'reportGroupTitle');
+      // Manual scrolling moves the marker back; a jump never lands under the sticky bar.
+      await delay(350);await reportPage.evaluate(()=>document.querySelector('#fightDialog').scrollTo(0,0));
+      await reportPage.waitForFunction(()=>document.querySelector('[data-report-target][aria-current]')?.dataset.reportTarget==='reportGroupTitle');
+      await reportPage.setViewportSize({width:390,height:844});
+      for(const target of ['fightDamageChart','fightCompareTools']) {
+        await reportPage.locator(`[data-report-target="${target}"]`).click();
+        const gap=await reportPage.evaluate(t=>document.getElementById(t).getBoundingClientRect().top-document.querySelector('.report-nav').getBoundingClientRect().bottom,target);
+        assert.ok(gap>=0,target+' hidden under navigation by '+(-gap)+'px');
+      }
+      await reportPage.locator('#closeDialog').click();
+      // No jump target for a curve that was not recorded.
+      await reportPage.route('**/api/fights/f9',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...fight,id:'f9',analytics:null})}));
+      await reportPage.evaluate(()=>openFight('f9'));await reportPage.locator('#fightDialog[open] .report-nav').waitFor();
+      assert.equal(await reportPage.locator('[data-report-target="fightDamageChart"]').isHidden(),true);
+      assert.equal(await reportPage.locator('[data-report-target="fightMeasurement"]').isVisible(),true);
+      await reportPage.close();
+    });
+    await check('OBS preview loads only in settings and unloads when leaving',async()=>{
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
+      assert.equal(await page.locator('#overlayPreview').getAttribute('src'),'/overlay');
+      await page.frameLocator('#overlayPreview').locator('#box').waitFor({state:'attached'});
+      await page.getByRole('button',{name:'Live',exact:true}).click();
+      assert.equal(await page.locator('#overlayPreview').count(),0);
+      // Back returns to the previous tab, not to an earlier preview address.
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
+      await page.frameLocator('#overlayPreview').locator('#box').waitFor({state:'attached'});
+      await page.getByRole('button',{name:'Verlauf',exact:true}).click();
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
+      assert.equal(await page.locator('iframe').count(),1,'exactly one preview');
+      await page.evaluate(()=>history.back());await page.waitForFunction(()=>tab==='runs');
+      assert.equal(await page.locator('#overlayPreview').count(),0);
+      await page.evaluate(()=>history.forward());await page.waitForFunction(()=>tab==='settings');
+      await page.getByRole('button',{name:'Live',exact:true}).click();
+      // No orphaned character caption while there is nothing to choose.
+      const caption=await page.evaluate(()=>{const sel=document.querySelector('#charSel'),old=sel.getAttribute('style');sel.setAttribute('style','display:none');const hidden=getComputedStyle(document.querySelector('.rail-caption')).display==='none';sel.setAttribute('style',old||'');return hidden;});
+      assert.equal(caption,true);
+      await page.locator('[data-studio-view="runs"]').click();
+      assert.equal(await page.locator('#runs').evaluate(e=>e.classList.contains('active')),true);
+    });
     await check('coach and skill indexes remain accessible without covering the fight analysis',async()=>{
       const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
       await isolated.route('**/api/fights?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({fights:[],more:false})}));
@@ -390,7 +443,7 @@ const server = http.createServer((req,res) => {
       await page.setViewportSize({width,height:844});
       for(const tab of ['Live','Verlauf','Statistik','Skill-Katalog','Einstellungen']) {
         await page.getByRole('button',{name:tab,exact:true}).click(); await delay(100);
-        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab);
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,tab+' '+JSON.stringify(await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+1&&getComputedStyle(e).display!=='none').map(e=>({tag:e.tagName,id:e.id,cl:e.className?.baseVal??e.className,right:e.getBoundingClientRect().right})).slice(0,12))));
       }
       }
       await page.getByRole('button',{name:'Live',exact:true}).click();
@@ -748,6 +801,7 @@ const server = http.createServer((req,res) => {
         assert.equal(await isolated.locator('[data-run-skills] tbody tr').count(),4);assert.match(await isolated.locator('[data-run-skill-note]').textContent(),/2 von 3/);
         assert.match(await isolated.locator('[data-run-coverage]').textContent(),/1 Kampf ohne auswertbaren Verlauf/);
         assert.equal(await isolated.locator('[data-run-plot] svg').count(),1);
+        await isolated.locator('#openRunTotals').click();assert.equal(await isolated.evaluate(()=>document.activeElement.id),'runAnalysis');
         await isolated.selectOption('[data-run-metric]','total');assert.equal(await isolated.locator('[data-run-window]').isDisabled(),true);assert.match(await isolated.locator('[data-run-readout]').textContent(),/9,00M/);
         await isolated.locator('[data-run-fight]').click();await isolated.locator('#fightDialog[open]').waitFor();await isolated.locator('#closeDialog').click();
         await isolated.selectOption('[data-run-player]','group');assert.match(await isolated.locator('[data-run-summary]').textContent(),/24,90M/);

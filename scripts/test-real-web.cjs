@@ -15,6 +15,8 @@ const {spawn}=require('node:child_process');const {chromium}=require('playwright
       await page.getByRole('button',{name:label,exact:true}).click();await new Promise(r=>setTimeout(r,300));
       if(process.env.SCREENSHOT_DIR){fs.mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,file+'.png'),fullPage:true});}
     }
+    // The settings preview must really render with the production headers.
+    await page.frameLocator('#overlayPreview').locator('#box').waitFor({state:'attached',timeout:5000});
     await page.selectOption('[data-k="theme"]','aether');await new Promise(r=>setTimeout(r,700));
     const settings=await(await fetch('http://127.0.0.1:8816/api/overlay')).json();assert.equal(settings.theme,'aether');
     assert.deepEqual(errors,[]);console.log('PASS production dashboard: four views, empty state, settings write, no page exceptions');

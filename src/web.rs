@@ -89,8 +89,17 @@ async fn index() -> Html<&'static str> {
     Html(include_str!("../web/index.html"))
 }
 
-async fn overlay_page() -> Html<&'static str> {
-    Html(include_str!("../web/overlay.html"))
+/// The only page the dashboard may frame (settings preview); still never
+/// embeddable by another origin.
+async fn overlay_page() -> Response {
+    (
+        [
+            (header::X_FRAME_OPTIONS, "SAMEORIGIN"),
+            (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'self'"),
+        ],
+        Html(include_str!("../web/overlay.html")),
+    )
+        .into_response()
 }
 
 async fn live(State(engine): State<AppState>) -> Response {
@@ -636,10 +645,9 @@ async fn local_request(State(addr): State<SocketAddr>, request: Request, next: N
         header::X_CONTENT_TYPE_OPTIONS,
         axum::http::HeaderValue::from_static("nosniff"),
     );
-    headers.insert(
-        header::X_FRAME_OPTIONS,
-        axum::http::HeaderValue::from_static("DENY"),
-    );
+    headers
+        .entry(header::X_FRAME_OPTIONS)
+        .or_insert(axum::http::HeaderValue::from_static("DENY"));
     response
 }
 
@@ -1166,6 +1174,30 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(engine.overlay.read().skill_language, "de");
+    }
+
+    #[tokio::test]
+    async fn only_the_overlay_page_may_be_framed_and_only_by_the_dashboard() {
+        for (path, frame) in [
+            ("/overlay", "SAMEORIGIN"),
+            ("/", "DENY"),
+            ("/api/live", "DENY"),
+        ] {
+            let response = app()
+                .oneshot(request("GET", path, "localhost:8787", false, ""))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::X_FRAME_OPTIONS], frame, "{path}");
+        }
+        let overlay = app()
+            .oneshot(request("GET", "/overlay", "localhost:8787", false, ""))
+            .await
+            .unwrap();
+        assert_eq!(
+            overlay.headers()[header::CONTENT_SECURITY_POLICY],
+            "frame-ancestors 'self'"
+        );
     }
 
     #[tokio::test]
