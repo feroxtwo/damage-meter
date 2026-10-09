@@ -231,6 +231,10 @@ fn register_functions(conn: &Connection) -> Result<()> {
                 .unwrap_or_default())
         },
     )?;
+    conn.create_scalar_function("required_bosses", 1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| {
+            Ok(serde_json::to_string(&names::dungeon_bosses(ctx.get(0)?)).unwrap())
+        })?;
     set_world_mob_check(conn, |_| false)?;
     set_activity_check(conn, |id, _| {
         names::dungeon_activity(id).unwrap_or("unclassified").into()
@@ -332,6 +336,14 @@ fn migrate(conn: &Connection) -> Result<()> {
         ),
         [],
     )?;
+    let ids: Vec<i32> = conn.prepare("SELECT DISTINCT dungeon_id FROM runs")?
+        .query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    for id in ids {
+        if names::dungeon_activity(id) == Some("transcendence") {
+            conn.execute("UPDATE runs SET difficulty = ?1 WHERE dungeon_id = ?2",
+                params![names::dungeon_difficulty(id), id])?;
+        }
+    }
     repair_masked_names_once(conn)
 }
 
@@ -962,6 +974,12 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT r.id, r.dungeon_id, r.dungeon_name, r.difficulty, r.kind, r.started_at, r.ended_at,
                     r.character, r.note, r.favorite,
+                    CASE WHEN r.ended_at IS NULL THEN 'active'
+                         WHEN json_array_length(required_bosses(r.dungeon_id)) > 0
+    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
+        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
+            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
+              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill')) THEN 'completed' ELSE 'incomplete' END AS outcome,
                     (SELECT COUNT(*) FROM fights f WHERE f.run_id = r.id AND f.is_train = 0) AS fights,
                     (SELECT json_group_array(json_object('name',name,'job',COALESCE(job,''),'is_self',is_self))
                        FROM run_members m WHERE m.run_id = r.id) AS members,
@@ -1004,6 +1022,13 @@ impl Db {
         let Some(mut run) = rows_to_json(&mut stmt, params![run_id])?.into_iter().next() else {
             return Ok(None);
         };
+        let complete: bool = conn.query_row("SELECT json_array_length(required_bosses(r.dungeon_id)) > 0
+    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
+        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
+            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
+              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill')) FROM runs r WHERE r.id=?1",
+            params![run_id], |row| row.get(0))?;
+        run["outcome"] = json!(if run["ended_at"].is_null() { "active" } else if complete { "completed" } else { "incomplete" });
         let mut stmt = conn.prepare(
             "SELECT name, job, server_id, level, gear_score, combat_power, is_self FROM run_members
              WHERE run_id = ?1 ORDER BY is_self DESC, name",
@@ -2039,8 +2064,13 @@ impl Db {
         )?;
         let mut stmt = conn.prepare(
             "SELECT dungeon_name, difficulty, COUNT(*) AS runs,
-                    MIN(CASE WHEN ended_at IS NOT NULL THEN ended_at - started_at END) AS fastest_ms
-             FROM runs WHERE (?1 = '' OR character = ?1)
+                    MIN(CASE WHEN r.ended_at IS NOT NULL AND json_array_length(required_bosses(r.dungeon_id)) > 0
+    AND NOT EXISTS (SELECT 1 FROM json_each(required_bosses(r.dungeon_id)) expected
+        WHERE NOT EXISTS (SELECT 1 FROM fights f JOIN fight_analytics a ON a.fight_id=f.id
+            WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
+              AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill'))
+                        THEN r.ended_at - r.started_at END) AS fastest_ms
+             FROM runs r WHERE (?1 = '' OR character = ?1)
              GROUP BY dungeon_name, difficulty ORDER BY runs DESC",
         )?;
         let per_dungeon = rows_to_json(&mut stmt, params![c])?;

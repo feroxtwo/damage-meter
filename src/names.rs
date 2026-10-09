@@ -1,6 +1,6 @@
 //! Display names: classes and dungeons.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use serde::Serialize;
@@ -98,15 +98,26 @@ pub fn dungeon_activity(id: i32) -> Option<&'static str> {
     DUNGEONS.get(&id)?.activity.as_deref()
 }
 
-/// "Erkundung", "Normal", "Schwer" or "Stufe n". The last digit of an instance
-/// id is its tier; dungeons with nine ids have levels instead.
+static BOSS_METADATA: LazyLock<Value> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../data/i18n/npcs/en.json")).expect("NPC catalog")
+});
+
+pub fn dungeon_bosses(id: i32) -> Vec<i32> {
+    BOSS_METADATA.as_object().unwrap().iter().filter_map(|(code, entry)| {
+        (entry["isBoss"] == true && entry["dungeonId"].as_i64() == Some(i64::from(id)))
+            .then(|| code.parse().ok()).flatten()
+    }).collect()
+}
+
+/// Use explicit NPC tiers for transcendence; map ID suffixes are not stages.
 pub fn dungeon_difficulty(id: i32) -> Option<String> {
     let entry = DUNGEONS.get(&id)?;
     let n = id % 10;
-    let group = id - n;
-    let size = DUNGEONS.keys().filter(|k| *k - *k % 10 == group).count();
-    if size >= 9 {
-        return Some(format!("Stufe {n}"));
+    if entry.activity.as_deref() == Some("transcendence") {
+        let tiers: HashSet<_> = BOSS_METADATA.as_object().unwrap().values()
+            .filter(|npc| npc["dungeonId"].as_i64() == Some(i64::from(id)) && npc["isBoss"] == true)
+            .filter_map(|npc| npc["tier"].as_str()).collect();
+        return (tiers.len() == 1).then(|| tiers.iter().next().unwrap().replace("Stage ", "Stufe "));
     }
     let key = entry.difficulty.clone().or_else(|| {
         match n {
@@ -178,7 +189,9 @@ mod tests {
     fn dungeon_labels() {
         assert_eq!(dungeon_label(600093), "Ferocious Horn Den (Schwer)");
         assert_eq!(dungeon_label(600001), "Krao Cave (Erkundung)");
-        assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 5)");
+        assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 2)");
+        assert_eq!(dungeon_difficulty(600063).as_deref(), Some("Stufe 1"));
+        assert_eq!(dungeon_bosses(600063).len(), 3);
         assert_eq!(dungeon_label(0), "Offene Welt");
         assert_eq!(dungeon_label(123), "Instanz 123");
         assert_eq!(dungeon_activity(600093), Some("expedition"));

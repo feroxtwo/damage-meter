@@ -34,7 +34,7 @@ function coachTopSkill(p) {
   const valid=(p?.skills||[]).filter(s=>Number(s.damage)>0);
   const top=valid.reduce((a,b)=>Number(b.damage)>Number(a?.damage||0)?b:a,null);
   if(!top||Number(p.damage)<=0)return null;
-  return {code:top.code,is_dot:!!top.is_dot,name:top.name||('#'+top.code),
+  return {code:top.code,is_dot:!!top.is_dot,name:top.name||('#'+top.code),names:top.names,icon:top.icon,
     share:100*Number(top.damage)/Number(p.damage)};
 }
 function coachBuffChanges(now,prior) {
