@@ -268,16 +268,37 @@ mod tests {
         assert!(conn.execute("DELETE FROM archives", []).is_err());
         let bundle = read_bundled().unwrap();
         assert_eq!(bundle.archives.len(), 6);
-        let notmeter = bundle.archives.iter().find(|a| a.source.id == "notmeter").unwrap();
+        let notmeter = bundle
+            .archives
+            .iter()
+            .find(|a| a.source.id == "notmeter")
+            .unwrap();
         assert_eq!(notmeter.rows.len(), 9133);
-        let identities: HashSet<_> = notmeter.rows.iter().map(|r|
-            serde_json::to_string(&serde_json::json!([
-                r.class_key, r.scope["dungeon_key"], r.scope["boss_index"],
-                r.scope["cp_tier"]["index"], r.scope["period"],
-                r.scope["period_label"], r.scope["generated_at"]
-            ])).unwrap()).collect();
+        let identities: HashSet<_> = notmeter
+            .rows
+            .iter()
+            .map(|r| {
+                serde_json::to_string(&serde_json::json!([
+                    r.class_key,
+                    r.scope["dungeon_key"],
+                    r.scope["boss_index"],
+                    r.scope["cp_tier"]["index"],
+                    r.scope["period"],
+                    r.scope["period_label"],
+                    r.scope["generated_at"]
+                ]))
+                .unwrap()
+            })
+            .collect();
         assert_eq!(identities.len(), notmeter.rows.len());
-        assert_eq!(notmeter.rows.iter().filter(|r| r.scope["period_kind"] == "weekly").count(), 2232);
+        assert_eq!(
+            notmeter
+                .rows
+                .iter()
+                .filter(|r| r.scope["period_kind"] == "weekly")
+                .count(),
+            2232
+        );
     }
 
     #[test]
