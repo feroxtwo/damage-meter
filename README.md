@@ -17,6 +17,14 @@ Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die a
 
 Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich gegen eigene beobachtete Mitspieler bei ähnlicher Kampfkraft. Zusätzlich können berechtigte, aggregierte Community-Referenzwerte über **Statistik → Datenquellen** freiwillig als JSON importiert werden. Alle Vergleichswerte sind explizit nach Herkunft gekennzeichnet, bleiben lokal und benötigen exakt passende Boss-/Schwierigkeits-/Klassen-/KP-/Region-/Balance-Daten. Ohne passende Stichproben wird kein Index erfunden. **Keine automatische Fremd-API, kein Webscraping, kein Upload.** [Quellen, Schema und Grenzen](docs/COMMUNITY_DATA_SOURCES.md).
 
+## Kampfqualität & Performance Coach
+
+Der Kampfbericht ergänzt deine gespeicherten Messwerte um einen persönlichen **Performance Coach** mit Schadensaktivität aus kumulativen 500-ms-Beobachtungen, 5-Sekunden-Peak, DPS-Vergleich mit demselben Boss und derselben Schwierigkeit, Skillanteilen und dokumentierten Buff-Änderungen. Fehlende oder begrenzte Daten werden nicht durch Schätzwerte ersetzt.
+
+Bei einer **Kampfpause** zeigt der Meter nach 3 Sekunden ohne Treffer am ausgewählten Ziel **0 aktuelle Schadens-DPS** im Browser und in beiden Overlays. Historischer Schaden und bisheriger Kampf-DPS bleiben erhalten; ein Leerlauf gilt nicht automatisch als Sieg oder Kampfabbruch. Der Parser verwendet die geprüfte A2Tools-Version 2.0.54 mit Fixes für fremde Bosse, Namen und DoT-Effekte. Der automatische destruktive Idle-Reset bleibt optional.
+
+Community-DPS-Vergleiche unterscheiden nun zwischen **Methodik belegt** (Importformat v2) und **Richtwert** (älteres Importformat v1). [Technische Grenzen und Abnahme](docs/COMBAT_FIDELITY_AND_COACH.md).
+
 ## Neu in 0.3.1
 
 Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regulären Beenden, korrigierte Overlay-Skalierung mit stabiler Position und Updateinstallation bei laufendem Meter. Skilldetails haben Suche, Sortierung, Durchschnitt, Anteil und Skill-DPS/HPS; zusätzliche Treffermerkmale sind auf Wunsch sichtbar. Statushilfen erklären fehlende Pakete. Laufende Runs können nicht gelöscht werden, Bossstatistiken trennen Schwierigkeitsgrade und zählen erfasste Versuche.
