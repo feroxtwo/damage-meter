@@ -18,6 +18,10 @@ Spielmetadaten (Dungeon-, NPC- und Skillkataloge) sind bereits integriert und bl
 | [A2 Tools Statistiken](https://a2tools.app/stats) | Boss-/Klassenmediane, Stichprobenzahlen, CP/GS-Bänder | Betreiberfreigabe und Datenexport-Format erforderlich |
 | [A2 Tools Fremdmeter-Anbindung](https://github.com/taengu/A2Tools-DPS-Meter/blob/main/docs/third-party-meters.md) | Freiwilliger Upload von anonymisierten Evidence Slices nach Konformitätsprüfung | Separater möglicher Integrationsweg, **hier nicht aktiviert** |
 | [Aion DPS](https://aiondps.com) und [Quellcode](https://github.com/SkeeveAN/Aion-DPS-Meter) | Bosslisten, Leaderboards, Referenzinformationen | Public-API-Verfügbarkeit und Datenrechte nicht bestätigt |
+| [Abyss Logs](https://abysslogs.com/) | Bosslogs, Klassen- und Skillanalyse | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [Questlog Combat Logs](https://questlog.gg/aion-2/en/app) | Kampf- und Performanceberichte | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [JaMeter](https://jameter.net/en) | Community-Kampfrankings | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [NotMeter](https://notmeter.com) | DPS-Vergleiche, teilweise andere DPS-Definition | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
 | [AION 2 API Client](https://github.com/nuriland/aion2-api) | Öffentliche Charakterprofile als möglicher optionaler Datenabgleich | Nicht angebunden, ausdrückliche Zustimmung nötig |
 | [Aion2.app](https://aion2.app/de/terms) | Spielmetadaten | Kein automatisierter Import/Scraping ohne Erlaubnis |
 | Berechtigter eigener JSON-Datensatz | Aggregierte Referenzwerte | **Import funktioniert** |
@@ -67,7 +71,7 @@ Bestehende V1-Importe bleiben lesbar und löschbar. Sie werden **nicht automatis
 V2-Werte erscheinen nur als strukturiert vergleichbar, wenn die importierte Methode exakt stimmt **und** der lokale Kampf einen erfassten Zieltod sowie keinen als unvollständig markierten Schadensverlauf hat. Abweichende oder unbestätigte Kampfabschlüsse erhalten keinen präzisen V2-Vergleich. Diese Einschränkung kann zu bewusst leeren Ergebnissen führen.
 
 
-Für jeden tatsächlichen Import müssen alle Beispielwerte durch verifizierte, zur Wiederverwendung freigegebene Aggregatdaten ersetzt werden. `source.id` ist `community`, `a2tools` oder `aiondps`; bei benannten Diensten muss die HTTPS-Quelladresse exakt zur Domain gehören. Eine solche Quellenangabe **beweist keine Authentizität**. `rights_confirmed` muss durch eine ausdrückliche Bestätigung des Nutzers auf `true` gesetzt werden.
+Für jeden tatsächlichen Import müssen alle Beispielwerte durch verifizierte, zur Wiederverwendung freigegebene Aggregatdaten ersetzt werden. `source.id` ist `community`, `a2tools`, `aiondps`, `abysslogs`, `questlog`, `jameter` oder `notmeter`; bei benannten Diensten muss die HTTPS-Quelladresse exakt zur Domain gehören. Eine solche Quellenangabe **beweist keine Authentizität**. `rights_confirmed` muss durch eine ausdrückliche Bestätigung des Nutzers auf `true` gesetzt werden.
 
 `balance.from_ms` und `balance.until_ms` sind Unix-Zeitstempel in **Millisekunden** für die Gültigkeit eines konkreten Balance-Zeitraums (maximal 180 Tage). `captured_at` ist das Datum des zugrunde liegenden Datensatzes. Die Zeilen enthalten den **Median** des Schadens pro Sekunde, nicht Maximalwert, Top-10-Liste, Perzentil oder den Schaden pro Treffer.
 
