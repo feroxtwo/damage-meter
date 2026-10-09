@@ -38,7 +38,7 @@ let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/performance-coach.js'?'performance-coach.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -123,6 +123,42 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#liveRows .bar').count(),3);
     });
     if(process.env.SCREENSHOT_DIR) { fs.mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true}); await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'dashboard-desktop.png'),fullPage:true}); }
+    await check('quiet boss shows zero current DPS without erasing historical damage',async()=>{
+      const paused=await context.newPage();paused.on('pageerror',e=>errors.push(e.message));
+      await paused.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        ...live,combat_state:'paused',target_idle_ms:12000,last_target_hit_ms:Date.now()-12000
+      })}));
+      try {
+        await paused.goto(base+'/#live');
+        await paused.waitForFunction(()=>document.querySelector('#livePhase')?.textContent.includes('Kampfpause'));
+        assert.equal(await paused.locator('#selfDps').textContent(),'0');
+        assert.equal(await paused.locator('#groupDps').textContent(),'0');
+        assert.notEqual(await paused.locator('#totalDamage').textContent(),'0');
+        assert.match(await paused.locator('#metricHint').textContent(),/Kampfpause/);
+        assert.match(await paused.locator('#liveSub').textContent(),/gespeichert/);
+        assert.equal(await paused.locator('#liveRows .ranking-value strong').first().textContent(),'0 DPS');
+      } finally {await paused.close();}
+    });
+    await check('performance coach renders measured values without inventing casts',async()=>{
+      const isolated=await context.newPage();
+      isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        // Keep this isolated report check from polluting the shared fight-list
+        // request counters used by the pagination regression below.
+        await isolated.route('**/api/fights?*',route=>route.fulfill({
+          status:200,contentType:'application/json',body:JSON.stringify({fights:[],more:false})
+        }));
+        await isolated.goto(base+'/#live');
+        await isolated.waitForFunction(()=>typeof window.openFight==='function'&&typeof window.fillPerformanceCoach==='function');
+        await isolated.evaluate(()=>openFight('f1'));
+        await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor({state:'attached'});
+        const text=await isolated.locator('#performanceCoachPanel').textContent();
+        assert.match(text,/Eigene Kampf-DPS/);
+        assert.match(text,/Stärkster Skill/);
+        assert.match(text,/kein Cast-/i);
+        assert.doesNotMatch(text,/falsche Rotation/i);
+      } finally {await isolated.close();}
+    });
     await check('unknown URL tab falls back to live',async()=>{
       await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
     });

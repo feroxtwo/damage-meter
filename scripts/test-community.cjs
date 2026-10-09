@@ -23,9 +23,15 @@ context.response = {
   }]
 };
 assert.equal(run('communityComparisonMarkup(response).includes("140")'), true);
-assert.equal(run('communityComparisonMarkup(response).includes("20 Vergleichsspieler")'), true);
+assert.equal(run('communityComparisonMarkup(response).includes("20 unabhängige Spieler laut Quelle")'), true);
 context.response.comparisons[0].balance_id = '<script>alert(1)</script>';
 assert.equal(run('communityComparisonMarkup(response).includes("<script>")'), false, 'snapshot metadata must be escaped');
 assert.equal(run('communityTemplate().source.rights_confirmed'), false, 'a generated template must not preauthorize anything');
+assert.equal(run('communityTemplate().schema'),'a2m-community-v2','new imports declare metric definition');
+assert.equal(run('communityTemplate().methodology.aggregation'),'median_unique_players');
+context.response.status='indicative';
+context.response.comparisons[0].comparison_quality='legacy_unspecified';
+assert.equal(run('communityComparisonMarkup(response).includes("Nur Richtwerte")'),true);
+
 assert.equal(run('communityTemplate().rows.length'), 0, 'never ship fake online measurements');
 console.log('Community reference UI: 7 assertions passed');

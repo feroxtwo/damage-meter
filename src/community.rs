@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use std::collections::HashSet;
 
 pub const SCHEMA: &str = "a2m-community-v1";
+pub const SCHEMA_V2: &str = "a2m-community-v2";
 
 #[derive(Debug, Deserialize)]
 pub struct CommunitySnapshot {
@@ -12,6 +13,19 @@ pub struct CommunitySnapshot {
     pub source: ReferenceSource,
     pub balance: BalancePeriod,
     pub rows: Vec<ReferenceRow>,
+    #[serde(default)]
+    pub methodology: Option<ReferenceMethod>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReferenceMethod {
+    /// The runtime and the comparison cohort must use the same full-fight DPS.
+    pub metric: String,
+    /// Only confirmed boss kills, never attempts or timed training.
+    pub outcome: String,
+    /// Dedupe repeated uploads before computing the median.
+    pub aggregation: String,
+    pub patch_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,13 +82,36 @@ impl CommunitySnapshot {
     /// A self-attestation only. The program cannot certify the uploader's rights
     /// nor that their JSON truly originated from the named third-party source.
     pub fn validate(self) -> Result<Self, &'static str> {
-        if self.schema != SCHEMA || self.rows.is_empty() || self.rows.len() > 500 {
+        if ![SCHEMA, SCHEMA_V2].contains(&self.schema.as_str())
+            || self.rows.is_empty()
+            || self.rows.len() > 500
+        {
             return Err("invalid_schema_or_row_count");
+        }
+        if self.schema == SCHEMA_V2 {
+            let method = self.methodology.as_ref().ok_or("methodology_required")?;
+            if method.metric != "fight_dps"
+                || method.outcome != "confirmed_kill"
+                || method.aggregation != "median_unique_players"
+                || method.patch_id.is_empty()
+                || method.patch_id.len() > 64
+                || !method
+                    .patch_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+            {
+                return Err("invalid_methodology");
+            }
+        } else if self.methodology.is_some() {
+            return Err("legacy_schema_cannot_claim_methodology");
         }
         if !self.source.rights_confirmed {
             return Err("rights_confirmation_required");
         }
-        if !matches!(self.source.id.as_str(), "a2tools" | "aiondps" | "community") {
+        if !matches!(
+            self.source.id.as_str(),
+            "a2tools" | "aiondps" | "abysslogs" | "questlog" | "jameter" | "notmeter" | "community"
+        ) {
             return Err("unknown_source");
         }
         let url = reqwest::Url::parse(&self.source.url).map_err(|_| "invalid_source_url")?;
@@ -87,6 +124,18 @@ impl CommunitySnapshot {
                 return Err("source_url_mismatch");
             }
             "aiondps" if host != "aiondps.com" && host != "www.aiondps.com" => {
+                return Err("source_url_mismatch");
+            }
+            "abysslogs" if host != "abysslogs.com" && host != "www.abysslogs.com" => {
+                return Err("source_url_mismatch");
+            }
+            "questlog" if host != "questlog.gg" && host != "www.questlog.gg" => {
+                return Err("source_url_mismatch");
+            }
+            "jameter" if host != "jameter.net" && host != "www.jameter.net" => {
+                return Err("source_url_mismatch");
+            }
+            "notmeter" if host != "notmeter.com" && host != "www.notmeter.com" => {
                 return Err("source_url_mismatch");
             }
             _ => {}
@@ -175,6 +224,38 @@ pub fn provider_catalog() -> Value {
             "detail": "Öffentliche Ranglisten-Routen im Quellcode, Datenabruf nicht verifiziert"
         },
         {
+            "id": "abysslogs",
+            "name": "Abyss Logs",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://abysslogs.com",
+            "detail": "Boss-Logs und Klassenstatistiken; API und Datenrechte nicht bestätigt"
+        },
+        {
+            "id": "questlog",
+            "name": "Questlog Combat Logs",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://questlog.gg/aion-2/en/app",
+            "detail": "Leistungsberichte; keine freigegebene Statistik-Download-API bestätigt"
+        },
+        {
+            "id": "jameter",
+            "name": "JaMeter",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://jameter.net/en",
+            "detail": "Anonyme Leistungsranglisten; Wiederverwendungsrechte ungeklärt"
+        },
+        {
+            "id": "notmeter",
+            "name": "NotMeter",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://notmeter.com",
+            "detail": "Bereinigte und rohe DPS-Indikatoren; Downloadrechte ungeklärt"
+        },
+        {
             "id": "ncsoft",
             "name": "AION 2 Charakterprofile",
             "kind": "character",
@@ -218,6 +299,42 @@ mod tests {
     }
 
     #[test]
+    fn community_v2_requires_explicit_comparable_methodology() {
+        let data = json!({
+            "schema": SCHEMA_V2,
+            "source": {
+                "id": "community", "url": "https://example.org/authorized",
+                "captured_at": 1_790_000_000_000_i64, "rights_confirmed": true
+            },
+            "balance": {
+                "id": "patch-42", "from_ms": 1_780_000_000_000_i64,
+                "until_ms": 1_792_000_000_000_i64
+            },
+            "methodology": {
+                "metric": "fight_dps",
+                "outcome": "confirmed_kill",
+                "aggregation": "median_unique_players",
+                "patch_id": "global-42"
+            },
+            "rows": [{
+                "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                "median_dps": 14500.0, "samples": 120
+            }]
+        });
+        let good: CommunitySnapshot = serde_json::from_value(data.clone()).unwrap();
+        assert!(good.validate().is_ok());
+        let mut missing = data.clone();
+        missing.as_object_mut().unwrap().remove("methodology");
+        let invalid: CommunitySnapshot = serde_json::from_value(missing).unwrap();
+        assert_eq!(invalid.validate().unwrap_err(), "methodology_required");
+        let mut false_metric = data;
+        false_metric["methodology"]["metric"] = json!("active_dps");
+        let invalid: CommunitySnapshot = serde_json::from_value(false_metric).unwrap();
+        assert_eq!(invalid.validate().unwrap_err(), "invalid_methodology");
+    }
+
+    #[test]
     fn validates_rights_scope_and_provenance() {
         assert!(snapshot().validate().is_ok());
         let mut wrong = snapshot();
@@ -229,6 +346,13 @@ mod tests {
         let mut wrong = snapshot();
         wrong.source.id = "a2tools".into();
         assert_eq!(wrong.validate().unwrap_err(), "source_url_mismatch");
+        let mut wrong = snapshot();
+        wrong.source.id = "abysslogs".into();
+        assert_eq!(wrong.validate().unwrap_err(), "source_url_mismatch");
+        let mut wrong = snapshot();
+        wrong.source.id = "questlog".into();
+        wrong.source.url = "https://questlog.gg/aion-2/en/app".into();
+        assert!(wrong.validate().is_ok());
         let mut wrong = snapshot();
         wrong.rows[0].median_dps = f64::NAN;
         assert_eq!(wrong.validate().unwrap_err(), "invalid_reference_row");

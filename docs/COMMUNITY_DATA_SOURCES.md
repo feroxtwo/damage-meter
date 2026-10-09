@@ -18,6 +18,10 @@ Spielmetadaten (Dungeon-, NPC- und Skillkataloge) sind bereits integriert und bl
 | [A2 Tools Statistiken](https://a2tools.app/stats) | Boss-/Klassenmediane, Stichprobenzahlen, CP/GS-Bänder | Betreiberfreigabe und Datenexport-Format erforderlich |
 | [A2 Tools Fremdmeter-Anbindung](https://github.com/taengu/A2Tools-DPS-Meter/blob/main/docs/third-party-meters.md) | Freiwilliger Upload von anonymisierten Evidence Slices nach Konformitätsprüfung | Separater möglicher Integrationsweg, **hier nicht aktiviert** |
 | [Aion DPS](https://aiondps.com) und [Quellcode](https://github.com/SkeeveAN/Aion-DPS-Meter) | Bosslisten, Leaderboards, Referenzinformationen | Public-API-Verfügbarkeit und Datenrechte nicht bestätigt |
+| [Abyss Logs](https://abysslogs.com/) | Bosslogs, Klassen- und Skillanalyse | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [Questlog Combat Logs](https://questlog.gg/aion-2/en/app) | Kampf- und Performanceberichte | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [JaMeter](https://jameter.net/en) | Community-Kampfrankings | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
+| [NotMeter](https://notmeter.com) | DPS-Vergleiche, teilweise andere DPS-Definition | Nur Referenz-/URL-Registry; Rechte und Lese-API offen |
 | [AION 2 API Client](https://github.com/nuriland/aion2-api) | Öffentliche Charakterprofile als möglicher optionaler Datenabgleich | Nicht angebunden, ausdrückliche Zustimmung nötig |
 | [Aion2.app](https://aion2.app/de/terms) | Spielmetadaten | Kein automatisierter Import/Scraping ohne Erlaubnis |
 | Berechtigter eigener JSON-Datensatz | Aggregierte Referenzwerte | **Import funktioniert** |
@@ -30,13 +34,13 @@ Im Dashboard unter **Statistik → Datenquellen** eine Region wählen und ein JS
 
 Die Schaltfläche **JSON-Vorlage** erzeugt absichtlich eine **leere** Vorlage und setzt `rights_confirmed: false`. Ein offizieller Download aus einem externen Portal wird **nicht vorgetäuscht**.
 
-### Format `a2m-community-v1`
+### Format `a2m-community-v2` (neue Vorlage)
 
-Folgendes ist ein **rein fiktives Strukturbeispiel** und darf keinesfalls als reale AION-2-Messung importiert oder verteilt werden:
+Die neue Vorlage deklariert ausdrücklich die Bedeutung ihrer DPS-Zahlen. Nur ein Median über **unabhängige Spieler bei bestätigten Bosskills**, berechnet über die komplette erfasste Kampfzeit (`fight_dps`), darf die strukturierte Vergleichsqualität erhalten. Die Erklärung des Anbieters wird gespeichert, aber **nicht unabhängig verifiziert**.
 
 ```json
 {
-  "schema": "a2m-community-v1",
+  "schema": "a2m-community-v2",
   "source": {
     "id": "community",
     "url": "https://example.org/permitted-data",
@@ -48,22 +52,26 @@ Folgendes ist ein **rein fiktives Strukturbeispiel** und darf keinesfalls als re
     "from_ms": 1780000000000,
     "until_ms": 1792000000000
   },
-  "rows": [
-    {
-      "region": "EU",
-      "dungeon_id": 600093,
-      "mob_code": 2300409,
-      "class_key": "gladiator",
-      "cp_min": 60000,
-      "cp_max": 80000,
-      "median_dps": 14500,
-      "samples": 120
-    }
-  ]
+  "methodology": {
+    "metric": "fight_dps",
+    "outcome": "confirmed_kill",
+    "aggregation": "median_unique_players",
+    "patch_id": "replace-with-game-patch"
+  },
+  "rows": []
 }
 ```
 
-Für jeden tatsächlichen Import müssen alle Beispielwerte durch verifizierte, zur Wiederverwendung freigegebene Aggregatdaten ersetzt werden. `source.id` ist `community`, `a2tools` oder `aiondps`; bei benannten Diensten muss die HTTPS-Quelladresse exakt zur Domain gehören. Eine solche Quellenangabe **beweist keine Authentizität**. `rights_confirmed` muss durch eine ausdrückliche Bestätigung des Nutzers auf `true` gesetzt werden.
+Vor dem Import sind eine echte, erlaubte Datenquelle, überprüfte NPC-/Gebiets-IDs, zusammengehörige regionale Versionen, gültige Werte und eine bewusst abgegebene Rechtebestätigung erforderlich. `rows` bleibt in der Vorlage **leer**; sie enthält keine fiktiven DPS.
+
+### Alte Datensätze: `a2m-community-v1`
+
+Bestehende V1-Importe bleiben lesbar und löschbar. Sie werden **nicht automatisch** als Fight-DPS aus bestätigten Kills uminterpretiert und erhalten die Kennzeichnung **Richtwert / Methodik unbekannt**. Die SQLite-Migration ergänzt die neuen Metadaten mit `unknown`, ohne ihre bisherigen Messungen zu verändern.
+
+V2-Werte erscheinen nur als strukturiert vergleichbar, wenn die importierte Methode exakt stimmt **und** der lokale Kampf einen erfassten Zieltod sowie keinen als unvollständig markierten Schadensverlauf hat. Abweichende oder unbestätigte Kampfabschlüsse erhalten keinen präzisen V2-Vergleich. Diese Einschränkung kann zu bewusst leeren Ergebnissen führen.
+
+
+Für jeden tatsächlichen Import müssen alle Beispielwerte durch verifizierte, zur Wiederverwendung freigegebene Aggregatdaten ersetzt werden. `source.id` ist `community`, `a2tools`, `aiondps`, `abysslogs`, `questlog`, `jameter` oder `notmeter`; bei benannten Diensten muss die HTTPS-Quelladresse exakt zur Domain gehören. Eine solche Quellenangabe **beweist keine Authentizität**. `rights_confirmed` muss durch eine ausdrückliche Bestätigung des Nutzers auf `true` gesetzt werden.
 
 `balance.from_ms` und `balance.until_ms` sind Unix-Zeitstempel in **Millisekunden** für die Gültigkeit eines konkreten Balance-Zeitraums (maximal 180 Tage). `captured_at` ist das Datum des zugrunde liegenden Datensatzes. Die Zeilen enthalten den **Median** des Schadens pro Sekunde, nicht Maximalwert, Top-10-Liste, Perzentil oder den Schaden pro Treffer.
 

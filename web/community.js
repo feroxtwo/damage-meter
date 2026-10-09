@@ -33,10 +33,11 @@ function communityRatio(score) {
 function communityComparisonMarkup(response) {
   if (!response) return '<p class="analysis-note">Kein Community-Vergleich verfügbar.</p>';
   const title = '<div class="skill-index-head"><div><span class="eyebrow">COMMUNITY · IMPORTIERTE DATEN</span><h3>Externe DPS-Referenzen</h3></div><span>Region ' + esc(response.region || 'ALL') + '</span></div>';
-  if (response.status !== 'ready') {
+  if (!['ready', 'indicative'].includes(response.status)) {
     return title + '<p class="analysis-note">' + esc(communityReasons[response.reason] || 'Keine geeigneten Community-Daten importiert.') +
       ' Ohne verifizierten Referenzdatensatz wird kein Online-Score angezeigt.</p><button type="button" class="btn" data-community-settings>Datenquellen öffnen</button>';
   }
+  const legacy=response.status==='indicative';
   const entries = (response.comparisons || []).map(row => {
     const score = Number(row.score);
     const sign = score >= 100 ? '+' : '−';
@@ -44,13 +45,13 @@ function communityComparisonMarkup(response) {
     return '<div class="community-reference">' +
       '<div><span class="eyebrow">' + esc(row.source_id) + ' · ' + (row.scope === 'same_class' ? 'Gleiche Klasse' : 'Alle Klassen') + '</span>' +
       '<strong class="' + (score >= 100 ? 'compare-positive' : 'compare-negative') + '">' + communityRatio(score) + '</strong>' +
-      '<span>' + sign + delta + ' % zum Median · ' + num(row.reference_dps) + ' Referenz-DPS</span></div>' +
-      '<div class="community-ref-detail">' + num(row.samples) + ' Vergleichsspieler · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
+      '<span>' + sign + delta + ' % zum Median · ' + num(row.reference_dps) + ' Referenz-DPS' + (row.comparison_quality==='legacy_unspecified'?' · Richtwert, DPS-Methode unbekannt':' · dokumentierte Kampf-DPS') + '</span></div>' +
+      '<div class="community-ref-detail">' + num(row.samples) + (row.comparison_quality==='legacy_unspecified'?' Beobachtungen (Stichprobe unbestätigt)':' unabhängige Spieler laut Quelle') + ' · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
       ' · ' + esc(row.region) + ' · ' + esc(row.balance_id) + '<div><a href="' + esc(row.source_url) +
       '" target="_blank" rel="noopener noreferrer">Quelle ansehen ↗</a></div></div></div>';
   }).join('');
   return title + '<div class="community-comparisons">' + entries + '</div>' +
-    '<p class="analysis-note">100 = Median der importierten Referenz. Datensatz und Berechtigung wurden vom Importierenden angegeben, nicht unabhängig verifiziert. Kein offizieller Skill Index, keine Perzentilwertung. Kampfwerte bleiben lokal.</p>';
+    '<p class="analysis-note">'+(legacy?'Nur Richtwerte: bei älteren Datensätzen sind DPS-Methode, Killfilter und unabhängige Stichprobe nicht nachgewiesen. ':'100 = Median vergleichbarer Kampf-DPS nach importierter Methodendeklaration. ')+'Quelle und Berechtigung sind Selbstauskünfte des Importierenden, nicht unabhängig verifiziert. Kein offizieller Skill Index oder Perzentil. Kampfwerte bleiben lokal.</p>';
 }
 async function fillCommunityIndex(id, root, request) {
   const region = selectedCommunityRegion();
@@ -89,7 +90,7 @@ async function loadCommunitySources() {
     const imported = (result.imports || []).map(entry =>
       '<div class="reference-imported"><strong>' + esc(entry.source_id) + '</strong>' +
       '<span>' + esc(entry.balance_id) + ' · ' + num(entry.rows) + ' Referenzgruppen · ' +
-      date(entry.captured_at) + ' Datenstand</span><button type="button" class="btn" data-remove-community="' + esc(entry.source_id) + '" data-balance="' + esc(entry.balance_id) + '">Entfernen</button></div>'
+      date(entry.captured_at) + ' Datenstand · ' + esc(entry.metric==='fight_dps'?'Kampf-DPS / Kills':'Methode nicht bestätigt') + '</span><button type="button" class="btn" data-remove-community="' + esc(entry.source_id) + '" data-balance="' + esc(entry.balance_id) + '">Entfernen</button></div>'
     ).join('');
     root.innerHTML = '<h3>Verfügbare Quellen</h3><div class="reference-providers">' + providers + '</div>' +
       '<h3>Auf diesem Gerät importiert</h3>' +
@@ -112,7 +113,7 @@ window.loadCommunitySources = loadCommunitySources;
 function communityTemplate() {
   const now = Date.now();
   return {
-    schema: 'a2m-community-v1',
+    schema: 'a2m-community-v2',
     source: {
       id: 'community',
       url: 'https://example.org/your-permitted-dataset',
@@ -123,6 +124,12 @@ function communityTemplate() {
       id: 'patch-or-balance-id',
       from_ms: now - 7 * 86400000,
       until_ms: now + 7 * 86400000
+    },
+    methodology: {
+      metric: 'fight_dps',
+      outcome: 'confirmed_kill',
+      aggregation: 'median_unique_players',
+      patch_id: 'replace-with-game-patch'
     },
     rows: []
   };

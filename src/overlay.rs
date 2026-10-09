@@ -492,6 +492,7 @@ impl Overlay {
             let rate = match settings.metric.as_str() {
                 "heal" => row.hps,
                 "damage_received" => value * 1000.0 / live.battle_time_ms.max(1000) as f64,
+                _ if live.combat_state == "paused" => 0.0,
                 _ => row.dps,
             };
             let (rect, response) = ui.allocate_exact_size(
@@ -692,6 +693,14 @@ impl Overlay {
             (
                 Color32::from_rgb(230, 180, 60),
                 "Zahlengrenze: Näherungswerte".to_string(),
+            )
+        } else if live.combat_state == "paused" {
+            (
+                Color32::from_rgb(230, 180, 60),
+                format!(
+                    "Kampfpause · {} s ohne Treffer",
+                    live.target_idle_ms.unwrap_or(0) / 1000
+                ),
             )
         } else if c.locked_port.is_some() {
             (

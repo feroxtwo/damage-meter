@@ -10,7 +10,7 @@ rust-version = "1.88"
 [dependencies]
 # Packet parser and combat aggregation from A2Tools DPS Meter (GPL-3.0),
 # built without its Tauri desktop half. Bump `rev` after a game patch.
-a2tools-dps-meter = { git = "https://github.com/taengu/A2Tools-DPS-Meter.git", rev = "d3cf6f92533721939f4b4454d163c6d1dd820666", default-features = false }
+a2tools-dps-meter = { git = "https://github.com/taengu/A2Tools-DPS-Meter.git", rev = "82e53c1008ac4c2974446cc703703f473bbbed81", default-features = false }
 
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 anyhow = "1"
