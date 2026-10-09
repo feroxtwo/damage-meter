@@ -111,7 +111,7 @@ const historyCache=new Map();
 async function attemptContext(f) {
   const me=f.players?.find(p=>p.is_self);
   if(!me||f.is_train||f.numeric_limited||!knownClassJob(me.job))return null;
-  const find=history=>{const boss=(history||[]).find(b=>b.boss===f.boss_name&&Number(b.dungeon_id??0)===Number(f.dungeon_id??0));return {boss,index:boss?.attempts.findIndex(a=>a.fight_id===f.id)??-1};};
+  const find=history=>{const boss=(history||[]).find(b=>b.boss===f.boss_name&&Number(b.dungeon_id??0)===Number(f.dungeon_id??0)&&Number(b.mob_code??0)===Number(f.mob_code??0));return {boss,index:boss?.attempts.findIndex(a=>a.fight_id===f.id)??-1};};
   // A cached history that does not know this fight yet (just saved) is fetched again.
   const cached=historyCache.get(me.name);let found=cached&&Date.now()-cached.at<30000?find(cached.data):{index:-1};
   if(found.index<0){const data=await api('/api/stats/boss-history?character='+encodeURIComponent(me.name));historyCache.set(me.name,{at:Date.now(),data});found=find(data);}
@@ -646,7 +646,7 @@ async function openFight(id) {
   $('#compareBtn').onclick=()=>task(compareFight());
   $('#compareFight').onchange=()=>{comparisonRequest++;$('#comparison').textContent='';};
   try {const data=await api('/api/fights?query='+encodeURIComponent(f.boss_name||'')+'&character='+encodeURIComponent(f.players.find(p=>p.is_self)?.name||''));if(request!==detailRequest)return;
-    const candidates=(data.fights||[]).filter(c=>c.id!==id&&c.boss_name===f.boss_name&&c.dungeon_id===f.dungeon_id);
+    const candidates=(data.fights||[]).filter(c=>c.id!==id&&c.boss_name===f.boss_name&&c.dungeon_id===f.dungeon_id&&(!f.mob_code||!c.mob_code||Number(c.mob_code)===Number(f.mob_code)));
     $('#compareFight').innerHTML='<option value="">Vergleichskampf wählen</option>'+candidates.map(c=>`<option value="${esc(c.id)}">${date(c.started_at)} · ${dur(c.duration_ms)} · ${num(c.my_dps)}/s</option>`).join('');
   }catch(e){if(request===detailRequest)$('#compareFight').innerHTML='<option value="">Vergleiche nicht erreichbar</option>';}
 }
@@ -659,7 +659,7 @@ async function compareFight() {
   $('#comparison').textContent='Vergleich wird geladen …';
   const old=await api('/api/fights/'+encodeURIComponent(id));if(detail!==detailRequest||request!==comparisonRequest)return;
   const me=f.players.find(p=>p.is_self),before=old.players.find(p=>p.is_self);
-  if(old.boss_name!==f.boss_name||old.dungeon_id!==f.dungeon_id||!me||!before||me.name!==before.name||me.job!==before.job){$('#comparison').textContent='Dieser Vergleich passt nicht zu Boss, Schwierigkeit, Charakter oder Klasse.';return;}
+  if(old.boss_name!==f.boss_name||old.dungeon_id!==f.dungeon_id||(old.mob_code&&f.mob_code&&Number(old.mob_code)!==Number(f.mob_code))||!me||!before||me.name!==before.name||me.job!==before.job||(me.server_id&&before.server_id&&me.server_id!==before.server_id)){$('#comparison').textContent='Dieser Vergleich passt nicht zu Boss, Schwierigkeit, Charakter oder Klasse.';return;}
   const skillKey=s=>String(s.code)+'|'+Boolean(s.is_dot);
   const keys=[...new Set([...(me.skills||[]),...(before.skills||[])].map(skillKey))];
   $('#comparison').innerHTML=`<p>Aktueller Kampf gegenüber ${date(old.started_at)}: DPS ${delta(me.dps,before.dps)} · Dauer ${delta(f.duration_ms/1000,old.duration_ms/1000)} Sekunden</p><div class="table-scroll"><table><thead><tr><th>Skill</th><th>Schaden jetzt</th><th>Schaden zuvor</th><th>Differenz</th><th>Krit jetzt / zuvor</th></tr></thead><tbody>${keys.map(k=>{const a=(me.skills||[]).find(s=>skillKey(s)===k),b=(before.skills||[]).find(s=>skillKey(s)===k);return `<tr><td>${skillLabel(a||b||{})}${(a||b)?.is_dot?' · DoT':''}</td><td>${num(a?.damage)}</td><td>${num(b?.damage)}</td><td>${delta(a?.damage,b?.damage)}</td><td>${pct(a?.crit_rate)} / ${pct(b?.crit_rate)}</td></tr>`;}).join('')}</tbody></table></div><h4>Buff-Uptime jetzt / zuvor</h4>${[...new Set([...(me.buffs||[]),...(before.buffs||[])].map(b=>b.code))].map(k=>{const a=me.buffs?.find(b=>b.code===k),b=before.buffs?.find(b=>b.code===k);return `<p>${skillLabel(a||b||{})}: ${pct(a?.uptime)} / ${pct(b?.uptime)}</p>`;}).join('')}`;

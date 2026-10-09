@@ -62,6 +62,8 @@ function performanceCoachData(f,previous=null) {
     &&f.boss_name===previous.boss_name&&f.dungeon_id===previous.dungeon_id
     &&Number(f.mob_code)>0&&Number(f.mob_code)===Number(previous.mob_code)
     &&self.name===old.name&&self.job===old.job
+    &&(!(Number(self.server_id)>0&&Number(old.server_id)>0)||Number(self.server_id)===Number(old.server_id))
+    &&previous.analytics?.partial===false&&!!previous.analytics?.points?.length
     &&Number(f.duration_ms)>=10000&&Number(previous.duration_ms)>=10000);
   if(previous&&!match)notes.push('Vorheriger Kampf nicht sicher vergleichbar');
   const sameOutcome=previous?.analytics?.outcome===f.analytics?.outcome && f.analytics?.outcome==='kill';

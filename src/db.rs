@@ -1268,7 +1268,7 @@ impl Db {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT f.boss_name AS boss, f.id AS fight_id, f.started_at, f.duration_ms, f.dungeon_id,
-                    fp.dps, fp.share, fp.died, fp.job, f.numeric_limited, f.mob_code,
+                    fp.dps, fp.share, fp.died, fp.job, fp.server_id, f.numeric_limited, f.mob_code,
                     activity_kind(f.dungeon_id, f.mob_code) AS activity
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
              WHERE fp.is_self = 1 AND f.is_train = 0 AND f.boss_name <> '' AND (?1 = '' OR fp.name = ?1)
