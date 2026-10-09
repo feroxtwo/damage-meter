@@ -550,14 +550,15 @@ async function openRun(id) {
   <div class="card run-head"><div class="row" style="justify-content:space-between">
     <div><div style="font-size:20px;font-weight:700">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
     <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} erfasste Kämpfe${r.character ? ' · ' + esc(r.character) : ''}${r.note ? ' · ' + esc(r.note) : ''}</div></div>
-    </div></div>
+    <button class="btn primary" id="openRunTotals">Gesamtstatistik · Skills &amp; Verlauf ↓</button></div></div>
   <div class="run-overview">
     <div class="card"><h2 title="${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}">Gruppe über den Run</h2><p class="analysis-note">Schaden · DPS über die gemeinsame Kampfzeit · Anteil</p>${bars(r.totals, { empty: 'Keine Kampfdaten in diesem Run.' })}</div>
     <div class="card"><h2>Bosse in diesem Run</h2><p class="analysis-note">Boss anklicken für den Kampfbericht.</p>${bossRows ? `<div class="table-scroll"><table class="run-table run-bosses"><thead><tr><th>Kampf</th><th>Dauer</th><th>Meine DPS</th></tr></thead><tbody>${bossRows}</tbody></table></div>` : '<div class="empty">Keine Kämpfe gespeichert.</div>'}</div>
   </div>
-  <div class="card" id="runAnalysis"><h2>Dungeon-Gesamtstatistik</h2><p class="muted">Skills und Damageverlauf werden geladen …</p></div>
+  <div class="card" id="runAnalysis" tabindex="-1"><h2>Dungeon-Gesamtstatistik</h2><p class="muted">Skills und Damageverlauf werden geladen …</p></div>
   <details class="card secondary-tools"><summary>Notiz oder Run löschen<small>${r.note ? esc(r.note.slice(0, 80)) : 'Noch keine Notiz'}</small></summary><div class="row"><input type="text" id="noteIn" aria-label="Run-Notiz" maxlength="4000" placeholder="Notiz" value="${esc(r.note || '')}"><button class="btn" id="noteBtn">Notiz speichern</button><button class="btn danger" id="delBtn" ${r.ended_at==null?'disabled title="Laufende Runs können nicht gelöscht werden"':''}>Run löschen</button></div></details>`;
   if(window.loadRunAnalysis)task(loadRunAnalysis(id,request));
+  $('#openRunTotals').onclick = () => { $('#runAnalysis').focus({preventScroll:true}); $('#runAnalysis').scrollIntoView({block:'start',behavior:'instant'}); };
   $('#backBtn').focus(); window.scrollTo({top:0,behavior:'instant'});
   $('#backBtn').onclick = () => task(loadRuns(false).then(()=>{const row=[...$('#runRows').querySelectorAll('tr.click')].find(tr=>tr.dataset.id===String(id));if(row)row.focus();else $('#showRunHistory').focus();}));
   const star = el.querySelector('[data-fav-run]'); star.onclick = () => task(toggleRunFavorite(star, r));

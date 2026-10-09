@@ -504,3 +504,7 @@ html[data-theme] .card{background:linear-gradient(140deg,color-mix(in srgb,var(-
 /* Keep the whole party in view on common laptop screens. */
 @media(min-width:1201px){.live-console{padding-top:22px;padding-bottom:10px}.live-metrics.performance-hero{padding-block:20px}.live-signal{padding-top:14px}.combat-strip{padding-bottom:14px}.ranking-panel{padding:20px}#liveRows .bar.telemetry-row{min-height:72px;padding-block:10px}}
 #settings .setup-preview{max-width:none}.skill-amount-track{margin-left:auto}
+.app-rail .brand h1{white-space:nowrap;font-size:14px}.app-rail{padding-top:24px;gap:16px}.app-rail .brand{margin-bottom:8px}.app-rail nav button{padding-block:12px}#runAnalysis{scroll-margin-top:24px}.run-head #openRunTotals{font-size:12px;white-space:normal;text-align:left}
+@media(max-width:1000px){.app-rail .brand h1{font-size:12px}}
+@media(max-width:760px){.app-rail{padding-top:14px;gap:12px}.app-rail .brand{margin-bottom:0}.app-rail nav button{padding-block:9px}.app-rail .brand h1{font-size:14px}#runAnalysis{scroll-margin-top:180px}}
+@media(max-width:400px){.app-rail .brand h1{font-size:12px}}

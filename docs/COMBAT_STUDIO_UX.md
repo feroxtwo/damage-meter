@@ -24,6 +24,7 @@ Die Bewertung der Gestaltung ist unsere Interpretation: Hauptproblem war die feh
 - Der Kampfbericht bietet sechs sichtbare Sprungziele: Gruppe & Skills, Schadensverlauf, Entwicklung, Vergleichen, Notizen und Messdetails. Ein Klick öffnet bei Bedarf den Bereich, scrollt dorthin und setzt den Tastaturfokus. Die Navigation bleibt beim Scrollen erreichbar; sie filtert oder ersetzt keine Daten.
 - Skilltabellen zeigen gemessene Schadens- beziehungsweise Heilungsanteile zusätzlich als Balken. Die bestehenden Zahlen, Sortierung, Suche und Exporte bleiben maßgeblich.
 - Einstellungen zeigen die echte OBS-Ansicht über `/overlay` mit Live-Daten und gespeicherten Einstellungen. Der zusätzliche Polling-Client wird nur dort geladen und beim Verlassen entfernt. Dies ist keine Vorschau der nativen Fensterposition. Bei hoher Skalierung können Inhalte den Rahmen überschreiten; die separat zu öffnende OBS-Ansicht bleibt verfügbar.
+- Im Run-Kopf führt „Gesamtstatistik · Skills & Verlauf“ direkt zur vollständigen Dungeon-Auswertung; lange Bosslisten verdecken ihren Zugang nicht mehr.
 - Ein gemeinsamer Export-Einstieg mit Formatauswahl bleibt erhalten. Keine zusätzlichen Exportknöpfe je Format.
 
 ## Prüfung und Grenzen

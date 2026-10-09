@@ -772,6 +772,7 @@ const server = http.createServer((req,res) => {
         assert.equal(await isolated.locator('[data-run-skills] tbody tr').count(),4);assert.match(await isolated.locator('[data-run-skill-note]').textContent(),/2 von 3/);
         assert.match(await isolated.locator('[data-run-coverage]').textContent(),/1 Kampf ohne auswertbaren Verlauf/);
         assert.equal(await isolated.locator('[data-run-plot] svg').count(),1);
+        await isolated.locator('#openRunTotals').click();assert.equal(await isolated.evaluate(()=>document.activeElement.id),'runAnalysis');
         await isolated.selectOption('[data-run-metric]','total');assert.equal(await isolated.locator('[data-run-window]').isDisabled(),true);assert.match(await isolated.locator('[data-run-readout]').textContent(),/9,00M/);
         await isolated.locator('[data-run-fight]').click();await isolated.locator('#fightDialog[open]').waitFor();await isolated.locator('#closeDialog').click();
         await isolated.selectOption('[data-run-player]','group');assert.match(await isolated.locator('[data-run-summary]').textContent(),/24,90M/);
