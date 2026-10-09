@@ -657,6 +657,15 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
             }),
         )
         .route(
+            "/performance-coach.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/performance-coach.js"),
+                )
+            }),
+        )
+        .route(
             "/community.js",
             get(|| async {
                 (

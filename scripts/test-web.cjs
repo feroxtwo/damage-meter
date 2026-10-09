@@ -38,7 +38,7 @@ let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/performance-coach.js'?'performance-coach.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });

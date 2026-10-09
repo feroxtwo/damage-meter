@@ -618,6 +618,10 @@ async function openFight(id) {
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
     ${fightStory(f)}
+    <section id="performanceCoachPanel" class="skill-index-panel coach-panel" aria-label="Persönlicher Performance Coach">
+      <div class="eyebrow">PERFORMANCE COACH</div><h3>Was hat sich verändert?</h3>
+      <p class="analysis-note">Deine aufgezeichneten Kampfwerte werden ausgewertet …</p>
+    </section>
     <div id="skillIndexPanel" class="skill-index-panel" aria-label="Lokaler Skill Index"><p class="analysis-note">Skill Index wird geladen …</p></div>
     <div id="communityIndexPanel" class="skill-index-panel community-index-panel" aria-label="Community Skill Index"><p class="analysis-note">Community-Referenzen werden geladen …</p></div>
     <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
@@ -627,6 +631,7 @@ async function openFight(id) {
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);fillAttemptContext($('#fightContent'),f);
   fillSkillIndex(id,$('#skillIndexPanel'),request);
+  if(window.fillPerformanceCoach)fillPerformanceCoach(f,$('#performanceCoachPanel'),request);
   if (window.fillCommunityIndex) fillCommunityIndex(id, $('#communityIndexPanel'), request);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights(false));}));
