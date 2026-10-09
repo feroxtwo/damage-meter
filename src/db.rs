@@ -77,6 +77,32 @@ CREATE TABLE IF NOT EXISTS fights (
 CREATE INDEX IF NOT EXISTS fights_started ON fights(started_at);
 CREATE INDEX IF NOT EXISTS fights_run ON fights(run_id);
 CREATE INDEX IF NOT EXISTS fights_boss_index ON fights(dungeon_id, mob_code);
+CREATE TABLE IF NOT EXISTS community_snapshots (
+    source_id     TEXT NOT NULL,
+    balance_id    TEXT NOT NULL,
+    source_url    TEXT NOT NULL,
+    captured_at   INTEGER NOT NULL,
+    from_ms       INTEGER NOT NULL,
+    until_ms      INTEGER NOT NULL,
+    imported_at   INTEGER NOT NULL,
+    PRIMARY KEY (source_id, balance_id)
+);
+CREATE TABLE IF NOT EXISTS community_reference_rows (
+    source_id     TEXT NOT NULL,
+    balance_id    TEXT NOT NULL,
+    region        TEXT NOT NULL,
+    dungeon_id    INTEGER NOT NULL,
+    mob_code      INTEGER NOT NULL,
+    class_key     TEXT NOT NULL,
+    cp_min        INTEGER NOT NULL,
+    cp_max        INTEGER NOT NULL,
+    median_dps    REAL NOT NULL,
+    samples       INTEGER NOT NULL,
+    FOREIGN KEY (source_id, balance_id)
+        REFERENCES community_snapshots(source_id, balance_id) ON DELETE CASCADE,
+    PRIMARY KEY (source_id, balance_id, region, dungeon_id, mob_code, class_key, cp_min, cp_max)
+);
+CREATE INDEX IF NOT EXISTS community_ref_boss ON community_reference_rows(dungeon_id, mob_code, class_key);
 CREATE TABLE IF NOT EXISTS fight_annotations (
  fight_id TEXT PRIMARY KEY REFERENCES fights(id) ON DELETE CASCADE,
  favorite INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT ''
@@ -1409,6 +1435,192 @@ impl Db {
         Ok(Some(result))
     }
 
+
+    /// Replace one balance-period snapshot atomically, without affecting combat history.
+    pub fn import_community(&self, snapshot: crate::community::CommunitySnapshot) -> Result<Value> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        let source = &snapshot.source;
+        let balance = &snapshot.balance;
+        tx.execute(
+            "INSERT INTO community_snapshots(
+                source_id, balance_id, source_url, captured_at, from_ms, until_ms, imported_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now')*1000)
+             ON CONFLICT(source_id, balance_id) DO UPDATE SET
+                source_url=excluded.source_url, captured_at=excluded.captured_at,
+                from_ms=excluded.from_ms, until_ms=excluded.until_ms,
+                imported_at=excluded.imported_at",
+            params![
+                source.id,
+                balance.id,
+                source.url,
+                source.captured_at,
+                balance.from_ms,
+                balance.until_ms
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM community_reference_rows WHERE source_id=?1 AND balance_id=?2",
+            params![source.id, balance.id],
+        )?;
+        let mut stmt = tx.prepare(
+            "INSERT INTO community_reference_rows(
+                source_id, balance_id, region, dungeon_id, mob_code, class_key,
+                cp_min, cp_max, median_dps, samples
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        )?;
+        for row in &snapshot.rows {
+            stmt.execute(params![
+                source.id,
+                balance.id,
+                row.region,
+                row.dungeon_id,
+                row.mob_code,
+                row.class_key,
+                row.cp_min,
+                row.cp_max,
+                row.median_dps,
+                row.samples
+            ])?;
+        }
+        drop(stmt);
+        tx.commit()?;
+        Ok(json!({
+            "source": source.id,
+            "balance": balance.id,
+            "imported": snapshot.rows.len(),
+            "local_only": true
+        }))
+    }
+
+    pub fn community_sources(&self) -> Result<Value> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT s.source_id, s.balance_id, s.source_url, s.captured_at,
+                    s.from_ms, s.until_ms, s.imported_at,
+                    COUNT(r.source_id) AS rows
+             FROM community_snapshots s LEFT JOIN community_reference_rows r
+               ON s.source_id=r.source_id AND s.balance_id=r.balance_id
+             GROUP BY s.source_id, s.balance_id
+             ORDER BY s.imported_at DESC, s.source_id LIMIT 100",
+        )?;
+        let imports = rows_to_json(&mut stmt, [])?;
+        Ok(json!({
+            "providers": crate::community::provider_catalog(),
+            "imports": imports,
+            "automatic_fetch": false,
+            "automatic_upload": false
+        }))
+    }
+
+    /// Select a reference only from the fight's own balance period, the exact
+    /// boss/difficulty, same class and a CP bracket covering the observed CP.
+    /// Imported provider medians stay separate; no average of incompatible
+    /// leaderboards and no percentile claim.
+    pub fn community_index(&self, fight_id: &str, region: &str) -> Result<Option<Value>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT f.dungeon_id, f.mob_code, f.started_at, f.duration_ms,
+                    f.is_train, f.numeric_limited, p.job, p.combat_power, p.dps
+             FROM fights f LEFT JOIN fight_players p
+               ON p.fight_id=f.id AND p.is_self=1
+             WHERE f.id=?1 ORDER BY p.damage DESC LIMIT 1",
+        )?;
+        let mut fights = rows_to_json(&mut stmt, params![fight_id])?;
+        let Some(fight) = fights.pop() else {
+            return Ok(None);
+        };
+        let cp = fight["combat_power"].as_i64().unwrap_or(0);
+        let dps = fight["dps"].as_f64().unwrap_or(0.0);
+        let job = fight["job"].as_str().unwrap_or("");
+        let class_key = names::class_info(job).key;
+        let mob = fight["mob_code"].as_i64().unwrap_or(0);
+        let dungeon = fight["dungeon_id"].as_i64().unwrap_or(0);
+        let started_at = fight["started_at"].as_i64().unwrap_or(0);
+        let duration = fight["duration_ms"].as_i64().unwrap_or(0);
+        let reason = if fight["is_train"].as_i64() != Some(0) {
+            Some("training")
+        } else if fight["numeric_limited"].as_i64() != Some(0) {
+            Some("limited_data")
+        } else if mob <= 0 {
+            Some("unknown_boss")
+        } else if duration < 10_000 {
+            Some("short_fight")
+        } else if cp <= 0 {
+            Some("missing_cp")
+        } else if !dps.is_finite() || dps <= 0.0 {
+            Some("missing_dps")
+        } else {
+            None
+        };
+        let mut response = json!({
+            "status": "unavailable",
+            "reason": reason,
+            "region": region,
+            "combat_power": cp,
+            "own_dps": dps,
+            "class_key": class_key,
+            "comparisons": [],
+            "data_origin": "manual_import"
+        });
+        if reason.is_some() {
+            return Ok(Some(response));
+        }
+        let world_mob: bool =
+            conn.query_row("SELECT world_mob(?1)", params![mob], |r| r.get(0))?;
+        if world_mob {
+            response["reason"] = json!("not_boss");
+            return Ok(Some(response));
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT r.source_id, s.source_url, r.balance_id, r.region,
+                    r.class_key, r.median_dps AS reference_dps, r.samples,
+                    r.cp_min, r.cp_max, s.captured_at
+             FROM community_reference_rows r
+             JOIN community_snapshots s
+               ON s.source_id=r.source_id AND s.balance_id=r.balance_id
+             WHERE r.dungeon_id=?1 AND r.mob_code=?2
+               AND (r.region=?3 OR r.region='ALL')
+               AND (r.class_key=?4 OR r.class_key='all')
+               AND r.cp_min<=?5 AND r.cp_max>=?5
+               AND s.from_ms<=?6 AND s.until_ms>=?6
+             ORDER BY CASE WHEN r.region=?3 THEN 0 ELSE 1 END,
+                      r.cp_max-r.cp_min, r.samples DESC, s.captured_at DESC",
+        )?;
+        let candidates = rows_to_json(
+            &mut stmt,
+            params![dungeon, mob, region, class_key, cp, started_at],
+        )?;
+        let mut used = HashSet::new();
+        let mut comparisons = Vec::new();
+        for mut row in candidates {
+            let source = row["source_id"].as_str().unwrap_or_default();
+            let class = row["class_key"].as_str().unwrap_or_default();
+            if class_key == "unknown" && class != "all" {
+                continue;
+            }
+            if !used.insert((source.to_string(), class.to_string())) {
+                continue;
+            }
+            let reference = row["reference_dps"].as_f64().unwrap_or(0.0);
+            if !reference.is_finite() || reference <= 0.0 {
+                continue;
+            }
+            let score = dps / reference * 100.0;
+            if !score.is_finite() {
+                continue;
+            }
+            row["score"] = json!(score);
+            row["scope"] = json!(if class == "all" { "all_classes" } else { "same_class" });
+            comparisons.push(row);
+        }
+        response["status"] = json!(if comparisons.is_empty() { "insufficient" } else { "ready" });
+        response["reason"] = json!(if comparisons.is_empty() { Some("no_matching_reference") } else { None });
+        response["comparisons"] = json!(comparisons);
+        Ok(Some(response))
+    }
+
     /// Ended runs only. Match run-detail's shared recorded fight windows,
     /// including zero contribution in fights the selected character missed.
     pub fn run_history(&self, character: &str) -> Result<Value> {
@@ -1539,6 +1751,67 @@ mod tests {
             dbid: 1,
             is_self,
         }
+    }
+
+
+    #[test]
+    fn community_references_import_and_match_exact_scope_and_period() {
+        let db = Db::in_memory().unwrap();
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch(
+                "INSERT INTO fights(id,boss_name,mob_code,dungeon_id,started_at,duration_ms,
+                                    is_train,numeric_limited)
+                 VALUES ('community-fight','Boss',2300409,600093,1785000000000,30000,0,0);
+                 INSERT INTO fight_players(
+                    fight_id,actor_id,name,job,damage,dps,combat_power,is_self)
+                 VALUES ('community-fight',1,'Me','검성',600000,20000,70000,1);",
+            )
+            .unwrap();
+        }
+        let dataset: crate::community::CommunitySnapshot = serde_json::from_value(json!({
+            "schema": "a2m-community-v1",
+            "source": {
+                "id": "community", "url": "https://example.org/statistics",
+                "captured_at": 1790000000000_i64, "rights_confirmed": true
+            },
+            "balance": {
+                "id": "patch-1", "from_ms": 1780000000000_i64,
+                "until_ms": 1792000000000_i64
+            },
+            "rows": [
+                {
+                    "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                    "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                    "median_dps": 10000.0, "samples": 50
+                },
+                {
+                    "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                    "class_key": "all", "cp_min": 60000, "cp_max": 80000,
+                    "median_dps": 16000.0, "samples": 120
+                },
+                {
+                    "region": "NAE", "dungeon_id": 600093, "mob_code": 2300409,
+                    "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                    "median_dps": 1.0, "samples": 50
+                },
+                {
+                    "region": "EU", "dungeon_id": 600093, "mob_code": 9999,
+                    "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                    "median_dps": 1.0, "samples": 50
+                }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(db.import_community(dataset.validate().unwrap()).unwrap()["imported"], 4);
+        let result = db.community_index("community-fight", "EU").unwrap().unwrap();
+        assert_eq!(result["status"], "ready");
+        assert_eq!(result["comparisons"].as_array().unwrap().len(), 2);
+        assert_eq!(result["comparisons"][0]["score"], 200.0);
+        let empty = db.community_index("community-fight", "KR").unwrap().unwrap();
+        assert_eq!(empty["status"], "insufficient");
+        assert_eq!(db.community_sources().unwrap()["imports"][0]["rows"], 4);
+        assert!(db.community_index("missing", "EU").unwrap().is_none());
     }
 
     #[test]
