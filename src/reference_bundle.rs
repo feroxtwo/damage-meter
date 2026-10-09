@@ -614,6 +614,26 @@ mod tests {
     }
 
     #[test]
+    fn committed_database_is_exactly_what_the_builder_makes_from_its_sources() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/community");
+        let mut inputs: Vec<PathBuf> = std::fs::read_dir(root.join("providers"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "json"))
+            .collect();
+        inputs.sort();
+        let dir = temp_dir();
+        let output = dir.join("rebuilt.sqlite");
+        build(&output, &inputs).unwrap();
+        assert!(
+            std::fs::read(&output).unwrap()
+                == std::fs::read(root.join("community-references.sqlite")).unwrap(),
+            "rebuild data/community/community-references.sqlite with build-references"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn bundle_roundtrip_validation_and_history_isolation() {
         let dir = std::env::temp_dir().join(format!(
             "a2m-reference-{}-{}",

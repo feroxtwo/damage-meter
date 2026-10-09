@@ -66,9 +66,9 @@ Vor dem Import sind eine echte, erlaubte Datenquelle, überprüfte NPC-/Gebiets-
 
 ### Alte Datensätze: `a2m-community-v1`
 
-Bestehende V1-Importe bleiben lesbar und löschbar. Sie werden **nicht automatisch** als Fight-DPS aus bestätigten Kills uminterpretiert und erhalten die Kennzeichnung **Richtwert / Methodik unbekannt**. Die SQLite-Migration ergänzt die neuen Metadaten mit `unknown`, ohne ihre bisherigen Messungen zu verändern.
+Bestehende V1-Importe bleiben lesbar und löschbar. Sie werden **nicht automatisch** als Fight-DPS aus bestätigten Kills uminterpretiert Weil ihre DPS-Methode nicht deklariert ist, ergeben sie **keinen Score**; der Kampfbericht nennt sie als „Daten vorhanden, Vergleich nicht freigegeben“. Die SQLite-Migration ergänzt die neuen Metadaten mit `unknown`, ohne ihre bisherigen Messungen zu verändern.
 
-V2-Werte erscheinen nur als strukturiert vergleichbar, wenn die importierte Methode exakt stimmt **und** der lokale Kampf einen erfassten Zieltod sowie keinen als unvollständig markierten Schadensverlauf hat. Abweichende oder unbestätigte Kampfabschlüsse erhalten keinen präzisen V2-Vergleich. Diese Einschränkung kann zu bewusst leeren Ergebnissen führen.
+V2-Werte ergeben nur dann einen Score, wenn die importierte Methode exakt stimmt **und** der lokale Kampf einen erfassten Zieltod sowie keinen als unvollständig markierten Schadensverlauf hat. Abweichende oder unbestätigte Kampfabschlüsse erhalten keinen präzisen V2-Vergleich. Diese Einschränkung kann zu bewusst leeren Ergebnissen führen.
 
 
 Für jeden tatsächlichen Import müssen alle Beispielwerte durch verifizierte, zur Wiederverwendung freigegebene Aggregatdaten ersetzt werden. `source.id` ist `community`, `a2tools`, `aiondps`, `abysslogs`, `questlog`, `jameter` oder `notmeter`; bei benannten Diensten muss die HTTPS-Quelladresse exakt zur Domain gehören. Eine solche Quellenangabe **beweist keine Authentizität**. `rights_confirmed` muss durch eine ausdrückliche Bestätigung des Nutzers auf `true` gesetzt werden.
@@ -79,7 +79,7 @@ Akzeptierte Regionen: `ALL` (bereits über Regionen aggregiert), `EU`, `NAE`, `N
 
 ## Vergleichsregeln und Datenschutz
 
-Ein Community-Score erscheint nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, Region (mit explizit ausgewähltem `ALL`-Fallback), Klasse oder `all`, Kampfkraftfenster und Balance-Zeitraum** passen. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
+Ein Community-Score erscheint nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, genau die gewählte Region, genau die eigene Klasse, Kampfkraftfenster, Balance-Zeitraum, deklarierte Kampf-DPS-Methode und ein bestätigter Kill mit vollständiger Aufzeichnung** passen. Es gibt keine automatische Lockerung: Zeilen für `ALL` (bei gewählter Einzelregion) oder Klasse `all`, Datensätze ohne Methodenangabe und Kämpfe ohne bestätigten Kill werden als „Vergleich nicht freigegeben“ mit Grund gemeldet, aber nie verrechnet. Das entscheidet die Geschäftslogik (`Db::community_index`), nicht die Oberfläche. Anbieterbeobachtungen liegen in eigenen Tabellen und werden dort nur gezählt und mit Grund gemeldet. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
 
 Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erzeugt einen Netzwerkaufruf zu A2 Tools oder Aion DPS. Die gespeicherten Daten bleiben in der lokalen SQLite-Datei des Meters.
 
@@ -223,3 +223,13 @@ reichen die mitgelieferten normalisierten JSON-Dateien; Rohantworten und der
 ist kein automatischer Updatefeed.
 
 Die SQLite-Datei wird beim Build in das Binary eingebettet und schreibgeschützt im Speicher gelesen. Tar-, DEB-, RPM- und Einzelbinary-Installationen besitzen daher dieselben Offline-Daten, auch ohne Repository-Verzeichnis. Beim Start werden die validierten Beobachtungen in die lokale Meter-Datenbank übernommen. `--reference-db` ersetzt die eingebettete Sammlung für diesen Start. NotMeter-Zeiträume erhalten `period_label` und explizite Wochen-Grenzen; Inklusivität bleibt unbestätigt. Eine Normalisierung bestätigt keine Weitergaberechte oder Score-Kompatibilität. Details: [NotMeter-Normalisierung](NOTMETER_NORMALIZATION.md).
+
+### Robustheit, Aktualisierung und API
+
+- Eine fehlende, beschädigte, fremde oder leere `--reference-db` verhindert den Start nicht; sie wird protokolliert und die eingebettete Datenbank verwendet. Jede Quelle wird vollständig geprüft, bevor etwas in die Meter-Datenbank geschrieben wird.
+- Ein unveränderter Datenstand wird nicht bei jedem Start neu geschrieben. Ein älterer Erfassungsstand (`captured_at`) ersetzt nie einen neueren derselben Quelle; pro Anbieter ist genau ein Datenstand aktiv, alte und neue Stände werden nicht gemischt.
+- Der Builder lehnt Zeilen ab, die sich nur in ihren Zahlen unterscheiden (verlorene Dimension), außerdem Stichprobe 0 und ungültige Kennzeichen. `scripts/normalize-community.py` prüft dasselbe für alle Anbieter vor dem Schreiben.
+- Ein Rust-Test baut die SQLite-Datei aus `data/community/providers/*.json` neu und verlangt eine byte-identische Datei; die committete Datenbank kann damit nicht unbemerkt von ihrer Quelle abweichen.
+- `GET /api/references/archive/{source}` liefert höchstens 200 Zeilen je Seite, dazu `limit`, `next_offset`, `rights_confirmed` und immer `score_eligible: false`. Ungültige Parameter ergeben 400, unbekannte Anbieter 404.
+- `GET /api/fights/{id}/community-index` meldet `withheld` (passende, aber nicht freigegebene Referenzzeilen mit Grund) und `offline_observations` (Anzahl, Anbieter, Gründe). So bleiben „keine Daten“ und „Daten vorhanden, Vergleich nicht freigegeben“ unterscheidbar.
+- Alle eingebetteten Anbieterdaten tragen `rights_confirmed: false`. Einbetten heißt, dass jede Installation sie weitergibt; eine Rechtebestätigung ist damit nicht verbunden.
