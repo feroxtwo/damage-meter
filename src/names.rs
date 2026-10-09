@@ -99,21 +99,23 @@ pub fn dungeon_activity(id: i32) -> Option<&'static str> {
     DUNGEONS.get(&id)?.activity.as_deref()
 }
 
-static BOSS_METADATA: LazyLock<Value> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../data/i18n/npcs/en.json")).expect("NPC catalog")
+// Index once: live ticks and history queries must not rescan the NPC catalog.
+static BOSS_METADATA: LazyLock<HashMap<i32, (Vec<i32>, HashSet<String>)>> = LazyLock::new(|| {
+    let catalog: Value = serde_json::from_str(include_str!("../data/i18n/npcs/en.json"))
+        .expect("NPC catalog");
+    let mut index: HashMap<i32, (Vec<i32>, HashSet<String>)> = HashMap::new();
+    for (code, npc) in catalog.as_object().unwrap() {
+        if npc["isBoss"] != true { continue; }
+        let (Some(id), Ok(code)) = (npc["dungeonId"].as_i64(), code.parse::<i32>()) else { continue; };
+        let entry = index.entry(id as i32).or_default();
+        entry.0.push(code);
+        if let Some(tier) = npc["tier"].as_str() { entry.1.insert(tier.to_string()); }
+    }
+    index
 });
 
 pub fn dungeon_bosses(id: i32) -> Vec<i32> {
-    BOSS_METADATA
-        .as_object()
-        .unwrap()
-        .iter()
-        .filter_map(|(code, entry)| {
-            (entry["isBoss"] == true && entry["dungeonId"].as_i64() == Some(i64::from(id)))
-                .then(|| code.parse().ok())
-                .flatten()
-        })
-        .collect()
+    BOSS_METADATA.get(&id).map(|entry| entry.0.clone()).unwrap_or_default()
 }
 
 /// Use explicit NPC tiers for transcendence; map ID suffixes are not stages.
@@ -121,13 +123,7 @@ pub fn dungeon_difficulty(id: i32) -> Option<String> {
     let entry = DUNGEONS.get(&id)?;
     let n = id % 10;
     if entry.activity.as_deref() == Some("transcendence") {
-        let tiers: HashSet<_> = BOSS_METADATA
-            .as_object()
-            .unwrap()
-            .values()
-            .filter(|npc| npc["dungeonId"].as_i64() == Some(i64::from(id)) && npc["isBoss"] == true)
-            .filter_map(|npc| npc["tier"].as_str())
-            .collect();
+        let tiers = &BOSS_METADATA.get(&id)?.1;
         return (tiers.len() == 1)
             .then(|| tiers.iter().next().unwrap().replace("Stage ", "Stufe "));
     }
