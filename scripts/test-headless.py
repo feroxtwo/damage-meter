@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
         assert "Dashboard-Adresse" in conflict.stderr
     proc = subprocess.Popen(
         [binary, "--no-overlay", "--db", database, "--port", str(port)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=tmp,
     )
     base = f"http://127.0.0.1:{port}"
     try:
@@ -81,6 +81,14 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             with urllib.request.urlopen(base + asset, timeout=2) as response:
                 assert mime in response.headers["Content-Type"]
                 assert response.read()
+        # Fresh machine: the standalone binary runs without repository/data files.
+        sources = get("/api/references/sources")
+        assert len(sources["offline_data"]) == 6, sources
+        assert sum(s["row_count"] for s in sources["offline_data"]) == 9272
+        assert sources["imports"] == []
+        notmeter = get("/api/references/archive/notmeter?limit=200")
+        assert notmeter["row_count"] == 9133 and notmeter["score_eligible"] is False
+        assert all(r["scope"]["period_label"] for r in notmeter["rows"])
         settings = get("/api/overlay")
         settings.update({"theme":"ember","compact":True,"idle_reset_seconds":30,"wipe_reset":True,"position":[123,456], "hide_names":True, "metric":"heal", "max_rows":2})
         post("/api/overlay", settings)

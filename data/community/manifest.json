@@ -2,7 +2,7 @@
   "schema": "a2m-reference-release-v1",
   "captured_date": "2026-10-09",
   "database": "community-references.sqlite",
-  "sha256": "c6ea6a4a943e3420e1499b60f5c365fae45b7eecb0765f5ee636c00a7ca2148e",
+  "sha256": "0580ec4ca26f0603629bb4ed5a15b00c66e30ea213a1ab4cedf8a451018dc514",
   "observation_count": 9272,
   "score_snapshot_count": 0,
   "sources": [
@@ -39,7 +39,7 @@
       "rows": 9133,
       "url": "https://notmeter.com",
       "captured_at": 1791562382599,
-      "input_json_sha256": "354f19405dbfee2de985056c74dd9d44f5826537ca5e5ee686f3819ddba9794e"
+      "input_json_sha256": "4099bba2c5dacd95d024cf01839b59b19d07a269c67f18bb987196f379fff31c"
     },
     {
       "source_id": "questlog",

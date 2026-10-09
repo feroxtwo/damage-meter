@@ -10,6 +10,7 @@ import hashlib
 import html
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 CLASSES = dict(zip(
@@ -106,6 +107,72 @@ def jameter(path, cls):
     return source_record(path, f'https://jameter.net/ranking/{cls}'), rows
 
 
+def notmeter_period_scope(view):
+    """Keep provider period labels: All also denotes bounded weekly cohorts."""
+    period, label = view['period'], view['periodLabel']
+    if not isinstance(label, str) or not label:
+        raise ValueError('Missing NotMeter period label')
+    scope = dict(period=period, period_label=label)
+    if label.startswith('weekly-wed05|'):
+        parts = label.split('|')
+        if len(parts) != 3 or period != 'All':
+            raise ValueError('Invalid NotMeter weekly period')
+        start, end = (datetime.fromisoformat(v) for v in parts[1:])
+        if start.tzinfo is None or end.tzinfo is None or end <= start:
+            raise ValueError('Invalid NotMeter weekly boundaries')
+        scope.update(period_kind='weekly', period_from_ms=int(start.timestamp()*1000),
+                     period_until_ms=int(end.timestamp()*1000),
+                     period_boundary_semantics='provider boundaries; inclusivity unconfirmed')
+    return scope
+
+
+def notmeter_rows(data, npc_catalog):
+    """Normalize class aggregates only; reject duplicate complete cohort identities."""
+    rows = []
+    cp_tiers = {t['index']:t for t in data['cpTiers']}
+    dungeons = {d['key']:d for d in data['dungeons']}
+    npcs = load(npc_catalog)
+    npc_hash = hashlib.sha256(npc_catalog.read_bytes()).hexdigest()
+    npc_ids = {}
+    for key, entry in npcs.items():
+        if entry.get('isBoss'):
+            npc_ids.setdefault(entry['name'], []).append(int(key))
+    identities = set()
+    for view in data['views']:
+        if view['dungeonKey'] == '__notmeter_daily_active_users__':
+            continue  # Service activity, not combat statistics.
+        tier = cp_tiers[view['cpTierIndex']]; dungeon = dungeons[view['dungeonKey']]
+        candidate_ids = npc_ids.get(view['bossName'], [])
+        for value in view['rows']:
+            metric = 'provider_dps'
+            known = dict(cp_min=tier.get('minCombatPower'),
+                    cp_max=tier.get('maxCombatPowerExclusive', 0)-1 if tier.get('maxCombatPowerExclusive') else None,
+                    median_dps=value.get('medianDps'), samples=value.get('sampleCount'))
+            if len(dungeon['mapIds']) == 1 and not view['dungeonKey'].startswith('training'):
+                known['dungeon_id'] = dungeon['mapIds'][0]
+            if len(candidate_ids) == 1: known['mob_code'] = candidate_ids[0]
+            row = normalized(value['jobName'], metric, dict(dungeon_key=view['dungeonKey'],
+                    map_ids=dungeon['mapIds'], boss_index=view['bossIndex'], boss_name=view['bossName'],
+                    mob_code_candidates=candidate_ids, **notmeter_period_scope(view), generated_at=view['generatedAt'],
+                    provider_schema=data['schema'], provider_version=data['version'],
+                    minimum_party_size=data['minimumPartySize'],
+                    record_count=view['recordCount'], player_sample_count=view['playerSampleCount'],
+                    region='KR/TW combined website dataset', ranking_basis=data['rankingBasis'],
+                    cp_tier=tier, npc_catalog_sha256=npc_hash),
+                    {k:v for k,v in value.items() if k != 'jobName'}, **known)
+            row['compatibility'] += ['KR_TW_combined', 'cp_band_over_20000']
+            if known.get('mob_code') is None: row['compatibility'].append('boss_id_ambiguous_or_aggregate')
+            if view['dungeonKey'].startswith('training'): row['compatibility'].append('training')
+            identity_scope = {k: v for k, v in row['scope'].items()
+                              if k not in ('record_count', 'player_sample_count')}
+            identity = json.dumps([row['class_key'], identity_scope], sort_keys=True)
+            if identity in identities:
+                raise ValueError('Duplicate NotMeter class/cohort identity')
+            identities.add(identity)
+            rows.append(row)
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input-dir', type=Path, required=True)
@@ -149,41 +216,11 @@ def main():
             'Vakron-Klassenmediane mit Anbieter-KP-Bändern; Antwort nennt globalen Build, keine bestätigte EU-Kohorte.'))
 
     # Only published aggregates. Never keep classRankings/player/profile sections.
-    path = src/'notmeter-cache.data'; data = load(path); rows = []
-    cp_tiers = {t['index']:t for t in data['cpTiers']}
-    dungeons = {d['key']:d for d in data['dungeons']}
-    npcs = load(args.npc_catalog)
-    npc_hash = hashlib.sha256(args.npc_catalog.read_bytes()).hexdigest()
-    npc_ids = {}
-    for key, entry in npcs.items():
-        if entry.get('isBoss'):
-            npc_ids.setdefault(entry['name'], []).append(int(key))
-    for view in data['views']:
-        if view['dungeonKey'] == '__notmeter_daily_active_users__':
-            continue  # Service activity, not combat statistics.
-        tier = cp_tiers[view['cpTierIndex']]; dungeon = dungeons[view['dungeonKey']]
-        candidate_ids = npc_ids.get(view['bossName'], [])
-        for value in view['rows']:
-            metric = 'provider_dps'
-            known = dict(cp_min=tier.get('minCombatPower'),
-                    cp_max=tier.get('maxCombatPowerExclusive', 0)-1 if tier.get('maxCombatPowerExclusive') else None,
-                    median_dps=value.get('medianDps'), samples=value.get('sampleCount'))
-            if len(dungeon['mapIds']) == 1 and not view['dungeonKey'].startswith('training'):
-                known['dungeon_id'] = dungeon['mapIds'][0]
-            if len(candidate_ids) == 1: known['mob_code'] = candidate_ids[0]
-            row = normalized(value['jobName'], metric, dict(dungeon_key=view['dungeonKey'],
-                    map_ids=dungeon['mapIds'], boss_index=view['bossIndex'], boss_name=view['bossName'],
-                    mob_code_candidates=candidate_ids, period=view['period'], generated_at=view['generatedAt'],
-                    region='KR/TW combined website dataset', ranking_basis=data['rankingBasis'],
-                    cp_tier=tier, npc_catalog_sha256=npc_hash),
-                    {k:v for k,v in value.items() if k != 'jobName'}, **known)
-            row['compatibility'] += ['KR_TW_combined', 'cp_band_over_20000']
-            if known.get('mob_code') is None: row['compatibility'].append('boss_id_ambiguous_or_aggregate')
-            if view['dungeonKey'].startswith('training'): row['compatibility'].append('training')
-            rows.append(row)
+    path = src/'notmeter-cache.data'; data = load(path)
+    rows = notmeter_rows(data, args.npc_catalog)
     datasets.append(archive('notmeter', 'https://notmeter.com',
             [source_record(path, 'https://notmeter.com/g/578d3695ce598fe2/data/notmeter-ranking.json.gz')], rows,
-            'Alle publizierten Kampf-Filteransichten dieser KR/TW-Generation; ausschließlich Klassenaggregate.'))
+            'Klassenaggregate mit unveränderten Zeitraum-Labels und getrennten Wochenkohorten.'))
 
     evidence, rows = [], []
     for cls in ['gladiator','templar','assassin','ranger','sorcerer','elementalist','cleric','chanter','brawler']:

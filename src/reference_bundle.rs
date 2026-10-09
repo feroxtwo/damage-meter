@@ -182,6 +182,25 @@ pub fn read(path: &Path) -> Result<Bundle> {
         bail!("Reference database exceeds 32 MiB");
     }
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    read_connection(&conn)
+}
+
+/// The database travels with the binary, including standalone and packaged installs.
+pub fn read_bundled() -> Result<Bundle> {
+    let conn = bundled_connection()?;
+    read_connection(&conn)
+}
+
+fn bundled_connection() -> Result<Connection> {
+    let mut conn = Connection::open_in_memory()?;
+    conn.deserialize_bytes(
+        rusqlite::MAIN_DB,
+        include_bytes!("../data/community/community-references.sqlite"),
+    )?;
+    Ok(conn)
+}
+
+fn read_connection(conn: &Connection) -> Result<Bundle> {
     let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
     let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     if app != APPLICATION_ID || ![1, 2].contains(&version) {
@@ -242,6 +261,24 @@ pub fn read(path: &Path) -> Result<Bundle> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn embedded_database_is_read_only_and_keeps_weekly_cohorts_distinct() {
+        let conn = bundled_connection().unwrap();
+        assert!(conn.execute("DELETE FROM archives", []).is_err());
+        let bundle = read_bundled().unwrap();
+        assert_eq!(bundle.archives.len(), 6);
+        let notmeter = bundle.archives.iter().find(|a| a.source.id == "notmeter").unwrap();
+        assert_eq!(notmeter.rows.len(), 9133);
+        let identities: HashSet<_> = notmeter.rows.iter().map(|r|
+            serde_json::to_string(&serde_json::json!([
+                r.class_key, r.scope["dungeon_key"], r.scope["boss_index"],
+                r.scope["cp_tier"]["index"], r.scope["period"],
+                r.scope["period_label"], r.scope["generated_at"]
+            ])).unwrap()).collect();
+        assert_eq!(identities.len(), notmeter.rows.len());
+        assert_eq!(notmeter.rows.iter().filter(|r| r.scope["period_kind"] == "weekly").count(), 2232);
+    }
 
     #[test]
     fn shipped_provider_database_has_six_sources_and_normalized_observations() {

@@ -188,8 +188,11 @@ in derselben SQLite-Datei gebündelt werden.
 ### Nutzung und Prüfung
 
 ```sh
-# Die mitgelieferte Datei lokal laden:
-aion2-meter --reference-db data/community/community-references.sqlite --no-overlay
+# Die eingebettete Datenbank wird ohne zusätzliche Datei automatisch geladen:
+aion2-meter --no-overlay
+
+# Optional eine eigene Datei statt der eingebetteten Datenbank verwenden:
+aion2-meter --reference-db /pfad/community-references.sqlite --no-overlay
 
 # Aus den enthaltenen Anbieter-JSON-Dateien reproduzierbar neu bauen:
 aion2-meter build-references --output /tmp/community-rebuilt.sqlite data/community/providers/*.json
@@ -218,3 +221,5 @@ koreanischen NPC-Katalog des gepinnten Parsers. Für die gebündelte SQLite-Date
 reichen die mitgelieferten normalisierten JSON-Dateien; Rohantworten und der
 152-MB-NotMeter-Gesamtdownload werden nicht mitgeliefert. Der Normalisierungslauf
 ist kein automatischer Updatefeed.
+
+Die SQLite-Datei wird beim Build in das Binary eingebettet und schreibgeschützt im Speicher gelesen. Tar-, DEB-, RPM- und Einzelbinary-Installationen besitzen daher dieselben Offline-Daten, auch ohne Repository-Verzeichnis. Beim Start werden die validierten Beobachtungen in die lokale Meter-Datenbank übernommen. `--reference-db` ersetzt die eingebettete Sammlung für diesen Start. NotMeter-Zeiträume erhalten `period_label` und explizite Wochen-Grenzen; Inklusivität bleibt unbestätigt. Eine Normalisierung bestätigt keine Weitergaberechte oder Score-Kompatibilität. Details: [NotMeter-Normalisierung](NOTMETER_NORMALIZATION.md).

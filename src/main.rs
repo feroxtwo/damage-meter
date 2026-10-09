@@ -40,7 +40,7 @@ struct Cli {
     /// SQLite database [default: ~/.local/share/aion2-meter/meter.db]
     #[arg(long)]
     db: Option<PathBuf>,
-    /// Load an offline, locally supplied community reference database.
+    /// Override the built-in offline community reference database with a local file.
     #[arg(long)]
     reference_db: Option<PathBuf>,
     /// Language of skill and monster names.
@@ -247,13 +247,16 @@ fn main() -> anyhow::Result<()> {
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
-    if let Some(path) = cli.reference_db {
-        let bundle = reference_bundle::read(&path)?;
-        database.import_provider_archives(&bundle.archives)?;
-        for snapshot in bundle.snapshots {
-            database.import_community(snapshot)?;
-        }
+    let bundle = if let Some(path) = cli.reference_db {
         tracing::info!("Offline reference database: {}", path.display());
+        reference_bundle::read(&path)?
+    } else {
+        tracing::info!("Using built-in offline community reference database");
+        reference_bundle::read_bundled()?
+    };
+    database.import_provider_archives(&bundle.archives)?;
+    for snapshot in bundle.snapshots {
+        database.import_community(snapshot)?;
     }
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {
