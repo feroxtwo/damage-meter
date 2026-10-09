@@ -637,7 +637,7 @@ async function openFight(id) {
     ${limits.length?'<p class="analysis-note" role="status">Aufzeichnung eingeschränkt: '+limits.join(' · ')+'. Details unter „Messdetails“.</p>':''}
     ${fightStory(f)}
     <nav class="report-nav" aria-label="Kampfbericht durchsuchen"><button type="button" data-report-target="reportGroupTitle" aria-current="location"><b>01</b> Gruppe & Skills</button><button type="button" data-report-target="fightDamageChart"><b>02</b> Schadensverlauf</button><button type="button" data-report-target="fightPerformanceTools"><b>03</b> Entwicklung</button><button type="button" data-report-target="fightCompareTools"><b>04</b> Vergleichen</button><button type="button" data-report-target="fightAnnotation"><b>05</b> Notizen</button><button type="button" data-report-target="fightMeasurement"><b>06</b> Messdetails</button></nav>
-    <section class="report-section aria-labelledby="reportGroupTitle"><div class="report-section-head"><h3 id="reportGroupTitle">Gruppe und Skills</h3><span class="analysis-note">Spieler anklicken für Skills, Heilung und Zeitlinien</span></div>
+    <section class="report-section" aria-labelledby="reportGroupTitle"><div class="report-section-head"><h3 id="reportGroupTitle">Gruppe und Skills</h3><span class="analysis-note">Spieler anklicken für Skills, Heilung und Zeitlinien</span></div>
     <div class="report-ranking">${f.players.map((p,i)=>playerReport(p,f,i)).join('')}</div></section>
     ${fightChartControls(f)}
     ${effectTimeline(f,f.target_id)}${f.boss_debuffs?.length?'<h4>Debuffs am Ziel</h4>'+uptimes(f.boss_debuffs,true):''}
@@ -650,7 +650,7 @@ async function openFight(id) {
     <details class="secondary-tools" id="fightAnnotation"><summary>${f.favorite?'★ ':''}Favorit, Notiz und Tags${f.note||f.tags?'<small>'+esc([f.note,f.tags].filter(Boolean).join(' · ').slice(0,80))+'</small>':''}</summary><div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div></details>
     <details class="secondary-tools" id="fightMeasurement"><summary>Messdetails<small>Erfassung, Datenqualität und Ping</small></summary><p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
       <h4>Ping-Verlauf</h4>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}</details>`;
-  bindReportNavigation();
+  bindReportNavigation(f);
   bindPlayerReports(f);fillAttemptContext($('#fightContent'),f);
   fillSkillIndex(id,$('#skillIndexPanel'),request);
   if(window.fillPerformanceCoach)fillPerformanceCoach(f,$('#performanceCoachPanel'),request);
@@ -673,18 +673,35 @@ async function openFight(id) {
     $('#compareFight').dataset.previous=previous?.id||'';comparePrevious();
   }catch(e){if(request===detailRequest)$('#compareFight').innerHTML='<option value="">Vergleiche nicht erreichbar</option>';}
 }
-function bindReportNavigation() {
-  const buttons = [...document.querySelectorAll('[data-report-target]')];
-  buttons.forEach(button => button.onclick = () => {
-    const destination = document.getElementById(button.dataset.reportTarget);
-    if (!destination) return;
-    if (destination.tagName === 'DETAILS') destination.open = true;
-    buttons.forEach(other => other.removeAttribute('aria-current'));
-    button.setAttribute('aria-current', 'location');
-    destination.setAttribute('tabindex', '-1');
-    destination.focus({preventScroll:true});
-    destination.scrollIntoView({block:'start', behavior:'instant'});
+// Jump targets that exist and carry data; the current one follows scrolling.
+function bindReportNavigation(f) {
+  const dialog=$('#fightDialog'),nav=dialog.querySelector('.report-nav');if(!nav)return;
+  const usable={fightDamageChart:!!f.analytics?.points?.length};
+  const buttons=[...nav.querySelectorAll('[data-report-target]')].filter(button=>{
+    const ok=!!document.getElementById(button.dataset.reportTarget)&&usable[button.dataset.reportTarget]!==false;
+    button.hidden=!ok;return ok;
   });
+  const mark=current=>buttons.forEach(b=>b===current?b.setAttribute('aria-current','location'):b.removeAttribute('aria-current'));
+  let jumpedAt=0,frame=0;
+  buttons.forEach(button=>button.onclick=()=>{
+    const destination=document.getElementById(button.dataset.reportTarget);
+    if(!destination)return;
+    if(destination.tagName==='DETAILS')destination.open=true;
+    mark(button);jumpedAt=performance.now();
+    destination.setAttribute('tabindex','-1');
+    destination.focus({preventScroll:true});
+    // Twice: the navigation only sticks after the first scroll, and may wrap to
+    // several rows on narrow screens. The target starts just below it.
+    for(let i=0;i<2;i++)dialog.scrollTop+=destination.getBoundingClientRect().top-nav.getBoundingClientRect().bottom-12;
+  });
+  dialog.onscroll=()=>{
+    if(frame||performance.now()-jumpedAt<300)return;
+    frame=requestAnimationFrame(()=>{
+      frame=0;const line=nav.getBoundingClientRect().bottom+24;let current=buttons[0],best=-Infinity;
+      for(const button of buttons){const top=document.getElementById(button.dataset.reportTarget)?.getBoundingClientRect().top;if(top!=null&&top<=line&&top>best){best=top;current=button;}}
+      mark(current);
+    });
+  };
 }
 // Export choices are remembered in this browser; the button names what will happen.
 const exportFormats={text:['Text','Kopieren','Kopiert die Rangliste als Text in die Zwischenablage.'],chat:['Chatzeile','Kopieren','Kopiert eine kurze Chatzeile (maximal 200 Zeichen) in die Zwischenablage.'],png:['PNG-Bild','Bild speichern','Speichert einen Bildbericht mit Diagramm und Skills. Lange Berichte werden auf mehrere Bilder verteilt.'],csv:['CSV-Tabelle','Tabelle speichern','Speichert eine Tabelle für Excel oder LibreOffice. Bei einem einzelnen Spieler mit dessen Skills.'],json:['JSON','Daten speichern','Speichert alle Auswertungsdaten des gewählten Umfangs als Datei.']};

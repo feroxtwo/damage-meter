@@ -247,7 +247,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   </section>
   <section id="settings">
     <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Einstellungen</h2><p>Overlay, Messung und Diagnose anpassen.</p></div><div class="settings-save"><p id="settingsStatus" class="save-status" role="status">Änderungen werden automatisch gespeichert.</p><button class="btn" id="retrySettings" hidden>Erneut speichern</button></div></div>
-    <div class="setup-preview card"><div><div class="eyebrow">Dein Overlay</div><h3>Bereit für deinen nächsten Kampf.</h3><p class="muted">Live-Vorschau der OBS-Ansicht mit deinen gespeicherten Einstellungen.</p><a class="preview-link" href="/overlay" target="_blank" rel="noopener">OBS-Ansicht öffnen ↗</a><p class="analysis-note">Wenn „Overlay anzeigen“ ausgeschaltet ist, bleibt die Vorschau leer. Hohe Skalierung und viele Zeilen können über den Vorschaurahmen hinausgehen.</p></div><div class="overlay-stage"><iframe id="overlayPreview" data-src="/overlay" title="Live-Vorschau des OBS-Overlays" tabindex="-1"></iframe></div></div>
+    <div class="setup-preview card"><div><div class="eyebrow">Dein Overlay</div><h3>Bereit für deinen nächsten Kampf.</h3><p class="muted">Live-Vorschau der OBS-Ansicht mit deinen gespeicherten Einstellungen.</p><a class="preview-link" href="/overlay" target="_blank" rel="noopener">OBS-Ansicht öffnen ↗</a><p class="analysis-note">Wenn „Overlay anzeigen“ ausgeschaltet ist, bleibt die Vorschau leer. Hohe Skalierung und viele Zeilen können über den Vorschaurahmen hinausgehen.</p></div><div class="overlay-stage" id="overlayStage"></div></div>
     <div class="settings-layout">
     <div class="settings-column">
     <div class="card">
@@ -343,6 +343,16 @@ const task = promise => promise.catch(() => toast('Daten konnten nicht geladen w
 
 // Tabs
 let tab = location.hash.slice(1) || 'live';
+// The OBS preview exists only while settings are open. A new frame per visit:
+// changing a frame's address would add entries to the browser's back history.
+function overlayPreview(on) {
+  const stage = $('#overlayStage'), frame = stage.querySelector('iframe');
+  if (!on) { frame?.remove(); return; }
+  if (frame) return;
+  const preview = document.createElement('iframe');
+  Object.assign(preview, { id: 'overlayPreview', src: '/overlay', title: 'Live-Vorschau des OBS-Overlays', tabIndex: -1 });
+  stage.append(preview);
+}
 function show(t) {
   if (!['live', 'runs', 'stats', 'settings', 'skills'].includes(t)) t = 'live';
   tab = t; location.hash = t;
@@ -352,11 +362,16 @@ function show(t) {
   if (t !== 'stats' && $('#communityReturn')) $('#communityReturn').hidden = true;
   if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
   if (t === 'stats') { task(loadStats()); task(loadBossHistory()); if(window.loadCommunitySources)task(loadCommunitySources()); }
-  if (t === 'settings') { task(loadSettings()); const preview = $('#overlayPreview'); if (!preview.getAttribute('src')) preview.src = preview.dataset.src; } else $('#overlayPreview').removeAttribute('src');
+  if (t === 'settings') task(loadSettings());
+  overlayPreview(t === 'settings');
   if (t === 'skills' && typeof loadSkillCatalog === 'function') task(loadSkillCatalog());
 }
 document.querySelectorAll('.app-rail nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
 document.querySelectorAll('[data-studio-view]').forEach(button => button.onclick = () => show(button.dataset.studioView));
+// Phones: brand and status scroll away, the tab row (and character choice) stays.
+const rail = document.querySelector('.app-rail'), narrowRail = matchMedia('(max-width:760px)');
+function fitRail() { rail.style.top = narrowRail.matches ? -Math.max(0, rail.querySelector('nav').offsetTop - 8) + 'px' : ''; }
+new ResizeObserver(fitRail).observe(rail); narrowRail.addEventListener('change', fitRail); fitRail();
 
 
 // Live

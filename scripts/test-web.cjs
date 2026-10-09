@@ -206,6 +206,22 @@ const server = http.createServer((req,res) => {
         assert.equal(await reportPage.evaluate(()=>document.activeElement.id),target);
         assert.equal(await button.getAttribute('aria-current'),'location');
       }
+      assert.equal(await reportPage.locator('section.report-section').getAttribute('aria-labelledby'),'reportGroupTitle');
+      // Manual scrolling moves the marker back; a jump never lands under the sticky bar.
+      await delay(350);await reportPage.evaluate(()=>document.querySelector('#fightDialog').scrollTo(0,0));
+      await reportPage.waitForFunction(()=>document.querySelector('[data-report-target][aria-current]')?.dataset.reportTarget==='reportGroupTitle');
+      await reportPage.setViewportSize({width:390,height:844});
+      for(const target of ['fightDamageChart','fightCompareTools']) {
+        await reportPage.locator(`[data-report-target="${target}"]`).click();
+        const gap=await reportPage.evaluate(t=>document.getElementById(t).getBoundingClientRect().top-document.querySelector('.report-nav').getBoundingClientRect().bottom,target);
+        assert.ok(gap>=0,target+' hidden under navigation by '+(-gap)+'px');
+      }
+      await reportPage.locator('#closeDialog').click();
+      // No jump target for a curve that was not recorded.
+      await reportPage.route('**/api/fights/f9',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...fight,id:'f9',analytics:null})}));
+      await reportPage.evaluate(()=>openFight('f9'));await reportPage.locator('#fightDialog[open] .report-nav').waitFor();
+      assert.equal(await reportPage.locator('[data-report-target="fightDamageChart"]').isHidden(),true);
+      assert.equal(await reportPage.locator('[data-report-target="fightMeasurement"]').isVisible(),true);
       await reportPage.close();
     });
     await check('OBS preview loads only in settings and unloads when leaving',async()=>{
@@ -213,7 +229,17 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#overlayPreview').getAttribute('src'),'/overlay');
       await page.frameLocator('#overlayPreview').locator('#box').waitFor({state:'attached'});
       await page.getByRole('button',{name:'Live',exact:true}).click();
-      assert.equal(await page.locator('#overlayPreview').getAttribute('src'),null);
+      assert.equal(await page.locator('#overlayPreview').count(),0);
+      // Back returns to the previous tab, not to an earlier preview address.
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
+      await page.frameLocator('#overlayPreview').locator('#box').waitFor({state:'attached'});
+      await page.getByRole('button',{name:'Verlauf',exact:true}).click();
+      await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
+      assert.equal(await page.locator('iframe').count(),1,'exactly one preview');
+      await page.evaluate(()=>history.back());await page.waitForFunction(()=>tab==='runs');
+      assert.equal(await page.locator('#overlayPreview').count(),0);
+      await page.evaluate(()=>history.forward());await page.waitForFunction(()=>tab==='settings');
+      await page.getByRole('button',{name:'Live',exact:true}).click();
       await page.locator('[data-studio-view="runs"]').click();
       assert.equal(await page.locator('#runs').evaluate(e=>e.classList.contains('active')),true);
     });
