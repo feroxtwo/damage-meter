@@ -3,6 +3,8 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../web/perform
 const ctx=vm.createContext({window:{},num:v=>(Number(v)/1000).toFixed(1).replace('.',',')+'K',date:v=>'Datum '+v,esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
   observedPeak:(f,id)=>f?.analytics?.partial?null:{dps:id===1?120:100},
   api:async()=>[],detailRequest:1});
+const index=fs.readFileSync(require('node:path').join(__dirname,'../web/index.html'),'utf8');
+vm.runInContext("let settings={skill_language:'de'},latestLive=null;"+index.split('\n').filter(line=>/^function (skillLanguage|skillName|iconUrl|skillLabel)\(/.test(line)).join('\n'),ctx);
 vm.runInContext(source,ctx);
 const run=s=>vm.runInContext(s,ctx);
 const points=(amount=100)=>Array.from({length:20},(_,i)=>({ms:(i+1)*500,damage:{1:(i+1)*amount}}));
@@ -30,3 +32,9 @@ ctx.f.players[0].skills[0].name='<img src=x>';
 assert.equal(run('coachView(performanceCoachData(f,g)).includes("<img")'),false);
 assert.match(run('coachView(performanceCoachData(f,g))'),/0,2K DPS/,'coach uses the dashboard number format');
 console.log('Performance coach: 14 checks passed');
+
+ctx.f.players[0].skills[0].icon='/assets/icons/skill-11170000.webp';
+assert.match(run('coachView(performanceCoachData(f,g))'),/src="\/assets\/icons\/skill-11170000.webp"/);
+assert.match(run('coachView(performanceCoachData(f,g))'),/&lt;img src=x&gt;/);
+ctx.f.players[0].skills[0].icon='https://example.org/bad.webp';
+assert.doesNotMatch(run('coachView(performanceCoachData(f,g))'),/<img/);
