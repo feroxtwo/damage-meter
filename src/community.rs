@@ -108,7 +108,10 @@ impl CommunitySnapshot {
         if !self.source.rights_confirmed {
             return Err("rights_confirmation_required");
         }
-        if !matches!(self.source.id.as_str(), "a2tools" | "aiondps" | "community") {
+        if !matches!(
+            self.source.id.as_str(),
+            "a2tools" | "aiondps" | "abysslogs" | "questlog" | "jameter" | "notmeter" | "community"
+        ) {
             return Err("unknown_source");
         }
         let url = reqwest::Url::parse(&self.source.url).map_err(|_| "invalid_source_url")?;
@@ -121,6 +124,18 @@ impl CommunitySnapshot {
                 return Err("source_url_mismatch");
             }
             "aiondps" if host != "aiondps.com" && host != "www.aiondps.com" => {
+                return Err("source_url_mismatch");
+            }
+            "abysslogs" if host != "abysslogs.com" && host != "www.abysslogs.com" => {
+                return Err("source_url_mismatch");
+            }
+            "questlog" if host != "questlog.gg" && host != "www.questlog.gg" => {
+                return Err("source_url_mismatch");
+            }
+            "jameter" if host != "jameter.net" && host != "www.jameter.net" => {
+                return Err("source_url_mismatch");
+            }
+            "notmeter" if host != "notmeter.com" && host != "www.notmeter.com" => {
                 return Err("source_url_mismatch");
             }
             _ => {}
@@ -207,6 +222,38 @@ pub fn provider_catalog() -> Value {
             "status": "api_unverified",
             "url": "https://aiondps.com",
             "detail": "Öffentliche Ranglisten-Routen im Quellcode, Datenabruf nicht verifiziert"
+        },
+        {
+            "id": "abysslogs",
+            "name": "Abyss Logs",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://abysslogs.com",
+            "detail": "Boss-Logs und Klassenstatistiken; API und Datenrechte nicht bestätigt"
+        },
+        {
+            "id": "questlog",
+            "name": "Questlog Combat Logs",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://questlog.gg/aion-2/en/app",
+            "detail": "Leistungsberichte; keine freigegebene Statistik-Download-API bestätigt"
+        },
+        {
+            "id": "jameter",
+            "name": "JaMeter",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://jameter.net/en",
+            "detail": "Anonyme Leistungsranglisten; Wiederverwendungsrechte ungeklärt"
+        },
+        {
+            "id": "notmeter",
+            "name": "NotMeter",
+            "kind": "community",
+            "status": "permission_required",
+            "url": "https://notmeter.com",
+            "detail": "Bereinigte und rohe DPS-Indikatoren; Downloadrechte ungeklärt"
         },
         {
             "id": "ncsoft",
@@ -299,6 +346,13 @@ mod tests {
         let mut wrong = snapshot();
         wrong.source.id = "a2tools".into();
         assert_eq!(wrong.validate().unwrap_err(), "source_url_mismatch");
+        let mut wrong = snapshot();
+        wrong.source.id = "abysslogs".into();
+        assert_eq!(wrong.validate().unwrap_err(), "source_url_mismatch");
+        let mut wrong = snapshot();
+        wrong.source.id = "questlog".into();
+        wrong.source.url = "https://questlog.gg/aion-2/en/app".into();
+        assert!(wrong.validate().is_ok());
         let mut wrong = snapshot();
         wrong.rows[0].median_dps = f64::NAN;
         assert_eq!(wrong.validate().unwrap_err(), "invalid_reference_row");
