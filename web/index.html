@@ -138,21 +138,23 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
 <body>
 <a class="skip" href="#main">Zum Inhalt</a>
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><symbol id="icon-swords" viewBox="0 0 24 24"><path d="M14 3l7 7M18 2l4 4-11 11M4 3l17 17M2 2l4 4M3 14l7 7M2 18l4 4-2-6 12-12"/></symbol><symbol id="icon-live" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol><symbol id="icon-runs" viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h4"/></symbol><symbol id="icon-stats" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6"/></symbol></svg>
-<header>
-  <div class="brand"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg></span><div><h1>AION2 METER</h1><small>KAMPFANALYSE</small></div></div>
+<header class="app-rail">
+  <div class="brand"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg></span><div><h1>AION2 METER</h1><small>COMBAT STUDIO</small></div></div>
   <nav aria-label="Hauptnavigation">
-    <button data-tab="live" class="active"><svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg>Live</button>
-    <button data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#icon-runs"/></svg>Verlauf</button>
-    <button data-tab="stats"><svg class="icon" aria-hidden="true"><use href="#icon-stats"/></svg>Statistik</button>
-    <button data-tab="skills"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg>Skill-Katalog</button>
-    <button data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Einstellungen</button>
+    <button data-tab="live" class="active"><svg class="icon" aria-hidden="true"><use href="#icon-live"/></svg><span class="nav-label">Live<small aria-hidden="true">Dein Kampf im Fokus</small></span></button>
+    <button data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#icon-runs"/></svg><span class="nav-label">Verlauf<small aria-hidden="true">Dungeons & Kampfberichte</small></span></button>
+    <button data-tab="stats"><svg class="icon" aria-hidden="true"><use href="#icon-stats"/></svg><span class="nav-label">Statistik<small aria-hidden="true">Entwicklung & Bestwerte</small></span></button>
+    <button data-tab="skills"><svg class="icon" aria-hidden="true"><use href="#icon-swords"/></svg><span class="nav-label">Skill-Katalog<small aria-hidden="true">Fähigkeiten nachschlagen</small></span></button>
+    <button data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="nav-label">Einstellungen<small aria-hidden="true">Overlay & dein Setup</small></span></button>
   </nav>
+  <div class="rail-caption" aria-hidden="true">DEIN CHARAKTER</div>
   <select id="charSel" aria-label="Charakter für Verlauf und Statistik" title="Filtert Verlauf und Statistik; Live zeigt den aktuellen Kampf" style="display:none"><option value="">Alle Charaktere</option></select>
   <div id="status" role="status"><span class="dot" id="statusDot"></span><span id="statusText">…</span></div>
 </header>
 <main id="main">
   <section id="live" class="active">
-    <div class="telemetry-heading"><span class="eyebrow">AION 2 / COMBAT TELEMETRY</span><div class="row live-controls">
+    <div class="page-title studio-title"><div><div class="eyebrow">Combat Studio / Live</div><h2>Dein Kampf. Im Fokus.</h2><p>Deine Leistung, deine Gruppe, dein nächster Bestwert.</p></div><button class="btn studio-link" data-studio-view="runs">Kampfberichte ansehen <span aria-hidden="true">↗</span></button></div>
+    <div class="telemetry-heading"><span class="eyebrow">AKTUELLE BEGEGNUNG</span><div class="row live-controls">
           <select id="targetMode" aria-label="Zielauswahl">
             <option value="bossTargets">Bosse</option>
             <option value="mostDamage">Höchster Schaden</option>
@@ -245,6 +247,7 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
   </section>
   <section id="settings">
     <div class="page-title"><div><div class="eyebrow">Dein Setup</div><h2>Einstellungen</h2><p>Overlay, Messung und Diagnose anpassen.</p></div><div class="settings-save"><p id="settingsStatus" class="save-status" role="status">Änderungen werden automatisch gespeichert.</p><button class="btn" id="retrySettings" hidden>Erneut speichern</button></div></div>
+    <div class="setup-preview card"><div><div class="eyebrow">Dein Overlay</div><h3>Bereit für deinen nächsten Kampf.</h3><p class="muted">Live-Vorschau der OBS-Ansicht mit deinen gespeicherten Einstellungen.</p><a class="preview-link" href="/overlay" target="_blank" rel="noopener">OBS-Ansicht öffnen ↗</a><p class="analysis-note">Wenn „Overlay anzeigen“ ausgeschaltet ist, bleibt die Vorschau leer. Hohe Skalierung und viele Zeilen können über den Vorschaurahmen hinausgehen.</p></div><div class="overlay-stage"><iframe id="overlayPreview" data-src="/overlay" title="Live-Vorschau des OBS-Overlays" tabindex="-1"></iframe></div></div>
     <div class="settings-layout">
     <div class="settings-column">
     <div class="card">
@@ -343,16 +346,18 @@ let tab = location.hash.slice(1) || 'live';
 function show(t) {
   if (!['live', 'runs', 'stats', 'settings', 'skills'].includes(t)) t = 'live';
   tab = t; location.hash = t;
-  document.querySelectorAll('nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  document.querySelectorAll('.app-rail nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('active', s.id === t));
   $('#charSel').hidden=!['runs','stats'].includes(t);
   if (t !== 'stats' && $('#communityReturn')) $('#communityReturn').hidden = true;
   if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
   if (t === 'stats') { task(loadStats()); task(loadBossHistory()); if(window.loadCommunitySources)task(loadCommunitySources()); }
-  if (t === 'settings') task(loadSettings());
+  if (t === 'settings') { task(loadSettings()); const preview = $('#overlayPreview'); if (!preview.getAttribute('src')) preview.src = preview.dataset.src; } else $('#overlayPreview').removeAttribute('src');
   if (t === 'skills' && typeof loadSkillCatalog === 'function') task(loadSkillCatalog());
 }
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+document.querySelectorAll('.app-rail nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+document.querySelectorAll('[data-studio-view]').forEach(button => button.onclick = () => show(button.dataset.studioView));
+
 
 // Live
 // Dead in this fight, or (run totals) how often.
