@@ -23,7 +23,7 @@ context.response = {
   }]
 };
 assert.equal(run('communityComparisonMarkup(response).includes("140")'), true);
-assert.equal(run('communityComparisonMarkup(response).includes("20 Vergleichsspieler")'), true);
+assert.equal(run('communityComparisonMarkup(response).includes("20 unabhängige Spieler laut Quelle")'), true);
 context.response.comparisons[0].balance_id = '<script>alert(1)</script>';
 assert.equal(run('communityComparisonMarkup(response).includes("<script>")'), false, 'snapshot metadata must be escaped');
 assert.equal(run('communityTemplate().source.rights_confirmed'), false, 'a generated template must not preauthorize anything');
