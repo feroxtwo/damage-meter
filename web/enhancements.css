@@ -357,3 +357,96 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 .coach-cell strong{font-size:22px;color:var(--text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 @media(max-width:850px){.coach-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:450px){.coach-grid{grid-template-columns:1fr}}
+/* Show the task the user chose, with secondary actions available on demand. */
+.archive-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:8px 0 18px;border:1px solid var(--line);border-radius:12px;padding:4px;background:var(--panel);max-width:720px}
+.archive-option{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:10px 16px;cursor:pointer;font:inherit;min-width:0}
+.archive-option b{font-size:15px;color:var(--text);font-weight:600}.archive-option small{font-size:12px;overflow-wrap:anywhere}
+.archive-option:hover{background:#ffffff08}
+.archive-option[aria-pressed="true"]{background:#6ce4d814;box-shadow:inset 0 0 0 1px #6ce4d855}.archive-option[aria-pressed="true"] b{color:var(--accent)}
+#runs[data-archive="runs"] #fightLibrary,#runs[data-archive="runs"] #mobLibrary{display:none}
+#runs[data-archive="fights"] #runList{display:none!important}
+#runs.run-open #archiveSwitch,#runs.run-open .page-title{display:none}
+.export-menu summary,.secondary-tools summary{cursor:pointer;font-weight:600;list-style-position:inside}
+.export-menu[open]>summary,.secondary-tools[open]>summary{margin-bottom:16px}
+.export-menu label{min-width:0}.export-menu label:has(select){display:flex;flex-direction:column;gap:6px}
+.export-menu select{max-width:100%}.export-menu .row{align-items:end}
+.ranking-tools .export-menu[open]{flex-basis:100%;padding-block:12px}
+#fightDamageChart,.player-report{scroll-margin-top:16px}
+#charSel[hidden]{display:none!important}
+@media(max-width:600px){.export-menu .row{align-items:stretch}.export-menu label:has(select){flex:1 1 140px}.export-menu .btn{flex:1 1 100px}}
+/* Review of PR #26: one disclosure style, analysis before tools, ranking rows that open in place. */
+.secondary-tools>summary,.player-timelines>summary{list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;font-weight:600}
+.secondary-tools>summary::-webkit-details-marker,.player-timelines>summary::-webkit-details-marker,.export-menu>summary::-webkit-details-marker,.player-report>summary::-webkit-details-marker{display:none}
+.secondary-tools>summary::before,.player-timelines>summary::before{content:"";width:7px;height:7px;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(-45deg);margin-right:4px;transition:transform .15s;align-self:center;flex-shrink:0}
+.secondary-tools[open]>summary::before,.player-timelines[open]>summary::before{transform:rotate(45deg)}
+.secondary-tools>summary small{font-weight:400;color:var(--muted);font-size:12px}
+.secondary-tools>summary:hover,.player-timelines>summary:hover{color:var(--accent)}
+.report-meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin:0 0 6px}
+.report-meta>p{margin:0;color:var(--muted)}
+#fightContent .export-menu{margin:0;padding:0;border:0;border-radius:0}
+#fightContent .export-menu>summary,.ranking-tools .export-menu>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-weight:600;font-size:13px;background:var(--panel2)}
+#fightContent .export-menu>summary::before,.ranking-tools .export-menu>summary::before{content:"↓";color:var(--accent)}
+#fightContent .export-menu[open]>summary,.ranking-tools .export-menu[open]>summary{border-color:var(--accent);color:var(--accent);margin-bottom:0}
+#fightContent .export-menu[open]{flex-basis:100%;display:flex;flex-direction:column;align-items:flex-end}
+.export-panel{width:100%;margin-top:10px;padding:14px 16px;border:1px solid var(--accent);border-radius:10px;background:#6ce4d80a;text-align:left}
+.export-panel .analysis-note{margin:10px 0 0}
+.btn.primary{border-color:var(--accent);color:var(--accent);background:#6ce4d814;font-weight:600}
+.export-anon{align-self:center}
+.report-section{margin-top:22px}.report-section-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px}.report-section-head h3{margin:0!important}.report-section-head .analysis-note{margin:0}
+.report-ranking{margin-top:10px;border-top:1px solid var(--line)}
+#fightContent .player-report{margin:0;padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0}
+#fightContent .player-report>summary{list-style:none;display:grid;grid-template-columns:28px minmax(120px,240px) minmax(60px,1fr) 200px;align-items:center;gap:14px;padding:12px 6px}
+#fightContent .player-report>summary:hover{background:#ffffff06}
+#fightContent .player-report.me>summary{box-shadow:inset 3px 0 0 var(--gold);background:#edc57b0a}
+#fightContent .player-report[open]>summary{background:#6ce4d80d}
+.report-rank-no{font-variant-numeric:tabular-nums;color:var(--muted);text-align:right;font-weight:600}
+.player-report.me .report-rank-no{color:var(--gold)}
+.report-rank-name{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}.report-rank-name b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.report-rank-name small{color:var(--muted);white-space:nowrap}
+.report-rank-bar{height:8px;border-radius:4px;background:#ffffff0d;overflow:hidden}.report-rank-bar i{display:block;height:100%;border-radius:4px;opacity:.85}
+.report-rank-value{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.report-rank-value b{font-size:17px}.report-rank-value small{display:block;color:var(--muted);font-size:11px}
+#fightContent .player-analysis{padding:4px 6px 18px 48px}
+#fightContent .player-timelines{border-style:dashed}
+#fightContent>details.secondary-tools{margin-top:12px;padding:14px 16px}
+@media(max-width:600px){#fightContent .player-report>summary{grid-template-columns:22px minmax(0,1fr) auto;gap:4px 10px}.report-rank-bar{grid-column:2/-1;grid-row:2}.report-rank-value{grid-row:1;grid-column:3}#fightContent .player-analysis{padding-left:0}#fightContent .export-menu[open]{align-items:stretch}}
+.list-filters{margin-bottom:14px}.list-filters input[type=search]{flex:1 1 220px}
+.list-title{margin:6px 0 4px}
+#fightLibrary .list-title{margin-top:4px}
+.run-table tr.click{cursor:pointer}.run-table tr.click:hover td{background:#ffffff06}.run-table tr.click:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.run-table .run-name b{margin-right:6px}.run-table .run-dps{font-weight:600;color:var(--text)}
+.run-overview{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+.run-overview>.card{margin:0}.run-head{margin-bottom:16px}.run-overview{margin-bottom:16px}
+.empty-hint{padding:18px 0}
+@media(max-width:900px){.run-overview{grid-template-columns:1fr}}
+/* Phones: list rows become two-line cards so date, name and your DPS stay visible without sideways scrolling. */
+@media(max-width:600px){
+  .archive-option{padding:8px 10px}.archive-option small{font-size:11px}
+  .run-table thead{display:none}
+  .run-table,.run-table tbody{display:block}
+  .run-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+  .run-table td{border:0!important;padding:0!important;background:none!important}
+  .run-table .run-date{grid-column:1/-1;color:var(--muted);font-size:12px}
+  .run-table .run-name{grid-column:1;grid-row:2}
+  .run-table .run-dps{grid-column:2;grid-row:2;text-align:right;align-self:start}
+  .run-table td[data-label]:not(.run-dps){grid-column:1/-1;font-size:12px;color:var(--muted);text-align:left}
+  .run-table td[data-label]:not(.run-dps)::before,.run-table .run-dps::after{content:attr(data-label)}
+  .run-table td[data-label]:not(.run-dps)::before{margin-right:6px}
+  .run-table .run-dps::after{display:block;font-size:10px;font-weight:400;color:var(--muted)}
+  .run-table td[data-label="Dauer"]{display:inline}
+  .run-table .run-group{display:none}
+  .run-table-wrap,.run-table{min-width:0!important}
+}
+.settings-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
+.settings-column{display:flex;flex-direction:column;gap:16px;min-width:0}.settings-column>.card{margin:0}
+.settings-column .card>h2+label.set,.settings-column .card>h2+.analysis-note{margin-top:4px}
+label.set>span small,.set-action small{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
+.set-action{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0}
+.settings-save{display:flex;align-items:center;gap:10px;align-self:end}.settings-save .save-status{margin:0}
+@media(max-width:700px){.page-title{flex-wrap:wrap;align-items:start}.settings-save{flex-wrap:wrap;align-self:start}}
+@media(max-width:900px){.settings-layout{grid-template-columns:1fr}}
+.ranking-head select{width:auto;min-width:0;font-size:12px;padding:6px 10px}
+.ranking-tools .export-menu[open]{flex-basis:100%}
+.ranking-tools .export-menu .export-panel{margin-top:10px}
+.ranking-tools .secondary-tools>summary{font-size:13px;color:var(--muted)}
+.ranking-tools>.row{align-items:center;gap:16px}
+@media(max-width:600px){.live-metrics .group-rate{order:2}.live-metrics .live-signal{order:3}}
+.table-scroll table.run-bosses{min-width:0}

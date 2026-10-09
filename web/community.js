@@ -32,10 +32,11 @@ function communityRatio(score) {
 }
 function communityComparisonMarkup(response) {
   if (!response) return '<p class="analysis-note">Kein Community-Vergleich verfügbar.</p>';
-  const title = '<div class="skill-index-head"><div><span class="eyebrow">COMMUNITY · IMPORTIERTE DATEN</span><h3>Externe DPS-Referenzen</h3></div><span>Region ' + esc(response.region || 'ALL') + '</span></div>';
+  const region = response.region && response.region !== 'ALL' ? 'Region ' + esc(response.region) : 'Alle Regionen';
+  const title = '<div class="skill-index-head"><div><span class="eyebrow">Community · importierte Daten</span><h3>Vergleich mit Community-Werten</h3></div><span>' + region + '</span></div>';
   if (!['ready', 'indicative'].includes(response.status)) {
-    return title + '<p class="analysis-note">' + esc(communityReasons[response.reason] || 'Keine geeigneten Community-Daten importiert.') +
-      ' Ohne verifizierten Referenzdatensatz wird kein Online-Score angezeigt.</p><button type="button" class="btn" data-community-settings>Datenquellen öffnen</button>';
+    return title + '<p class="analysis-note">Noch kein Community-Vergleich: ' + esc(communityReasons[response.reason] || 'Keine passenden Community-Daten importiert.') +
+      ' Ohne importierten Referenzdatensatz wird kein Online-Score angezeigt.</p><button type="button" class="btn" data-community-settings>Community-Daten verwalten</button>';
   }
   const legacy=response.status==='indicative';
   const entries = (response.comparisons || []).map(row => {
@@ -66,9 +67,13 @@ async function fillCommunityIndex(id, root, request) {
   }
   const button = root.querySelector('[data-community-settings]');
   if (button) button.onclick = () => {
+    const from = tab;
     if ($('#fightDialog').open) $('#fightDialog').close();
     show('stats');
-    $('#communitySourcesCard').scrollIntoView({ behavior: 'smooth' });
+    const sources=$('#communitySourcesCard');sources.open=true;sources.scrollIntoView({block:'start'});sources.querySelector('summary').focus({preventScroll:true});
+    // A way back to the report this detour started from.
+    const back = $('#communityReturn');back.hidden = false;
+    back.onclick = () => { back.hidden = true; show(from); task(openFight(id)); };
   };
 }
 window.fillCommunityIndex = fillCommunityIndex;

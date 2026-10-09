@@ -9,7 +9,7 @@ function handleSearchShortcut(e) {
   if(e.key!=='/'||target?.closest('input,textarea,select'))return;
   const dialog=document.querySelector('dialog[open]');
   const search=dialog?dialog.querySelector('input[type="search"]'):document.querySelector(tab==='skills'?'#skills.active #catalogSearch':document.querySelector('#runDetail')?.style.display==='block'?'#runs.active #runAnalysis input[type="search"]':'#runs.active #fightSearch');
-  if(search){e.preventDefault();search.focus();search.select();}
+  if(search){e.preventDefault();if(!dialog&&tab==='runs'&&!document.querySelector('#runs.run-open'))setArchiveView('fights');search.focus();search.select();}
 }
 document.addEventListener('keydown',handleSearchShortcut);
 $('#fightSearch').title='/: Suche fokussieren · Esc: Suche leeren';
@@ -28,7 +28,6 @@ function chatLine(title,players,ms,metric='damage',limit=200) {
   }
   return text.trim();
 }
-$('#copyChat').onclick=()=>{if(latestLive)task(copyText(chatLine(latestLive.target_name||'Kampf',exportPlayers(metricRows(latestLive.rows),$('#anonymousExport').checked),latestLive.battle_time_ms,metricKey())));};
 const chartColors=['#75e0ce','#f6b179','#cda8ff','#7eafff','#f58dba','#d8dc76','#91cfe5','#f18282','#add9a1','#d8b59a'];
 function pairSkills(skills=[]) {
   return `<div class="table-scroll pair-skills"><table><thead><tr><th>Skill</th><th>Schaden</th><th>Treffer/Ticks</th><th>Krit</th><th>Max</th></tr></thead><tbody>${skills.map(s=>`<tr><td>${skillLabel(s)}${s.is_dot?' · DoT':''}</td><td>${num(s.damage)}</td><td>${s.hits??'—'}</td><td>${pct(s.crit_rate)}</td><td>${s.max>0?num(s.max):'—'}</td></tr>`).join('')}</tbody></table></div>`;
@@ -46,8 +45,6 @@ function installFightQol(f) {
   anchor.parentNode.insertBefore(block,anchor.nextSibling);
   if(f.players.length>1)$('#pairB').selectedIndex=1;
   $('#pairCompare').onclick=()=>{$('#playerPair').innerHTML=pairReport(f.players.find(p=>String(p.actor_id)===$('#pairA').value),f.players.find(p=>String(p.actor_id)===$('#pairB').value),f);};
-  $('#pngFight').onclick=()=>task(exportPng(f,$('#anonFight').checked,$('#exportScope').value||null,exportSuffix(f)));
-  $('#chatFight').onclick=()=>task(copyText(chatLine(f.boss_name,scopedPlayers(f,exportPlayers(f.players,$('#anonFight').checked)),f.duration_ms)));
 }
 function installLiveComparison(detail,row) {
   const candidates=latestLive?.rows.filter(r=>r.id!==row?.id)||[];
