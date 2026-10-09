@@ -35,7 +35,7 @@ pub fn class_info(job: &str) -> ClassInfo {
         },
         "궁성" => ClassInfo {
             key: "ranger",
-            name: "Waldläufer",
+            name: "Jäger",
             color: [120, 186, 84],
         },
         "살성" => ClassInfo {

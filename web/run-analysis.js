@@ -135,13 +135,14 @@ function renderRunAnalysis(root, run) {
   const model = runCombatModel(run);
   const label = p => (p.name || 'Unbekannter Spieler') + (!p.identity_known ? ' · Kampf ' + (model.windows.findIndex(w => w.fight.id === p.source_fight_id) + 1) : model.players.some(other => other !== p && other.name === p.name)
     ? ' · ' + (runKnownField(p.job) == null ? 'Klasse unbekannt' : p.class_name || p.job) + ' · Server ' + (runKnownField(p.server_id) ?? 'unbekannt') : '');
-  root.innerHTML = `<h2>Dungeon-Gesamtstatistik</h2><p class="analysis-note">Über ${model.windows.length} erfasste Kämpfe dieses Runs, ohne Training. Kampfzeit ohne Wege und Pausen, mindestens 1 Sekunde je Kampf. Fehlende Teilnahme zählt als 0 Schaden. Ein Run belegt keine vollständige Dungeon-Abdeckung.</p>
+  root.innerHTML = `<h2>Dungeon-Gesamtstatistik</h2><p class="analysis-note">Alle ${model.windows.length} erfassten Kämpfe dieses Runs zusammen, ohne Wege und Pausen.</p>
     <div class="chart-tools run-analysis-tools"><label>Auswertung <select data-run-player aria-label="Spieler für Dungeon-Gesamtstatistik"><option value="group">Gesamte Gruppe</option>${model.players.map(p => `<option value="${esc(p.key)}">${esc(label(p))}${p.is_self ? ' · Du' : ''}</option>`).join('')}</select></label>
     <label>Verlauf <select data-run-metric aria-label="Wert im Dungeon-Verlauf"><option value="dps">DPS</option><option value="total">Gesamtschaden</option></select></label>
     <label>Glättung <select data-run-window aria-label="Glättung im Dungeon-Verlauf"><option value="5000">5 Sekunden</option><option value="0">Einzelne Intervalle</option></select></label></div>
     <div class="trend-summary" data-run-summary></div><h3>Damageverlauf · gesamter Dungeon-Run</h3><p class="analysis-note" data-run-coverage></p><div data-run-plot></div>
     <label class="curve-scrubber">Kampfzeit <input type="range" data-run-time aria-label="Zeitpunkt im Dungeon-Verlauf" min="0" max="0" value="0" disabled></label><div class="curve-readout" data-run-readout></div><button class="btn" data-run-fight disabled>Kampfbericht am Zeitpunkt öffnen</button>
-    <h3>Skills · gesamter Dungeon-Run</h3><p class="analysis-note" data-run-skill-note></p><div data-run-skills></div>`;
+    <h3>Skills · gesamter Dungeon-Run</h3><p class="analysis-note" data-run-skill-note></p><div data-run-skills></div>
+    <details class="secondary-tools run-method"><summary>So wird gerechnet</summary><p class="analysis-note">Ohne Training. Kampfzeit ohne Wege und Pausen, mindestens 1 Sekunde je Kampf. Fehlende Teilnahme zählt als 0 Schaden. Ein Run belegt keine vollständige Dungeon-Abdeckung.</p><p class="analysis-note">Zeitachse: erfasste Kämpfe chronologisch aneinandergereiht. Linien und Glättung beginnen an Kampfgrenzen neu und verwenden nur Beobachtungen innerhalb desselben Kampfes. Lücken werden nicht interpoliert.</p><p class="analysis-note">Skills mit gleicher ID und gleichem DoT/HoT-Typ werden summiert; Skill-DPS verwendet die gesamte gemeinsame Kampfzeit. Trefferquoten werden nach Trefferzahl gewichtet; unbekannte Merkmale bleiben unbekannt.</p></details>`;
   const scope = root.querySelector('[data-run-player]'), metric = root.querySelector('[data-run-metric]'), smooth = root.querySelector('[data-run-window]');
   const own = model.players.filter(p => p.is_self && (!character || p.name === character));
   if (own.length === 1) scope.value = own[0].key;
@@ -154,11 +155,12 @@ function renderRunAnalysis(root, run) {
     root.querySelector('[data-run-summary]').innerHTML = summary(num(selection.damage), 'Erfasster Schaden') +
       summary(num(selection.damage * 1000 / Math.max(1000, model.duration)), 'DPS über gemeinsame Kampfzeit') +
       summary(dur(model.duration), 'Erfasste Kampfzeit') + summary(model.windows.length, 'Erfasste Kämpfe');
-    root.querySelector('[data-run-coverage]').textContent = 'Zeitachse: erfasste Kämpfe chronologisch aneinandergereiht. Linien und Glättung beginnen an Kampfgrenzen neu. ' +
-      (missing ? `${missing} ${missing === 1 ? 'Kampf' : 'Kämpfe'} ohne auswertbaren Verlauf; Zeitfenster bleiben als Lücken erhalten. ` : '') +
+    // Only what limits this run is shown inline; the method sits under "So wird gerechnet".
+    root.querySelector('[data-run-coverage]').textContent = (missing ? `${missing} ${missing === 1 ? 'Kampf' : 'Kämpfe'} ohne auswertbaren Verlauf; Zeitfenster bleiben als Lücken erhalten. ` : '') +
       (partial ? `${partial} ${partial === 1 ? 'Kampf' : 'Kämpfe'} mit unvollständigen Verlaufsdaten. ` : '') +
       (model.windows.some(w => w.fight.numeric_limited) ? 'Parser-Zahlengrenze in mindestens einem Kampf; Messwerte können begrenzt sein. ' : '') +
-      (metric.value === 'total' ? 'Gesamtschaden enthält die gespeicherten Summen vorheriger Kämpfe; Lücken werden nicht interpoliert.' : smooth.value === '0' ? 'DPS je gespeichertem Beobachtungsintervall innerhalb desselben Kampfes; keine Glättung.' : '5s-Glättung verwendet ausschließlich Beobachtungen innerhalb desselben Kampfes und zusammenhängenden Zeitfensters.');
+      (metric.value === 'total' ? 'Gesamtschaden enthält die Summen vorheriger Kämpfe.' : '');
+    root.querySelector('[data-run-coverage]').hidden = !root.querySelector('[data-run-coverage]').textContent;
     const plot = root.querySelector('[data-run-plot]'); root.drawnWidth = root.clientWidth;
     plot.innerHTML = curveMarkup(samples, [{name: scope.value === 'group' ? 'Gesamte Gruppe' : label(selection.players[0]),
       color: 'var(--accent)', value: p => p[metric.value]}], {label: 'Dungeon-' + unit + '-Verlauf', unit,
@@ -187,9 +189,9 @@ function renderRunAnalysis(root, run) {
       show(lo);
     };
     if (updateSkills) {
-      root.querySelector('[data-run-skill-note]').textContent = `Skill-Aufzeichnungen: ${selection.skill_fights} von ${selection.player_fights} Spieler-Kampfteilnahmen. Skills mit gleicher ID und gleichem DoT/HoT-Typ werden summiert; Skill-DPS verwendet die gesamte gemeinsame Kampfzeit. ` +
-        (selection.skill_fights < selection.player_fights ? 'Fehlende Skilldaten bleiben unbekannt; die Skilltabelle kann weniger Schaden als die Gesamtsumme enthalten. ' : '') +
-        'Trefferquoten werden nach Trefferzahl gewichtet; unbekannte Merkmale bleiben unbekannt.';
+      const skillGap = selection.skill_fights < selection.player_fights;
+      root.querySelector('[data-run-skill-note]').textContent = skillGap ? `Skilldaten für ${selection.skill_fights} von ${selection.player_fights} Spieler-Kampfteilnahmen. Fehlende Skilldaten bleiben unbekannt; die Tabelle kann weniger Schaden als die Gesamtsumme enthalten.` : '';
+      root.querySelector('[data-run-skill-note]').hidden = !skillGap;
       root.querySelector('[data-run-skills]').innerHTML = skillTable(selection.skills);
       bindSkillTables(root);
     }

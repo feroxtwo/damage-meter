@@ -205,6 +205,53 @@ const server = http.createServer((req,res) => {
         assert.equal(await isolated.locator('#stats').evaluate(e=>e.classList.contains('active')),true);
         assert.equal(await isolated.locator('#communitySourcesCard').evaluate(d=>d.open),true);
         assert.equal(await isolated.locator('#communityFile').isVisible(),true);
+        // The detour into the statistics tab leads back to the same report.
+        await isolated.locator('#communityReturn').click();await isolated.locator('#fightDialog[open]').waitFor();
+        assert.equal(await isolated.evaluate(()=>currentFight.id),'f1');assert.equal(await isolated.locator('#live').evaluate(e=>e.classList.contains('active')),true);
+        assert.equal(await isolated.locator('#communityReturn').isHidden(),true);
+      } finally {await isolated.close();}
+    });
+    await check('everyday choices are remembered and need no extra click',async()=>{
+      const limitsBefore=new Set(fightLimits),kindsBefore=new Set(fightKinds);
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.goto(base+'/#runs');await isolated.locator('#runRows tr.click').first().waitFor({state:'attached'});
+        await isolated.locator('#showFightHistory').click();await isolated.locator('[data-open-fight]').first().waitFor();
+        // A whole fight row opens the report, also by keyboard.
+        await isolated.locator('#fightLibrary tr[data-open-fight]').first().focus();await isolated.keyboard.press('Enter');await isolated.locator('#fightDialog[open]').waitFor();
+        await openDisclosure(isolated,'#fightExportMenu');await isolated.selectOption('#fightExportFormat','csv');
+        assert.equal(await isolated.locator('#exportFight').textContent(),'Tabelle speichern');
+        await isolated.locator('#closeDialog').click();
+        await isolated.reload();await isolated.locator('#fightLibrary').waitFor();
+        assert.equal(await isolated.locator('#fightLibrary').isVisible(),true,'archive view survives a reload');
+        assert.equal(await isolated.locator('#showFightHistory').getAttribute('aria-pressed'),'true');
+        await isolated.evaluate(()=>openFight('f2'));await isolated.locator('#fightDialog[open]').waitFor();
+        assert.equal(await isolated.locator('#fightExportFormat').inputValue(),'csv','export format is remembered');
+        assert.equal(await isolated.locator('#exportFight').textContent(),'Tabelle speichern');
+        await openDisclosure(isolated,'#fightExportMenu');await isolated.selectOption('#fightExportFormat','text');assert.equal(await isolated.locator('#exportFight').textContent(),'Kopieren');
+        // Opening the comparison loads the previous attempt right away.
+        await openDisclosure(isolated,'#fightCompareTools');await isolated.waitForFunction(()=>document.querySelector('#comparison').textContent.trim().length>0);
+        assert.equal(await isolated.locator('#compareFight').inputValue(),'f1','previous attempt is preselected');
+        await isolated.locator('#closeDialog').click();
+        await isolated.locator('#showRunHistory').click();
+      } finally {await isolated.close();fightLimits=limitsBefore;fightKinds=kindsBefore;}
+    });
+    await check('a single recorded character is chosen automatically',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      await isolated.route('**/api/characters',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([characters[0]])}));
+      try {
+        await isolated.addInitScript(()=>localStorage.removeItem('a2m-character'));
+        await isolated.goto(base+'/#stats');await isolated.waitForFunction(()=>document.querySelector('#charSel').value==='FeroxTOO');
+      } finally {await isolated.close();}
+    });
+    await check('settings group overlay, measurement and recovery in one place',async()=>{
+      const isolated=await context.newPage();isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.goto(base+'/#settings');await isolated.locator('[data-k="scale"]').waitFor();
+        const overlayCard=isolated.locator('.settings-column').first();
+        for(const sel of ['[data-k="visible"]','[data-k="locked"]','#recoverOverlay','[data-k="scale"]','[data-k="theme"]'])assert.equal(await overlayCard.locator(sel).count(),1,sel+' sits with the overlay settings');
+        assert.equal(await overlayCard.locator('[data-k="idle_reset_seconds"]').count(),0);
+        assert.equal(await isolated.locator('#settingsStatus').isVisible(),true);
       } finally {await isolated.close();}
     });
     await check('run history shows ten runs per page and pages without skipping',async()=>{
@@ -279,13 +326,13 @@ const server = http.createServer((req,res) => {
       await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Aktion fehlgeschlagen'));
     });
     await page.getByRole('button',{name:'Einstellungen',exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='1.00×');
+    await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='1,00×');
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'overlay-settings.png'),fullPage:true});
     await check('settings writes stay ordered during rapid edits',async()=>{
       await page.locator('[data-k="scale"]').evaluate(i=>{i.value='1.5';i.dispatchEvent(new Event('input'));});
       await delay(210);
       await page.locator('[data-k="scale"]').evaluate(i=>{i.value='2';i.dispatchEvent(new Event('input'));});
-      await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='2.00×');
+      await page.waitForFunction(()=>document.querySelector('[data-for="scale"]').value==='2,00×');
       await delay(900);
       assert.equal(settings.scale,2); assert.equal(maxActiveWrites,1); assert.equal(writes.length,2);
     });
@@ -419,10 +466,14 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#exportFight').count(),1);
       assert.equal(await page.locator('#copyFight,#jsonFight,#csvFight,#pngFight,#chatFight').count(),0);
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'fight-analysis-first.png'),fullPage:true});
-      await page.locator('#jumpMySkills').click();await page.locator('.player-report[data-actor="1"] .skill-browser').first().waitFor();
+      // The group ranking is visible at once and the own analysis is already open, no extra click needed.
+      assert.ok(await page.locator('.report-ranking .player-report').count()>=2);
       assert.equal(await page.locator('.player-report[data-actor="1"]').evaluate(d=>d.open),true);
-      assert.equal(await page.evaluate(()=>document.activeElement.closest('.player-report').dataset.actor),'1');
-      await page.locator('#jumpDamageChart').click();assert.equal(await page.evaluate(()=>document.activeElement.id),'fightChartScope');
+      await page.locator('.player-report[data-actor="1"] .skill-browser').first().waitFor();
+      assert.equal(await page.locator('.player-report:not([data-actor="1"])').first().evaluate(d=>d.open),false);
+      assert.equal(await page.locator('#jumpMySkills,#jumpDamageChart').count(),0);
+      const order=await page.evaluate(()=>['.report-ranking','#fightChartScope','#fightPerformanceTools','#fightMeasurement'].map(s=>document.querySelector(s)).map((e,i,a)=>i?Boolean(a[i-1].compareDocumentPosition(e)&Node.DOCUMENT_POSITION_FOLLOWING):true));
+      assert.deepEqual(order,[true,true,true,true],'ranking, chart, coach, measurement in reading order');
       await openDisclosure(page,'#fightExportMenu');await page.selectOption('#fightExportFormat','chat');await page.locator('#exportFight').click();
       const text=await page.evaluate(()=>window.copiedRanking);assert.equal(text.includes('\n'),false);assert.ok(!text.includes('Moon'));
       await page.selectOption('#fightExportFormat','csv');assert.match(await page.locator('#fightExportHint').textContent(),/Tabelle/);
@@ -584,8 +635,8 @@ const server = http.createServer((req,res) => {
         const html=svgCurve(points,p=>p.v,'large test');const d=new DOMParser().parseFromString(html,'text/html');
         return (d.querySelector('path[stroke-width="2"]').getAttribute('d').match(/[ML]/g)||[]).length;
       });assert.ok(count<=601);
-      await page.evaluate(()=>openFight('f1'));assert.equal(await page.locator('.player-analysis .skill-browser').count(),0);
-      await page.locator('.player-report summary').first().click();await page.locator('.player-analysis .skill-browser').first().waitFor();
+      await page.evaluate(()=>openFight('f1'));assert.equal(await page.locator('.player-report:not([data-actor="1"]) .player-analysis .skill-browser').count(),0,'other players render lazily');
+      await page.locator('.player-report:not([data-actor="1"]) summary').first().click();await page.locator('.player-report:not([data-actor="1"]) .player-analysis .skill-browser').first().waitFor();
       if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'skill-details.png'),fullPage:true});
       await page.locator('#closeDialog').click();
       for(const theme of ['midnight','aether','ember']) {
@@ -692,7 +743,7 @@ const server = http.createServer((req,res) => {
       await isolated.route('**/api/runs/*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...run,fights:full.fights,totals:first.players})}));
       await isolated.route('**/api/runs/*/analysis',async route=>{const id=Number(new URL(route.request().url()).pathname.split('/')[3]);if(slow&&id===1)await delay(350);await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(id===2?{...run,fights:[]}:full)});});
       try {
-        await isolated.goto(base+'/#runs');await isolated.locator('#runRows tr.click').first().waitFor();await isolated.locator('#runRows tr.click').first().click();
+        await isolated.goto(base+'/#runs');await isolated.locator('#showRunHistory').click();await isolated.locator('#runRows tr.click').first().waitFor();await isolated.locator('#runRows tr.click').first().click();
         await isolated.locator('[data-run-summary]').waitFor();assert.equal(await isolated.locator('#fightLibrary').isVisible(),false);assert.match(await isolated.locator('[data-run-summary]').textContent(),/14,00M/);
         assert.equal(await isolated.locator('[data-run-skills] tbody tr').count(),4);assert.match(await isolated.locator('[data-run-skill-note]').textContent(),/2 von 3/);
         assert.match(await isolated.locator('[data-run-coverage]').textContent(),/1 Kampf ohne auswertbaren Verlauf/);
@@ -896,7 +947,8 @@ const server = http.createServer((req,res) => {
       await page.evaluate(()=>openFight('insight'));await page.locator('[data-curve-peak]').waitFor();
       assert.match(await page.locator('.fight-story').textContent(),/200.*5s-Fenster.*100,0%/);
       assert.match(await page.locator('.fight-story .story-intro').textContent(),/200 DPS.*Rang 2 von 2.*47,6%/);
-      assert.ok(await page.evaluate(()=>document.querySelector('.fight-story').compareDocumentPosition(document.querySelector('.fight-tools'))&Node.DOCUMENT_POSITION_FOLLOWING),'story leads the report before export tools');
+      assert.ok(await page.evaluate(()=>document.querySelector('.fight-story').compareDocumentPosition(document.querySelector('.report-ranking'))&Node.DOCUMENT_POSITION_FOLLOWING),'story leads the report before the group ranking');
+      assert.equal(await page.locator('#fightExportMenu').evaluate(d=>d.open),false,'export stays a compact action in the header');
       await page.locator('[data-story-peak]').click();assert.equal(await page.locator('#fightChartScope').inputValue(),'1');assert.equal(await page.locator('[data-curve-highlight]').count(),1);
       // Moving the pointer over the chart or resizing must not silently drop the marked window.
       await page.locator('[data-curve-plot] .curve-hit').hover({position:{x:40,y:40}});assert.equal(await page.locator('[data-curve-highlight]').count(),1);

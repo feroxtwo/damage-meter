@@ -1209,9 +1209,14 @@ impl Db {
         let more = rows.len() as i64 > s.limit;
         rows.truncate(s.limit.max(0) as usize);
         for r in &mut rows {
-            r["difficulty"] = json!(names::dungeon_difficulty(
-                r["dungeon_id"].as_i64().unwrap_or(0) as i32
-            ));
+            let dungeon = r["dungeon_id"].as_i64().unwrap_or(0) as i32;
+            r["difficulty"] = json!(names::dungeon_difficulty(dungeon));
+            // Where the fight happened, for the history list; null in the open world.
+            r["dungeon_name"] = json!(if dungeon > 0 {
+                names::dungeon_name(dungeon)
+            } else {
+                None
+            });
         }
         Ok(json!({"fights":rows,"more":more}))
     }
@@ -1775,7 +1780,7 @@ impl Db {
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
         let fights: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM fights f WHERE is_train = 0 AND (?1 = '' OR EXISTS
+            "SELECT COUNT(*) FROM fights f WHERE is_train = 0 AND NOT world_mob(f.mob_code) AND (?1 = '' OR EXISTS
                (SELECT 1 FROM fight_players fp WHERE fp.fight_id = f.id AND fp.is_self = 1 AND fp.name = ?1))",
             params![c],
             |r| r.get(0),
@@ -1797,7 +1802,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT f.boss_name, f.dungeon_id, fp.name, MAX(fp.dps) AS best_dps, fp.job, COUNT(*) AS attempts
              FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
-             WHERE fp.is_self = 1 AND f.is_train = 0 AND (?1 = '' OR fp.name = ?1)
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND NOT world_mob(f.mob_code) AND (?1 = '' OR fp.name = ?1)
              GROUP BY f.boss_name, f.dungeon_id, fp.name, fp.job ORDER BY best_dps DESC LIMIT 10",
         )?;
         let mut my_best = rows_to_json(&mut stmt, params![c])?;
@@ -1816,7 +1821,7 @@ impl Db {
         let per_day = rows_to_json(&mut stmt, params![c])?;
         let my_deaths: i64 = conn.query_row(
             "SELECT COALESCE(SUM(fp.died), 0) FROM fight_players fp JOIN fights f ON f.id = fp.fight_id
-             WHERE fp.is_self = 1 AND f.is_train = 0 AND (?1 = '' OR fp.name = ?1)",
+             WHERE fp.is_self = 1 AND f.is_train = 0 AND NOT world_mob(f.mob_code) AND (?1 = '' OR fp.name = ?1)",
             params![c],
             |r| r.get(0),
         )?;
@@ -3029,6 +3034,47 @@ mod tests {
         assert_eq!(ids(FightKind::Mob, 1, 0), (vec!["mob2".into()], true));
         assert_eq!(ids(FightKind::Mob, 1, 1), (vec!["mob1".into()], false));
         assert_eq!(ids(FightKind::All, 10, 0).0.len(), 3);
+    }
+
+    #[test]
+    fn world_mobs_stay_out_of_boss_summary_and_fights_name_their_dungeon() {
+        let db = Db::in_memory().unwrap();
+        let mut boss = record("boss", 1000, 1500);
+        boss.mob_code = 7;
+        boss.dungeon_id = 600072;
+        db.save_fights(&[boss], 600072, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        let mut mob = record("mob", 2000, 1500);
+        mob.mob_code = 8;
+        mob.boss_name = "Wolf".into();
+        mob.dungeon_id = 0;
+        db.save_fights(&[mob], 0, &["Me".into()], None, &HashSet::new())
+            .unwrap();
+        db.set_world_mob_check(|code| code == 8);
+        let summary = db.summary("").unwrap();
+        assert_eq!(summary["fights"], 1);
+        let best = summary["my_best"].as_array().unwrap();
+        assert_eq!(best.len(), 1);
+        assert_eq!(best[0]["boss_name"], "Kargos");
+        let found = db
+            .search_fights(&FightSearch {
+                to: i64::MAX,
+                limit: 10,
+                ..Default::default()
+            })
+            .unwrap();
+        let place = |id: &str| {
+            found["fights"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|f| f["id"] == id)
+                .unwrap()["dungeon_name"]
+                .clone()
+        };
+        assert_eq!(place("boss"), json!(names::dungeon_name(600072)));
+        assert!(place("boss").is_string());
+        assert_eq!(place("mob"), Value::Null);
     }
     #[test]
     fn healing_only_actor_is_retained_and_old_records_are_readable() {

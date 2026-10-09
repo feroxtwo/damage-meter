@@ -19,7 +19,7 @@ Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich
 
 ## Kampfqualität & Performance Coach
 
-Der Kampfbericht ergänzt deine gespeicherten Messwerte um einen persönlichen **Performance Coach** mit Schadensaktivität aus kumulativen 500-ms-Beobachtungen, 5-Sekunden-Peak, DPS-Vergleich mit demselben Boss und derselben Schwierigkeit, Skillanteilen und dokumentierten Buff-Änderungen. Fehlende oder begrenzte Daten werden nicht durch Schätzwerte ersetzt.
+Der Kampfbericht ergänzt deine gespeicherten Messwerte um einen persönlichen **Performance Coach** mit aktiver Schadenszeit aus kumulativen 500-ms-Beobachtungen, 5-Sekunden-Peak, DPS-Vergleich mit demselben Boss und derselben Schwierigkeit, Skillanteilen und dokumentierten Buff-Änderungen. Fehlende oder begrenzte Daten werden nicht durch Schätzwerte ersetzt.
 
 Bei einer **Kampfpause** zeigt der Meter nach 3 Sekunden ohne Treffer am ausgewählten Ziel **0 aktuelle Schadens-DPS** im Browser und in beiden Overlays. Historischer Schaden und bisheriger Kampf-DPS bleiben erhalten; ein Leerlauf gilt nicht automatisch als Sieg oder Kampfabbruch. Der Parser verwendet die geprüfte A2Tools-Version 2.0.54 mit Fixes für fremde Bosse, Namen und DoT-Effekte. Der automatische destruktive Idle-Reset bleibt optional.
 
@@ -134,12 +134,12 @@ zeigt alle zusammen. Deine eigenen Charaktere zählen nie als Mitspieler.
 ### Schnell zur richtigen Auswertung
 
 - **Live:** aktueller Kampf; Spieler anklicken für dessen Skills.
-- **Verlauf → Dungeon-Runs:** Dungeon öffnen für Gesamtwerte, Skill-Summen und Schadensverlauf über den Run. **Zurück zu Dungeon-Runs** führt zur vorherigen Listenseite.
-- **Verlauf → Einzelkämpfe:** Bosse, Training und Welt-Mobs suchen und einen Kampfbericht öffnen. **Meine Skills** und **Schadensverlauf** springen direkt zur jeweiligen Auswertung.
-- **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und importierte Community-Referenzen. **Vergleichen** öffnet Kampf- und Spielervergleiche.
-- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Community-Dateien und Vergleichsregion stehen unter **Community-Daten und Vergleichsregion verwalten**.
+- **Verlauf → Dungeon-Runs:** Run öffnen: oben Gruppe und Bosse des Runs, darunter Gesamtwerte, Skill-Summen und Schadensverlauf. **Zurück zu Dungeon-Runs** führt zur vorherigen Listenseite. Die zuletzt gewählte Ansicht (Runs oder Einzelkämpfe) bleibt erhalten.
+- **Verlauf → Einzelkämpfe:** Bosse, Training und Welt-Mobs suchen (die Liste filtert beim Tippen) und per Klick auf die Zeile den Kampfbericht öffnen. Der Bericht zeigt zuerst die Gruppe als Rangliste; deine eigene Zeile ist mit deinen Skills schon aufgeklappt.
+- **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und importierte Community-Referenzen. **Vergleichen** lädt sofort den vorherigen Versuch und bietet den Spielervergleich. **Exportieren** merkt sich Format und Anonymisierung.
+- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Community-Dateien und Vergleichsregion stehen unter **Community-Daten verwalten**; aus dem Kampfbericht führt „← Zurück zum Kampfbericht“ wieder zurück.
 - **Skill-Katalog:** Namen und IDs nachschlagen; gemessene Skills stehen in Live und Verlauf.
-- **Einstellungen:** Overlay, Messung, Sprache und Profile. Änderungen werden automatisch gespeichert.
+- **Einstellungen:** links alles zum Overlay im Spiel (Sichtbarkeit, „Overlay zurückholen“, Größe, Inhalt, Aussehen), rechts Sprache, Messung, Profile, Diagnose und Updates. Änderungen werden automatisch gespeichert.
 
 ### Buffs, Debuffs und Mitschnitt
 

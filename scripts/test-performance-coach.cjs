@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../web/performance-coach.js'),'utf8');
-const ctx=vm.createContext({window:{},esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
+const ctx=vm.createContext({window:{},num:v=>(Number(v)/1000).toFixed(1).replace('.',',')+'K',date:v=>'Datum '+v,esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
   observedPeak:(f,id)=>f?.analytics?.partial?null:{dps:id===1?120:100},
   api:async()=>[],detailRequest:1});
 vm.runInContext(source,ctx);
@@ -28,4 +28,5 @@ ctx.g.mob_code=25;ctx.g.analytics.outcome='unknown';
 assert.equal(run('performanceCoachData(f,g).notes.some(n=>n.includes("Nicht beide"))'),true);
 ctx.f.players[0].skills[0].name='<img src=x>';
 assert.equal(run('coachView(performanceCoachData(f,g)).includes("<img")'),false);
-console.log('Performance coach: 13 checks passed');
+assert.match(run('coachView(performanceCoachData(f,g))'),/0,2K DPS/,'coach uses the dashboard number format');
+console.log('Performance coach: 14 checks passed');

@@ -85,18 +85,19 @@ function coachView(data) {
   const cell=(label,value,detail)=>'<div class="coach-cell"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(detail||'')+'</small></div>';
   const relative=data.match&&data.dps_delta!=null?coachPct(data.dps_delta):'Noch kein Vergleich';
   const row=[
-    cell('Eigene Kampf-DPS',coachMetric(data.own_dps),data.match?'Veränderung '+relative:'Erfasster Kampfwert'),
-    cell('Schadensaktivität',data.activity==null?'—':coachMetric(data.activity)+' %',
+    cell('Eigene Kampf-DPS',num(data.own_dps)+' DPS',data.match?'Veränderung '+relative:'Erfasster Kampfwert'),
+    cell('Aktive Schadenszeit',data.activity==null?'—':coachMetric(data.activity)+' %',
       data.activity_delta==null?'Nicht durchgehend beobachtet oder kein Vergleich':(data.activity_delta>=0?'+':'')+data.activity_delta.toFixed(1).replace('.',',')+' Prozentpunkte'),
-    cell('Beobachteter 5s-Peak',data.current_peak==null?'—':coachMetric(data.current_peak)+' DPS',
+    cell('Beobachteter 5s-Peak',data.current_peak==null?'—':num(data.current_peak)+' DPS',
       data.peak_delta==null?'Kein durchgehendes 5s-Vergleichsfenster':coachPct(data.peak_delta)+' zum vorigen'),
     cell('Stärkster Skill',data.top_skill?coachMetric(data.top_skill.share)+' %':'—',
       data.top_skill?data.top_skill.name+(data.top_skill.is_dot?' · DoT':''):'Keine belastbaren Skillanteile')
   ].join('');
   const buffs=data.buffs.length?'<p class="analysis-note">Beobachtete Buff-Veränderung: '+data.buffs.map(b=>esc(b.name)+' '+(b.delta>=0?'+':'')+b.delta.toFixed(1).replace('.',',')+' PP').join(' · ')+'</p>':'';
   const notes=(data.notes||[]).map(x=>esc(x)).join(' · ');
-  return '<div class="coach-grid">'+row+'</div>'+buffs+
-    '<p class="analysis-note">Beobachtete Schadensaktivität = Anteil der erfassten 500-ms-Intervalle mit positivem Schadenszuwachs, kein Cast-/Rotations- oder mechanisch garantierter Uptime-Wert. '+notes+'. Es wird keine Ursache behauptet.</p>';
+  const head='<div class="skill-index-head"><div><span class="eyebrow">Dein letzter Versuch</span><h3>'+(data.match&&data.predecessor_date?'Was hat sich seit '+esc(date(data.predecessor_date))+' verändert?':'Dein Kampf in Zahlen')+'</h3></div></div>';
+  return head+'<div class="coach-grid">'+row+'</div>'+buffs+
+    '<p class="analysis-note">Aktive Schadenszeit: Anteil der 500-ms-Abschnitte, in denen du Schaden gemacht hast. Das ist kein Cast- oder Rotationswert und nennt keine Ursache.'+(notes?' '+notes+'.':'')+'</p>';
 }
 async function fillPerformanceCoach(f,root,request) {
   const apply=previous=>{
