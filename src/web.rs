@@ -791,7 +791,8 @@ mod tests {
                 "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
                 "median_dps": 14500.0, "samples": 30
             }]
-        }).to_string();
+        })
+        .to_string();
         let blocked = app
             .clone()
             .oneshot(request(
