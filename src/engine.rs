@@ -853,9 +853,13 @@ impl Engine {
                         .is_some_and(|n| trusted.contains(n.trim()))
             }));
             // Healing-only party members may have no damage-context actor yet.
-            audience.extend(self.storage.get_nicknames().into_iter()
-                .filter(|(_, name)| trusted.contains(name.trim()))
-                .map(|(id, _)| id));
+            audience.extend(
+                self.storage
+                    .get_nicknames()
+                    .into_iter()
+                    .filter(|(_, name)| trusted.contains(name.trim()))
+                    .map(|(id, _)| id),
+            );
             audience.extend(
                 context
                     .actors
@@ -1840,8 +1844,12 @@ mod tests {
         e.replay_tick();
         assert!(e.save_fights(true));
         let fight = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
-        let healer = fight["players"].as_array().unwrap().iter()
-            .find(|p| p["actor_id"] == 2260).unwrap();
+        let healer = fight["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["actor_id"] == 2260)
+            .unwrap();
         assert_eq!(healer["damage"], 0);
         assert_eq!(healer["heal"], 500);
         a2tools_dps_meter_lib::clock::set_override(None);
