@@ -51,8 +51,16 @@ pub fn valid_region(value: &str) -> bool {
 pub fn valid_class(value: &str) -> bool {
     matches!(
         value,
-        "all" | "gladiator" | "templar" | "ranger" | "assassin" | "sorcerer"
-            | "cleric" | "elementalist" | "chanter" | "fighter"
+        "all"
+            | "gladiator"
+            | "templar"
+            | "ranger"
+            | "assassin"
+            | "sorcerer"
+            | "cleric"
+            | "elementalist"
+            | "chanter"
+            | "fighter"
     )
 }
 
@@ -214,7 +222,10 @@ mod tests {
         assert!(snapshot().validate().is_ok());
         let mut wrong = snapshot();
         wrong.source.rights_confirmed = false;
-        assert_eq!(wrong.validate().unwrap_err(), "rights_confirmation_required");
+        assert_eq!(
+            wrong.validate().unwrap_err(),
+            "rights_confirmation_required"
+        );
         let mut wrong = snapshot();
         wrong.source.id = "a2tools".into();
         assert_eq!(wrong.validate().unwrap_err(), "source_url_mismatch");

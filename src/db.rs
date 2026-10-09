@@ -1435,7 +1435,6 @@ impl Db {
         Ok(Some(result))
     }
 
-
     /// Replace one balance-period snapshot atomically, without affecting combat history.
     pub fn import_community(&self, snapshot: crate::community::CommunitySnapshot) -> Result<Value> {
         let mut conn = self.conn.lock();
@@ -1566,8 +1565,7 @@ impl Db {
         if reason.is_some() {
             return Ok(Some(response));
         }
-        let world_mob: bool =
-            conn.query_row("SELECT world_mob(?1)", params![mob], |r| r.get(0))?;
+        let world_mob: bool = conn.query_row("SELECT world_mob(?1)", params![mob], |r| r.get(0))?;
         if world_mob {
             response["reason"] = json!("not_boss");
             return Ok(Some(response));
@@ -1612,11 +1610,23 @@ impl Db {
                 continue;
             }
             row["score"] = json!(score);
-            row["scope"] = json!(if class == "all" { "all_classes" } else { "same_class" });
+            row["scope"] = json!(if class == "all" {
+                "all_classes"
+            } else {
+                "same_class"
+            });
             comparisons.push(row);
         }
-        response["status"] = json!(if comparisons.is_empty() { "insufficient" } else { "ready" });
-        response["reason"] = json!(if comparisons.is_empty() { Some("no_matching_reference") } else { None });
+        response["status"] = json!(if comparisons.is_empty() {
+            "insufficient"
+        } else {
+            "ready"
+        });
+        response["reason"] = json!(if comparisons.is_empty() {
+            Some("no_matching_reference")
+        } else {
+            None
+        });
         response["comparisons"] = json!(comparisons);
         Ok(Some(response))
     }
@@ -1753,7 +1763,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn community_references_import_and_match_exact_scope_and_period() {
         let db = Db::in_memory().unwrap();
@@ -1803,12 +1812,21 @@ mod tests {
             ]
         }))
         .unwrap();
-        assert_eq!(db.import_community(dataset.validate().unwrap()).unwrap()["imported"], 4);
-        let result = db.community_index("community-fight", "EU").unwrap().unwrap();
+        assert_eq!(
+            db.import_community(dataset.validate().unwrap()).unwrap()["imported"],
+            4
+        );
+        let result = db
+            .community_index("community-fight", "EU")
+            .unwrap()
+            .unwrap();
         assert_eq!(result["status"], "ready");
         assert_eq!(result["comparisons"].as_array().unwrap().len(), 2);
         assert_eq!(result["comparisons"][0]["score"], 200.0);
-        let empty = db.community_index("community-fight", "KR").unwrap().unwrap();
+        let empty = db
+            .community_index("community-fight", "KR")
+            .unwrap()
+            .unwrap();
         assert_eq!(empty["status"], "insufficient");
         assert_eq!(db.community_sources().unwrap()["imports"][0]["rows"], 4);
         assert!(db.community_index("missing", "EU").unwrap().is_none());
