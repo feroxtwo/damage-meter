@@ -323,6 +323,8 @@ const api = (path, opts = {}) => fetch(path, { signal: AbortSignal.timeout(6000)
 let latestLive = null;
 // Local artwork and display names only. No requests to third-party sites.
 function skillLanguage(){return settings?.skill_language||latestLive?.overlay?.skill_language||'de';}
+// No boss catalog for the instance: nothing to claim either way.
+function runOutcome(r){return r.ended_at==null?'läuft':r.outcome==='completed'?'Abgeschlossen':r.outcome==='incomplete'?'Abgebrochen / unvollständig':'';}
 function skillName(s={}){return s.names?.[skillLanguage()]||s.names?.en||s.names?.de||s.name||'#'+(s.code??s.id??'?');}
 function iconUrl(s={}){return /^\/assets\/icons\/[a-z0-9-]+\.webp$/.test(s.icon||'')?s.icon:'';}
 function skillLabel(s={}){const url=iconUrl(s);return `<span class="skill-label">${url?`<img class="game-icon" src="${url}" alt="" loading="lazy">`:'<span class="unknown-skill" aria-hidden="true" title="Symbol nicht verfügbar"></span>'}<span>${esc(skillName(s))}</span></span>`;}
@@ -527,7 +529,7 @@ async function loadRuns(reset) {
   sel.innerHTML = '<option value="">Alle Dungeons</option>' + data.dungeons.map(d => `<option>${esc(d)}</option>`).join('');
   sel.value = cur;
   const html = data.runs.map(r => `<tr class="click" data-id="${r.id}">
-    <td class="run-date">${date(r.started_at)}</td><td class="run-name">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}<b>${esc(r.dungeon_name)}</b>${badge(r.difficulty)}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</td>
+    <td class="run-date">${date(r.started_at)}</td><td class="run-name">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}<b>${esc(r.dungeon_name)}</b>${badge(r.difficulty)}${r.ended_at==null?'':badge(runOutcome(r))}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ''}</td>
     <td class="num" data-label="Dauer">${r.ended_at ? dur(r.ended_at - r.started_at) : '<span style="color:var(--green)">läuft</span>'}</td>
     <td class="num" data-label="Kämpfe">${r.fights}</td><td class="run-group">${r.members.map(chip).join('')}</td><td class="num run-dps" data-label="Meine Ø DPS">${r.my_dps ? num(r.my_dps) : '–'}</td></tr>`).join('');
   $('#runRows').innerHTML = html || `<tr><td colspan="6" class="empty">${$('#runFavorites').checked ? 'Noch keine Favoriten. Markiere Runs mit dem Stern.' : 'Noch keine Runs gespeichert. Betritt eine Expedition mit laufendem Meter.'}</td></tr>`;
@@ -564,7 +566,7 @@ async function openRun(id) {
   el.innerHTML = `<button class="btn back" id="backBtn">← Zurück zu Dungeon-Runs</button>
   <div class="card run-head"><div class="row" style="justify-content:space-between">
     <div><div style="font-size:20px;font-weight:700">${favButton(r.favorite, 'data-fav-run', r.id, r.dungeon_name)}${esc(r.dungeon_name)}${badge(r.difficulty)}</div>
-    <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) : 'läuft'} · ${r.fights.length} erfasste Kämpfe${r.character ? ' · ' + esc(r.character) : ''}${r.note ? ' · ' + esc(r.note) : ''}</div></div>
+    <div class="muted">${date(r.started_at)} · ${r.ended_at ? dur(r.ended_at - r.started_at) + (runOutcome(r) ? ' · ' + runOutcome(r) : '') : 'läuft'} · ${r.fights.length} erfasste Kämpfe${r.character ? ' · ' + esc(r.character) : ''}${r.note ? ' · ' + esc(r.note) : ''}</div></div>
     <button class="btn primary" id="openRunTotals">Gesamtstatistik · Skills &amp; Verlauf ↓</button></div></div>
   <div class="run-overview">
     <div class="card"><h2 title="${esc(r.totals_scope||'Schaden und DPS über gespeicherte Kämpfe.')}">Gruppe über den Run</h2><p class="analysis-note">Schaden · DPS über die gemeinsame Kampfzeit · Anteil</p>${bars(r.totals, { empty: 'Keine Kampfdaten in diesem Run.' })}</div>

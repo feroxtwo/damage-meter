@@ -60,7 +60,13 @@ pub fn metadata(code: i64) -> Option<Value> {
     if de.is_none() && en.is_none() {
         return None;
     }
-    Some(json!({"names":{"de":de,"en":en},"icon":null}))
+    let family_icon = (code >= 10_000_000)
+        .then(|| BY_ID.get(&(code - code % 10_000)))
+        .flatten()
+        .and_then(|s| s.get("icon"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    Some(json!({"names":{"de":de,"en":en},"icon":family_icon}))
 }
 /// Enrich only skill/effect display rows. Raw names stay available in storage;
 /// recursively applying metadata to a saved report leaves every number intact.
@@ -127,6 +133,14 @@ fn all() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ranked_effect_keeps_its_own_name_and_id_with_the_family_icon() {
+        let m = metadata(11340028).unwrap();
+        assert_eq!(m["names"]["en"], "Predation");
+        assert_eq!(m["icon"], "/assets/icons/skill-11340000.webp");
+        assert!(m.get("skill_id").is_none());
+    }
+
     #[test]
     fn catalog_assets_and_aliases_are_valid() {
         assert_eq!(CATALOG["skills"].as_array().unwrap().len(), 364);

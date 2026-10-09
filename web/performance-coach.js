@@ -34,7 +34,7 @@ function coachTopSkill(p) {
   const valid=(p?.skills||[]).filter(s=>Number(s.damage)>0);
   const top=valid.reduce((a,b)=>Number(b.damage)>Number(a?.damage||0)?b:a,null);
   if(!top||Number(p.damage)<=0)return null;
-  return {code:top.code,is_dot:!!top.is_dot,name:top.name||('#'+top.code),
+  return {code:top.code,is_dot:!!top.is_dot,name:top.name||('#'+top.code),names:top.names,icon:top.icon,
     share:100*Number(top.damage)/Number(p.damage)};
 }
 function coachBuffChanges(now,prior) {
@@ -90,8 +90,7 @@ function coachView(data) {
       data.activity_delta==null?'Nicht durchgehend beobachtet oder kein Vergleich':(data.activity_delta>=0?'+':'')+data.activity_delta.toFixed(1).replace('.',',')+' Prozentpunkte'),
     cell('Beobachteter 5s-Peak',data.current_peak==null?'—':num(data.current_peak)+' DPS',
       data.peak_delta==null?'Kein durchgehendes 5s-Vergleichsfenster':coachPct(data.peak_delta)+' zum vorigen'),
-    cell('Stärkster Skill',data.top_skill?coachMetric(data.top_skill.share)+' %':'—',
-      data.top_skill?data.top_skill.name+(data.top_skill.is_dot?' · DoT':''):'Keine belastbaren Skillanteile')
+    '<div class="coach-cell"><span>Stärkster Skill</span><strong>'+esc(data.top_skill?coachMetric(data.top_skill.share)+' %':'—')+'</strong><small>'+(data.top_skill?skillLabel(data.top_skill)+(data.top_skill.is_dot?' · DoT':''):'Keine belastbaren Skillanteile')+'</small></div>'
   ].join('');
   const buffs=data.buffs.length?'<p class="analysis-note">Beobachtete Buff-Veränderung: '+data.buffs.map(b=>esc(b.name)+' '+(b.delta>=0?'+':'')+b.delta.toFixed(1).replace('.',',')+' PP').join(' · ')+'</p>':'';
   const notes=(data.notes||[]).map(x=>esc(x)).join(' · ');

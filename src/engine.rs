@@ -310,6 +310,9 @@ pub struct Engine {
     /// Your group from the game's own group list, you included; empty when
     /// you play alone. See `instances::group_list`.
     group: RwLock<HashSet<String>>,
+    group_known: AtomicBool,
+    party_ended: AtomicBool,
+    audiences: Mutex<HashMap<(i32, i64), HashSet<i32>>>,
     target_mode: RwLock<String>,
     pub buffs: BuffTracker,
     record_wanted: AtomicBool,
@@ -435,6 +438,9 @@ impl Engine {
             instance_entry_ms: AtomicI64::new(i64::MIN),
             last_map: AtomicI32::new(0),
             group: RwLock::new(HashSet::new()),
+            group_known: AtomicBool::new(false),
+            party_ended: AtomicBool::new(false),
+            audiences: Mutex::new(HashMap::new()),
             target_mode: RwLock::new(target_mode),
             buffs: BuffTracker::default(),
             record_wanted: AtomicBool::new(false),
@@ -520,6 +526,7 @@ impl Engine {
         self.process_reset();
         let (dps, context) = self.snapshot();
         self.observe(&context);
+        self.track_run(now_ms());
         let live = self.build_live(&dps, &context);
         self.automatic_reset(&live, &context);
         *self.live.write() = live;
@@ -527,8 +534,59 @@ impl Engine {
     /// One consistent parser view per heartbeat, shared by the curve, the live
     /// numbers and the reset monitor instead of three separate snapshots.
     fn snapshot(&self) -> (DpsData, DetailsContext) {
+        self.sync_group();
+        let names = self.storage.get_nicknames();
+        let local_named = |me: &str| {
+            self.storage
+                .local_player_id()
+                .and_then(|id| names.get(&(id as i32)))
+                .is_some_and(|name| name.trim() == me.trim())
+        };
+        // Rebind only when the current id no longer carries your name, so a
+        // normal tick does not copy every target's combat data.
+        if let Some(me) = self.storage.local_profile().name
+            && self.storage.local_identity_from_self_record()
+            && !local_named(&me)
+        {
+            let newest = self
+                .storage
+                .get_combat_snapshot_light()
+                .values()
+                .flat_map(|t| t.actors.iter())
+                .filter(|(id, _)| names.get(id).is_some_and(|name| name.trim() == me.trim()))
+                .max_by_key(|(_, actor)| actor.last_damage_time)
+                .map(|(&id, _)| id);
+            if let Some(id) = newest {
+                self.storage
+                    .set_local_identity_from_game(i64::from(id), Some(me));
+            }
+        }
         let mut calc = self.calc.lock();
-        (calc.get_dps(), calc.get_details_context())
+        let mut dps = calc.get_dps();
+        let context = calc.get_details_context();
+        let local = self.storage.local_player_id().map(|id| id as i32);
+        let newer_own_target = local.is_some_and(|id| {
+            context.targets.iter().any(|t| {
+                t.target_id != dps.target_id
+                    && t.actor_damage.contains_key(&id)
+                    && t.last_damage_time
+                        > context
+                            .targets
+                            .iter()
+                            .find(|t| t.target_id == dps.target_id)
+                            .map_or(0, |t| t.last_damage_time)
+            })
+        });
+        let mode = self.target_mode.read().clone();
+        if local.is_some()
+            && (mode == "bossTargets" && dps.map.is_empty()
+                || self.storage.is_entity_dead(dps.target_id) && newer_own_target)
+        {
+            calc.set_target_selection_mode("lastHitByMe");
+            dps = calc.get_dps();
+            calc.set_target_selection_mode(&mode);
+        }
+        (dps, context)
     }
     pub fn replay_report(&self) -> Value {
         self.save_fights(true);
@@ -537,7 +595,7 @@ impl Engine {
             let d=self.calc.lock().get_target_details(t.target_id,None);
             json!({"target":t,"details":d,"analytics":self.series.lock().get(&(t.target_id,d.start_time)).map(|s|s.json())})
         }).collect();
-        json!({"live":self.live(),"context":c,"targets":targets,"parser_rev":crate::updates::PARSER_REV})
+        json!({"live":self.live(),"context":c,"targets":targets,"parser_rev":crate::updates::PARSER_REV,"identity":{"local_id":self.storage.local_player_id(),"scope_leader":self.storage.party_scope_leader()},"saved_runs":self.db.list_runs(100,0,None,"",false).ok()})
     }
     pub fn set_capture_error(&self, error: Option<String>) {
         self.status.write().error = error;
@@ -666,6 +724,7 @@ impl Engine {
         if !is_open_world_map(map_id) {
             self.instance_load_ms.fetch_max(at_ms, Ordering::Relaxed);
             if previous != map_id {
+                self.party_ended.store(false, Ordering::Relaxed);
                 self.instance_entry_ms.fetch_max(at_ms, Ordering::Relaxed);
             }
         }
@@ -679,13 +738,15 @@ impl Engine {
             self.note_map_load(map, at_ms);
         } else if let Some(names) = crate::instances::group_list(payload).filter(|n| !n.is_empty())
         {
-            // The list always names you; only you left: the group is over.
-            let names: HashSet<String> = if names.len() > 1 {
-                names.into_iter().collect()
-            } else {
-                HashSet::new()
-            };
-            *self.group.write() = names;
+            let next: HashSet<String> = names.into_iter().collect();
+            let was_party = self.group.read().len() >= 2;
+            if was_party && next.len() <= 1 {
+                self.party_ended.store(true, Ordering::Relaxed);
+            } else if next.len() >= 2 {
+                self.party_ended.store(false, Ordering::Relaxed);
+            }
+            *self.group.write() = next;
+            self.group_known.store(true, Ordering::Relaxed);
         }
     }
 
@@ -783,17 +844,47 @@ impl Engine {
     fn observe(&self, context: &DetailsContext) {
         let now = now_ms();
         let mut series = self.series.lock();
+        let trusted = self.trusted_names();
+        let local = self.storage.local_player_id().map(|id| id as i32);
+        let mut audiences = self.audiences.lock();
+        let open_world_others =
+            self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others;
+        let trusted_ids: Vec<i32> = self
+            .storage
+            .get_nicknames()
+            .into_iter()
+            .filter(|(_, name)| trusted.contains(name.trim()))
+            .map(|(id, _)| id)
+            .collect();
         for target in &context.targets {
             if now - target.last_damage_time > 10_000 {
                 continue;
             }
             let start = target.last_damage_time - target.battle_time;
+            let audience = audiences.entry((target.target_id, start)).or_default();
+            audience.extend(
+                target
+                    .actor_damage
+                    .keys()
+                    .copied()
+                    .filter(|id| open_world_others || Some(*id) == local),
+            );
+            // Also covers healing-only party members with no damage-context actor yet.
+            audience.extend(trusted_ids.iter().copied());
+            audience.extend(
+                context
+                    .actors
+                    .iter()
+                    .filter(|a| Some(a.actor_id) == local || trusted.contains(a.nickname.trim()))
+                    .map(|a| a.actor_id),
+            );
             let entry = series.entry((target.target_id, start)).or_default();
             entry.observe(
                 now - start,
                 target
                     .actor_damage
                     .iter()
+                    .filter(|(id, _)| audience.contains(id))
                     .map(|(&id, &d)| (id, i64::from(d)))
                     .collect(),
             );
@@ -803,6 +894,7 @@ impl Engine {
             keys.sort_by_key(|k| k.1);
             for k in keys.into_iter().take(series.len() - 256) {
                 series.remove(&k);
+                audiences.remove(&k);
             }
         }
         crate::analytics::bound_series(&mut series);
@@ -859,6 +951,46 @@ impl Engine {
                 let _ = self.db.set_meta("last_training", &t.to_string());
             }
         }
+    }
+
+    fn trusted_names(&self) -> HashSet<String> {
+        let mut names = if self.group_known.load(Ordering::Relaxed) {
+            self.group.read().clone()
+        } else {
+            self.storage.get_party_members().into_keys().collect()
+        };
+        names.extend(self.self_names());
+        names
+    }
+
+    fn sync_group(&self) {
+        if !self.group_known.load(Ordering::Relaxed) {
+            return;
+        }
+        let group = self.group.read().clone();
+        // The upstream complete-solo setter flushes combat and clears the
+        // instance. Membership filtering belongs here; preserve the last fight.
+        if group.len() <= 1 {
+            return;
+        }
+        let roster = self.storage.get_party_members();
+        if roster.keys().cloned().collect::<HashSet<_>>() == group {
+            return;
+        }
+        let members = group
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let member = roster.get(&name).cloned().unwrap_or(
+                    a2tools_dps_meter_lib::combat::data_storage::PartyMember {
+                        slot: (i + 1) as u8,
+                        ..Default::default()
+                    },
+                );
+                (name, member)
+            })
+            .collect();
+        self.storage.set_party_roster(members, true);
     }
 
     fn self_names(&self) -> Vec<String> {
@@ -1026,6 +1158,34 @@ impl Engine {
                 }
             }
         }
+        let audiences = self.audiences.lock();
+        for record in &mut records {
+            if let Some(allowed) = audiences.get(&(record.target_id, record.start_time_ms)) {
+                let before = record.details.skills.len();
+                record.actors.retain(|a| allowed.contains(&a.actor_id));
+                record
+                    .details
+                    .skills
+                    .retain(|skill| allowed.contains(&skill.actor_id));
+                record
+                    .details
+                    .heal_skills
+                    .retain(|skill| allowed.contains(&skill.actor_id));
+                // Keep the parser's total unless someone was filtered out.
+                if record.details.skills.len() != before {
+                    record.total_damage = record
+                        .details
+                        .skills
+                        .iter()
+                        .map(|s| i64::from(s.dmg))
+                        .sum::<i64>()
+                        .clamp(0, i64::from(i32::MAX))
+                        as i32;
+                }
+            }
+        }
+        drop(audiences);
+        records.retain(|r| !r.details.skills.is_empty() || !r.details.heal_skills.is_empty());
         // Leaving an instance clears its id before the last fights are
         // saved (the open-world load comes first); they still belong to the
         // instance the run was in.
@@ -1120,7 +1280,7 @@ impl Engine {
     /// Follow instance entries and exits, and record who was in the party.
     fn track_run(&self, now: i64) {
         self.sync_open_world();
-        let dungeon = if self.in_open_world() {
+        let dungeon = if self.in_open_world() || self.party_ended.load(Ordering::Relaxed) {
             0
         } else {
             self.storage.current_dungeon_id()
@@ -1231,9 +1391,11 @@ impl Engine {
             let _ = self.db.set_run_character(run_id, name, profile.server_id);
         }
 
+        let trusted = self.trusted_names();
         let party = self.storage.get_party_members();
         let mut members: Vec<Member> = party
             .into_iter()
+            .filter(|(name, _)| trusted.contains(name.trim()))
             .map(|(name, m)| Member {
                 is_self: me.as_deref() == Some(name.as_str()),
                 job: m
@@ -1397,15 +1559,15 @@ impl Engine {
         } else {
             self.storage.current_dungeon_id()
         };
-        if dungeon_id <= 0 && !self.overlay.read().open_world_others {
+        if dungeon_id > 0 || !self.overlay.read().open_world_others {
+            // Until you are known (meter started mid-session in the open world,
+            // no group), filtering would empty the meter; show everyone then.
             let known = me.is_some() || self.storage.local_player_id().is_some();
-            let mut party: HashSet<String> = self.storage.get_party_members().into_keys().collect();
-            party.extend(self.group.read().iter().cloned());
-            keep_own_rows(&mut rows, known, &party);
+            keep_own_rows(&mut rows, known, &self.trusted_names());
         }
         rows.sort_by(|a, b| b.damage.total_cmp(&a.damage));
         let total: f64 = rows.iter().fold(0.0, |acc, r| acc + r.damage);
-        if total > 0.0 && rows.iter().all(|r| r.share <= 0.0) {
+        if total > 0.0 {
             for r in &mut rows {
                 r.share = r.damage * 100.0 / total;
             }
@@ -1666,6 +1828,52 @@ pub fn metric_value(row: &LiveRow, metric: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dungeon_membership_and_dead_target_switch_do_not_reset_damage() {
+        let e = short_attempt();
+        e.storage.set_current_dungeon(600063);
+        *e.group.write() = HashSet::from(["Me".into()]);
+        e.group_known.store(true, Ordering::Relaxed);
+        hit(&e, 2500, 3000, "Stranger", 50000);
+        e.replay_tick();
+        assert_eq!(e.live().rows.len(), 1);
+        assert_eq!(e.live().total_damage, 300.0);
+        e.storage.mark_entity_dead(50000);
+        e.replay_tick();
+        assert_eq!(e.live().total_damage, 300.0);
+        hit(&e, 3000, 2259, "Me", 50001);
+        e.replay_tick();
+        assert_eq!(e.live().target_id, 50001);
+        assert_eq!(e.live().total_damage, 100.0);
+        assert!(e.save_fights(true));
+        let old = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        assert_eq!(old["players"].as_array().unwrap().len(), 1);
+        assert_eq!(old["total_damage"], 300);
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
+    fn group_healing_without_damage_is_preserved_in_history() {
+        let e = short_attempt();
+        e.storage.set_current_dungeon(600063);
+        *e.group.write() = HashSet::from(["Me".into(), "Healer".into()]);
+        e.group_known.store(true, Ordering::Relaxed);
+        e.storage.append_nickname_authoritative(2260, "Healer");
+        e.storage.append_heal(2260, 17010000, 500, false);
+        e.replay_tick();
+        assert!(e.save_fights(true));
+        let fight = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        let healer = fight["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["actor_id"] == 2260)
+            .unwrap();
+        assert_eq!(healer["damage"], 0);
+        assert_eq!(healer["heal"], 500);
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
     #[test]
     fn combat_activity_distinguishes_pauses_from_finished_encounters() {
         assert_eq!(combat_activity(15_000, 0, 0.0, None), ("ready", None));
@@ -2215,7 +2423,7 @@ mod tests {
             ],
             true,
         );
-        assert_eq!(names(&e), ["Friend", "Me"]);
+        assert_eq!(names(&e), ["Me"]); // authoritative solo beats a stale roster
         e.modify_overlay(|s| s.open_world_others = true).unwrap();
         assert_eq!(names(&e), ["Friend", "Me", "Stranger"]);
         a2tools_dps_meter_lib::clock::set_override(None);

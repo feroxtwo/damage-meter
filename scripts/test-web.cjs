@@ -164,6 +164,7 @@ const server = http.createServer((req,res) => {
         const text=await isolated.locator('#performanceCoachPanel').textContent();
         assert.match(text,/Eigene Kampf-DPS/);
         assert.match(text,/Stärkster Skill/);
+        assert.equal(await isolated.locator('#performanceCoachPanel .game-icon').count(),1);
         assert.match(text,/kein Cast-/i);
         assert.doesNotMatch(text,/falsche Rotation/i);
       } finally {await isolated.close();}

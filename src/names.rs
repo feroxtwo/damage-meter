@@ -1,9 +1,10 @@
 //! Display names: classes and dungeons.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
 
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct ClassInfo {
@@ -98,15 +99,48 @@ pub fn dungeon_activity(id: i32) -> Option<&'static str> {
     DUNGEONS.get(&id)?.activity.as_deref()
 }
 
-/// "Erkundung", "Normal", "Schwer" or "Stufe n". The last digit of an instance
-/// id is its tier; dungeons with nine ids have levels instead.
+// Index once: live ticks and history queries must not rescan the NPC catalog.
+// One boss can have several NPC codes (Ultimate Berk has four in Krao Cave,
+// Kaldrix two in the raid); a run meets only one of them, so codes are grouped
+// by name.
+type BossIndex = HashMap<i32, (BTreeMap<String, Vec<i32>>, HashSet<String>)>;
+static BOSS_METADATA: LazyLock<BossIndex> = LazyLock::new(|| {
+    let catalog: Value =
+        serde_json::from_str(include_str!("../data/i18n/npcs/en.json")).expect("NPC catalog");
+    let mut index: BossIndex = HashMap::new();
+    for (code, npc) in catalog.as_object().unwrap() {
+        if npc["isBoss"] != true {
+            continue;
+        }
+        let (Some(id), Ok(code)) = (npc["dungeonId"].as_i64(), code.parse::<i32>()) else {
+            continue;
+        };
+        let entry = index.entry(id as i32).or_default();
+        let name = npc["name"].as_str().unwrap_or_default().to_string();
+        entry.0.entry(name).or_default().push(code);
+        if let Some(tier) = npc["tier"].as_str() {
+            entry.1.insert(tier.to_string());
+        }
+    }
+    index
+});
+
+/// The bosses a run must kill, each as the NPC codes it can appear as.
+pub fn dungeon_bosses(id: i32) -> Vec<Vec<i32>> {
+    BOSS_METADATA
+        .get(&id)
+        .map(|entry| entry.0.values().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Use explicit NPC tiers for transcendence; map ID suffixes are not stages.
 pub fn dungeon_difficulty(id: i32) -> Option<String> {
     let entry = DUNGEONS.get(&id)?;
     let n = id % 10;
-    let group = id - n;
-    let size = DUNGEONS.keys().filter(|k| *k - *k % 10 == group).count();
-    if size >= 9 {
-        return Some(format!("Stufe {n}"));
+    if entry.activity.as_deref() == Some("transcendence") {
+        let tiers = &BOSS_METADATA.get(&id)?.1;
+        return (tiers.len() == 1)
+            .then(|| tiers.iter().next().unwrap().replace("Stage ", "Stufe "));
     }
     let key = entry.difficulty.clone().or_else(|| {
         match n {
@@ -178,7 +212,12 @@ mod tests {
     fn dungeon_labels() {
         assert_eq!(dungeon_label(600093), "Ferocious Horn Den (Schwer)");
         assert_eq!(dungeon_label(600001), "Krao Cave (Erkundung)");
-        assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 5)");
+        assert_eq!(dungeon_label(600055), "Deus Research Base (Stufe 2)");
+        assert_eq!(dungeon_difficulty(600063).as_deref(), Some("Stufe 1"));
+        assert_eq!(dungeon_bosses(600063).len(), 3);
+        // Ultimate Berk has four codes; one kill of any of them counts.
+        assert_eq!(dungeon_bosses(600001).len(), 3);
+        assert!(dungeon_bosses(600001).iter().any(|b| b.len() == 4));
         assert_eq!(dungeon_label(0), "Offene Welt");
         assert_eq!(dungeon_label(123), "Instanz 123");
         assert_eq!(dungeon_activity(600093), Some("expedition"));
