@@ -74,6 +74,23 @@ function peakSparkline(f,actor,peak) {
   const step=Math.max(1,Math.ceil(samples.length/220)),pts=samples.filter((_,i)=>i%step===0||i===samples.length-1);
   return `<svg class="peak-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><rect class="peak-band" x="${x(peak.start)}" y="0" width="${Math.max(2,(peak.end-peak.start)/end*W).toFixed(1)}" height="${H}"/><path class="peak-line" d="M${pts.map(p=>x(p.ms)+','+y(p.dps)).join(' L')}"/></svg>`;
 }
+// Only observed local peers, never an online percentile or global ladder.
+function skillIndexPanel(data) {
+  if (!data) return '<p class="analysis-note">Kein Skill Index für diesen Kampf.</p>';
+  const notes={training:'Training ist nicht mit Bosskämpfen vergleichbar.',limited_data:'Schadensdaten sind unvollständig oder begrenzt.',unknown_boss:'Boss-ID fehlt.',short_fight:'Kampf dauert weniger als 10 Sekunden.',missing_cp:'Kampfkraft wurde nicht erfasst.',missing_dps:'DPS fehlen.',not_boss:'Kein bestätigter Bosskampf.',few_peers:'Nicht genug unabhängige Spieler mit ähnlicher Kampfkraft erfasst.'};
+  const group=(value,title)=>{
+    if (!value||value.status!=='ready')return '<div class="skill-index-group"><small>'+title+'</small><strong>—</strong><span>'+(value?.peer_count||0)+' von 5 benötigten Vergleichsspielern</span></div>';
+    const score=value.score,delta=score-100;
+    return '<div class="skill-index-group"><small>'+title+'</small><strong class="'+(delta>=0?'compare-positive':'compare-negative')+'">'+score.toLocaleString('de-DE',{maximumFractionDigits:1})+'</strong><span>'+((delta>=0?'+':'')+delta.toFixed(1).replace('.',','))+' % zur Referenz · '+num(value.reference_dps)+' DPS · '+value.peer_count+' Spieler</span></div>';
+  };
+  return '<div class="skill-index-head"><div><span class="eyebrow">LOKALER SKILL INDEX</span><h3>Deine Leistung im Vergleich</h3></div><span>KP '+num(data.combat_power||0)+' · ±10.000</span></div><div class="skill-index-groups">'+group(data.overall,'Alle Klassen')+group(data.same_class,'Gleiche Klasse')+'</div><p class="analysis-note">'+(data.status==='ready'?'100 = Median der Vergleichsspieler. ':'')+(notes[data.reason]||'Median je unabhängigem Spieler, gleicher Boss, Schwierigkeit und ähnliches KP-Niveau. Keine globale Rangliste.')+' Daten bleiben auf deinem Gerät. Klassen, Gruppenzusammensetzung und Kampfbedingungen können Ergebnisse beeinflussen.</p>';
+}
+async function fillSkillIndex(id,root,request) {
+  try {
+    const data=await api('/api/fights/'+encodeURIComponent(id)+'/skill-index');
+    if(request===detailRequest&&root.isConnected)root.innerHTML=skillIndexPanel(data);
+  } catch { if(request===detailRequest&&root.isConnected)root.innerHTML='<p class="analysis-note">Skill Index derzeit nicht verfügbar.</p>'; }
+}
 function fightStory(f) {
   if(f.numeric_limited)return '';
   const me=f.players.find(p=>p.is_self),actor=me?.actor_id??null,peak=observedPeak(f,actor);
@@ -595,12 +612,14 @@ async function openFight(id) {
   $('#fightContent').innerHTML=`<p>${date(f.started_at)} · ${dur(f.duration_ms)} · ${num(f.total_damage)} Schaden</p>
     <p class="analysis-note">${f.numeric_limited?'Parser-Zahlengrenze erreicht; einzelne Skillwerte können begrenzt sein. <br>':''}${f.analytics?.effects_partial?'Effektdaten wegen Speichergrenzen unvollständig. <br>':''}${esc(f.healing_scope||'Erfasste Heilung. Keine Aussage über Overheal.')}<br>${f.analytics?`DPS-Verlauf: Beobachtung alle ${f.analytics.resolution_ms||500} ms${f.analytics.partial?' · unvollständige Daten':''}.`:'Keine zeitliche Schadensaufzeichnung vorhanden.'} Vollständigkeit vor Erfassungsbeginn unbekannt. Ergebnis: ${f.analytics?.outcome==='kill'?'Tod des Ziels erfasst':f.analytics?.outcome==='wipe'?'Wipe mit HP-Reset erkannt':'unbekannt'}${f.analytics?.end_reason?' · Abschluss: '+esc({manual:'manueller Reset',idle:'Leerlauf',wipe:'Wipe'}[f.analytics.end_reason]||f.analytics.end_reason):''}.</p>
     ${fightStory(f)}
+    <div id="skillIndexPanel" class="skill-index-panel" aria-label="Lokaler Skill Index"><p class="analysis-note">Skill Index wird geladen …</p></div>
     <div class="row fight-tools"><select id="exportScope" aria-label="Export für">${exportScopeOptions(f)}</select><button class="btn" id="copyFight">Kopieren</button><button class="btn" id="jsonFight">JSON</button><button class="btn" id="csvFight">CSV</button><button class="btn" id="pngFight">PNG-Bericht</button><button class="btn" id="chatFight">Chatzeile</button><label><input type="checkbox" id="anonFight" checked> Andere Namen anonymisieren</label></div>
     <div class="row fight-tools"><label><input type="checkbox" id="favoriteFight" ${f.favorite?'checked':''}> Favorit</label><input id="fightNote" aria-label="Kampfnotiz" placeholder="Notiz" maxlength="4000" value="${esc(f.note||'')}"><input id="fightTags" aria-label="Kampf-Tags" placeholder="Tags, z. B. neues Gear" maxlength="500" value="${esc(f.tags||'')}"><button class="btn" id="saveFightNote">Speichern</button></div>
     ${fightChartControls(f)}<h3>Direkter Kampfvergleich</h3><div class="row"><select id="compareFight" aria-label="Vergleichskampf"><option value="">Vergleich laden …</option></select><button class="btn" id="compareBtn">Vergleichen</button></div><p class="analysis-note">Gleicher Boss und Schwierigkeitsgrad. Eigene Werte werden nur bei gleichem Charakter und gleicher Klasse verglichen.</p><div id="comparison"></div>
     <details><summary>Verbindung · Ping-Verlauf</summary>${svgCurve((f.ping_history||[]).map(p=>({ms:p.tsMs,ping:p.pingMs})),p=>p.ping,'ms Ping')}</details>
     ${f.players.map(p=>playerReport(p,f)).join('')}${effectTimeline(f,f.target_id)}${uptimes(f.boss_debuffs,true)}`;
   bindPlayerReports(f);fillAttemptContext($('#fightContent'),f);
+  fillSkillIndex(id,$('#skillIndexPanel'),request);
   if(!$('#fightDialog').open)$('#fightDialog').showModal();
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights(false));}));
   $('#copyFight').onclick=()=>task(copyText(rankingText(f.boss_name,scopedPlayers(f,exportPlayers(f.players,$('#anonFight').checked)),f.duration_ms)));
