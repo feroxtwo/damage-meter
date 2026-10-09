@@ -311,6 +311,7 @@ pub struct Engine {
     /// you play alone. See `instances::group_list`.
     group: RwLock<HashSet<String>>,
     group_known: AtomicBool,
+    party_ended: AtomicBool,
     audiences: Mutex<HashMap<(i32, i64), HashSet<i32>>>,
     target_mode: RwLock<String>,
     pub buffs: BuffTracker,
@@ -438,6 +439,7 @@ impl Engine {
             last_map: AtomicI32::new(0),
             group: RwLock::new(HashSet::new()),
             group_known: AtomicBool::new(false),
+            party_ended: AtomicBool::new(false),
             audiences: Mutex::new(HashMap::new()),
             target_mode: RwLock::new(target_mode),
             buffs: BuffTracker::default(),
@@ -697,6 +699,7 @@ impl Engine {
         if !is_open_world_map(map_id) {
             self.instance_load_ms.fetch_max(at_ms, Ordering::Relaxed);
             if previous != map_id {
+                self.party_ended.store(false, Ordering::Relaxed);
                 self.instance_entry_ms.fetch_max(at_ms, Ordering::Relaxed);
             }
         }
@@ -709,7 +712,14 @@ impl Engine {
         if let Some(map) = crate::instances::map_load(payload) {
             self.note_map_load(map, at_ms);
         } else if let Some(names) = crate::instances::group_list(payload).filter(|n| !n.is_empty()) {
-            *self.group.write() = names.into_iter().collect();
+            let next: HashSet<String> = names.into_iter().collect();
+            let was_party = self.group.read().len() >= 2;
+            if was_party && next.len() <= 1 {
+                self.party_ended.store(true, Ordering::Relaxed);
+            } else if next.len() >= 2 {
+                self.party_ended.store(false, Ordering::Relaxed);
+            }
+            *self.group.write() = next;
             self.group_known.store(true, Ordering::Relaxed);
         }
     }
@@ -1192,7 +1202,7 @@ impl Engine {
     /// Follow instance entries and exits, and record who was in the party.
     fn track_run(&self, now: i64) {
         self.sync_open_world();
-        let dungeon = if self.in_open_world() {
+        let dungeon = if self.in_open_world() || self.party_ended.load(Ordering::Relaxed) {
             0
         } else {
             self.storage.current_dungeon_id()
