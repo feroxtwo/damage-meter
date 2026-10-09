@@ -1825,6 +1825,67 @@ mod tests {
     }
 
     #[test]
+    fn community_v2_requires_confirmed_kill_and_explicit_full_fight_method() {
+        let db = Db::in_memory().unwrap();
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch(
+                "INSERT INTO fights(id,boss_name,mob_code,dungeon_id,started_at,
+                                    duration_ms,is_train,numeric_limited)
+                 VALUES ('confirmed','Boss',2300409,600093,1785000000000,30000,0,0);
+                 INSERT INTO fight_players(fight_id,actor_id,name,job,damage,dps,combat_power,is_self)
+                 VALUES ('confirmed',1,'Me','검성',600000,20000,70000,1);
+                 INSERT INTO fight_analytics(fight_id,data)
+                 VALUES ('confirmed','{\"outcome\":\"kill\",\"partial\":false}');",
+            ).unwrap();
+        }
+        let dataset: crate::community::CommunitySnapshot=serde_json::from_value(json!({
+            "schema": "a2m-community-v2",
+            "source": {
+                "id": "community", "url": "https://example.org/authorized",
+                "captured_at": 1_790_000_000_000_i64, "rights_confirmed": true
+            },
+            "balance": {
+                "id": "full-fight-patch", "from_ms": 1_780_000_000_000_i64,
+                "until_ms": 1_792_000_000_000_i64
+            },
+            "methodology": {
+                "metric": "fight_dps", "outcome": "confirmed_kill",
+                "aggregation": "median_unique_players", "patch_id": "global-2026.10"
+            },
+            "rows": [{
+                "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                "median_dps": 10000.0, "samples": 50
+            }]
+        })).unwrap();
+        db.import_community(dataset.validate().unwrap()).unwrap();
+        let result=db.community_index("confirmed","EU").unwrap().unwrap();
+        assert_eq!(result["status"],"ready");
+        assert_eq!(result["comparisons"][0]["score"],200.0);
+        assert_eq!(result["comparisons"][0]["comparison_quality"],"structured");
+        assert_eq!(db.community_sources().unwrap()["imports"][0]["metric"],"fight_dps");
+
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE fight_analytics SET data=?1 WHERE fight_id='confirmed'",
+            params![r#"{"outcome":"wipe","partial":false}"#],
+        ).unwrap();
+        drop(conn);
+        let wiped=db.community_index("confirmed","EU").unwrap().unwrap();
+        assert_eq!(wiped["status"],"insufficient");
+        assert_eq!(wiped["comparisons"].as_array().unwrap().len(),0);
+
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE fight_analytics SET data=?1 WHERE fight_id='confirmed'",
+            params![r#"{"outcome":"kill","partial":true}"#],
+        ).unwrap();
+        drop(conn);
+        assert_eq!(db.community_index("confirmed","EU").unwrap().unwrap()["status"],"insufficient");
+    }
+
+    #[test]
     fn community_references_import_and_match_exact_scope_and_period() {
         let db = Db::in_memory().unwrap();
         {
