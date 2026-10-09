@@ -464,7 +464,7 @@ html[data-theme] body{background:radial-gradient(ellipse at 80% -10%,var(--studi
 .app-rail nav button .icon{width:20px;height:20px;flex-shrink:0}.nav-label{display:block;min-width:0;font-weight:650}.nav-label small{display:block;font-size:10px;margin-top:3px;font-weight:400;color:var(--muted)}
 .app-rail nav button.active{background:linear-gradient(100deg,var(--studio-wash),transparent);color:var(--studio);border-color:color-mix(in srgb,var(--studio) 25%,transparent);box-shadow:none}
 .app-rail nav button.active::before{content:'';width:3px;height:22px;position:absolute;left:-19px;border-radius:0 3px 3px 0;background:var(--studio);box-shadow:0 0 12px var(--studio)}
-.rail-caption{font-size:9px;letter-spacing:1.6px;color:var(--muted);margin:10px 12px -14px}.rail-caption:has(+select[hidden]),.rail-caption:has(+select[style*="display: none"]){display:none}
+.rail-caption{font-size:9px;letter-spacing:1.6px;color:var(--muted);margin:10px 12px -14px}.rail-caption:has(+select[hidden]),.rail-caption:has(+select[style*="display: none"]),.rail-caption:has(+select[style*="display:none"]){display:none}
 .app-rail #charSel{width:100%;font-size:12px}.app-rail #status{margin: auto 0 0;padding:16px 12px;border:1px solid var(--line);border-radius:12px;max-width:none;width:100%;font-size:11px;background:var(--bg);align-items:flex-start}.app-rail #status .dot{margin-top:5px;box-shadow:0 0 9px currentColor}
 main{max-width:1504px;margin:0 0 0 224px;padding:36px 40px 56px}
 .page-title{margin-bottom:28px}.page-title h2{font-size:34px;letter-spacing:-1.2px;font-weight:750}.page-title p{font-size:13px;line-height:1.7}.eyebrow{font-size:9px;letter-spacing:1.6px;color:var(--studio)}

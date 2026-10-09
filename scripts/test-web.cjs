@@ -240,6 +240,9 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#overlayPreview').count(),0);
       await page.evaluate(()=>history.forward());await page.waitForFunction(()=>tab==='settings');
       await page.getByRole('button',{name:'Live',exact:true}).click();
+      // No orphaned character caption while there is nothing to choose.
+      const caption=await page.evaluate(()=>{const sel=document.querySelector('#charSel'),old=sel.getAttribute('style');sel.setAttribute('style','display:none');const hidden=getComputedStyle(document.querySelector('.rail-caption')).display==='none';sel.setAttribute('style',old||'');return hidden;});
+      assert.equal(caption,true);
       await page.locator('[data-studio-view="runs"]').click();
       assert.equal(await page.locator('#runs').evaluate(e=>e.classList.contains('active')),true);
     });
