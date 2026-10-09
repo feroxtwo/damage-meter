@@ -38,7 +38,7 @@ let annotations=[],trainingStarts=[],fightLimits=new Set(),fightKinds=new Set(),
 const server = http.createServer((req,res) => {
   const route=req.url.split('?')[0];
   if(route.startsWith('/assets/icons/')){const icons=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/skills/icons.json'))),entry=icons[route.split('/').pop()];if(!entry){res.writeHead(404);res.end();return;}res.setHeader('Content-Type','image/webp');res.end(fs.readFileSync(path.join(__dirname,'../data/skills/icons.bin')).subarray(entry.offset,entry.offset+entry.length));return;}
-  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
+  const file=route==='/overlay'?'overlay.html':route==='/enhancements.js'?'enhancements.js':route==='/enhancements.css'?'enhancements.css':route==='/qol.js'?'qol.js':route==='/community.js'?'community.js':route==='/run-analysis.js'?'run-analysis.js':route==='/skills.js'?'skills.js':'index.html';
   res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8');
   res.end(fs.readFileSync(path.join(__dirname,'../web',file)));
 });
@@ -60,6 +60,11 @@ const server = http.createServer((req,res) => {
     else if(u.pathname==='/api/version')data={version:'0.3.1',parser_version:'2.0.52'};
     else if(u.pathname==='/api/update-check')data={available:true,message:'Update v0.4.0 verfügbar.',url:'https://github.com/feroxtwo/damage-meter/releases'};
     else if (u.pathname === '/api/live') data = live;
+    else if(u.pathname==='/api/references/sources') data={providers:[{id:'a2tools',name:'A2 Tools',status:'permission_required',detail:'Nur mit Lizenz',url:'https://a2tools.app/stats'}],imports:[],automatic_fetch:false};
+    else if(u.pathname==='/api/references/import')data={source:'community',balance:'test',imported:1,local_only:true};
+    else if(u.pathname.endsWith('/community-index'))data={status:'insufficient',reason:'no_matching_reference',region:u.searchParams.get('region')||'ALL',comparisons:[]};
+    else if(u.pathname.endsWith('/skill-index'))data={status:'insufficient',reason:'few_peers',combat_power:0,overall:{status:'insufficient',peer_count:0},same_class:null};
+
     else if(u.pathname==='/api/fights'){
       fightLimits.add(u.searchParams.get('limit'));
       fightKinds.add(u.searchParams.get('kind'));
@@ -845,7 +850,7 @@ const server = http.createServer((req,res) => {
         current={...live,target_started_at:2000,battle_time_ms:1000,total_damage:105000,rows:live.rows.map(r=>({...r,damage:r.dps}))};
         await isolated.locator('#postFight').waitFor();assert.match(await isolated.locator('#postFight').textContent(),/LETZTER GESPEICHERTER VERSUCH/);
         assert.doesNotMatch(await isolated.locator('#postFight').textContent(),/Sieg|Kampf beendet/);
-        await isolated.locator('#postFight [data-story-peak]').click();await isolated.locator('#fightDialog').waitFor();assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
+        await isolated.locator('#postFight [data-story-peak]').click();await isolated.waitForFunction(()=>document.querySelector('#fightDialog')?.open && document.querySelector('#fightChartScope')?.value==='1');assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
         await isolated.locator('#closeDialog').click();
         await isolated.evaluate(()=>scrollTo(0,0));
         if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-saved-moment.png'),fullPage:true});

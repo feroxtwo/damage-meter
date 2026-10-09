@@ -227,6 +227,82 @@ async fn fight_detail(
     .ok_or(StatusCode::NOT_FOUND)
 }
 
+/// Personal or overall local peer reference for a stored boss fight.
+async fn skill_index(
+    State(engine): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| e.db.skill_index(&id))
+        .await?
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+/// List reference sources and locally imported snapshots. No third-party requests.
+async fn community_sources(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| e.db.community_sources())
+        .await?
+        .map(Json)
+        .map_err(db_error)
+}
+
+/// Explicit local import only: the user attests that reuse is permitted.
+async fn import_community(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<crate::community::CommunitySnapshot>,
+) -> Result<Json<Value>, StatusCode> {
+    guard(&headers)?;
+    let body = body.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+    blocking(engine, move |e| e.db.import_community(body))
+        .await?
+        .map(Json)
+        .map_err(db_error)
+}
+
+/// Explicit deletion of an imported reference period, never of combat data.
+async fn delete_community(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Path((source, balance)): Path<(String, String)>,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    let deleted = blocking(engine, move |e| e.db.delete_community(&source, &balance))
+        .await?
+        .map_err(db_error)?;
+    Ok(if deleted {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    })
+}
+
+#[derive(Deserialize)]
+struct CommunityRegion {
+    #[serde(default = "default_reference_region")]
+    region: String,
+}
+
+fn default_reference_region() -> String {
+    "ALL".to_string()
+}
+
+async fn community_index(
+    State(engine): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<CommunityRegion>,
+) -> Result<Json<Value>, StatusCode> {
+    if !crate::community::valid_region(&query.region) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    blocking(engine, move |e| e.db.community_index(&id, &query.region))
+        .await?
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 /// `?character=Name` limits a statistic to one of your characters.
 #[derive(Deserialize)]
 struct StatsQuery {
@@ -581,6 +657,15 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
             }),
         )
         .route(
+            "/community.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/community.js"),
+                )
+            }),
+        )
+        .route(
             "/run-analysis.js",
             get(|| async {
                 (
@@ -599,6 +684,14 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/runs/{id}/favorite", post(run_favorite))
         .route("/api/fights", get(search_fights))
         .route("/api/fights/{id}", get(fight_detail))
+        .route("/api/fights/{id}/skill-index", get(skill_index))
+        .route("/api/fights/{id}/community-index", get(community_index))
+        .route("/api/references/sources", get(community_sources))
+        .route("/api/references/import", post(import_community))
+        .route(
+            "/api/references/{source}/{balance}",
+            axum::routing::delete(delete_community),
+        )
         .route("/api/fights/{id}/annotation", post(annotate))
         .route("/api/players/{id}", get(player))
         .route("/api/overlay/profile", post(profile))
@@ -686,6 +779,100 @@ mod tests {
             builder = builder.header(ACTION_HEADER, "1");
         }
         builder.body(Body::from(body.to_string())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn community_sources_are_read_only_and_import_requires_action_header() {
+        let app = app();
+        let list = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/references/sources",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(list.status(), StatusCode::OK);
+        let dataset = json!({
+            "schema": "a2m-community-v1",
+            "source": {
+                "id": "community", "url": "https://example.org/statistics",
+                "captured_at": 1_790_000_000_000_i64,
+                "rights_confirmed": true
+            },
+            "balance": {
+                "id": "period-1", "from_ms": 1_780_000_000_000_i64,
+                "until_ms": 1_792_000_000_000_i64
+            },
+            "rows": [{
+                "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
+                "class_key": "gladiator", "cp_min": 60000, "cp_max": 80000,
+                "median_dps": 14500.0, "samples": 30
+            }]
+        })
+        .to_string();
+        let blocked = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/references/import",
+                "localhost:8787",
+                false,
+                &dataset,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(blocked.status(), StatusCode::FORBIDDEN);
+        let imported = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/references/import",
+                "localhost:8787",
+                true,
+                &dataset,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(imported.status(), StatusCode::OK);
+        let removed = app
+            .clone()
+            .oneshot(request(
+                "DELETE",
+                "/api/references/community/period-1",
+                "localhost:8787",
+                true,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT);
+        let missing = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/fights/missing/community-index?region=EU",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let wrong_region = app
+            .oneshot(request(
+                "GET",
+                "/api/fights/missing/community-index?region=HACK",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(wrong_region.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

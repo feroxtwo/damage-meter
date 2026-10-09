@@ -13,6 +13,10 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 
 Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
 
+## Community Skill Index (experimentell)
+
+Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich gegen eigene beobachtete Mitspieler bei ähnlicher Kampfkraft. Zusätzlich können berechtigte, aggregierte Community-Referenzwerte über **Statistik → Datenquellen** freiwillig als JSON importiert werden. Alle Vergleichswerte sind explizit nach Herkunft gekennzeichnet, bleiben lokal und benötigen exakt passende Boss-/Schwierigkeits-/Klassen-/KP-/Region-/Balance-Daten. Ohne passende Stichproben wird kein Index erfunden. **Keine automatische Fremd-API, kein Webscraping, kein Upload.** [Quellen, Schema und Grenzen](docs/COMMUNITY_DATA_SOURCES.md).
+
 ## Neu in 0.3.1
 
 Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regulären Beenden, korrigierte Overlay-Skalierung mit stabiler Position und Updateinstallation bei laufendem Meter. Skilldetails haben Suche, Sortierung, Durchschnitt, Anteil und Skill-DPS/HPS; zusätzliche Treffermerkmale sind auf Wunsch sichtbar. Statushilfen erklären fehlende Pakete. Laufende Runs können nicht gelöscht werden, Bossstatistiken trennen Schwierigkeitsgrade und zählen erfasste Versuche.

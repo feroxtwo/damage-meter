@@ -3,6 +3,7 @@
 mod analytics;
 mod buffs;
 mod capture;
+mod community;
 mod db;
 mod dispatcher;
 mod encounters;
