@@ -853,9 +853,13 @@ impl Engine {
                         .is_some_and(|n| trusted.contains(n.trim()))
             }));
             // Healing-only party members still belong to the encounter.
-            audience.extend(context.actors.iter()
-                .filter(|a| Some(a.actor_id) == local || trusted.contains(a.nickname.trim()))
-                .map(|a| a.actor_id));
+            audience.extend(
+                context
+                    .actors
+                    .iter()
+                    .filter(|a| Some(a.actor_id) == local || trusted.contains(a.nickname.trim()))
+                    .map(|a| a.actor_id),
+            );
             let entry = series.entry((target.target_id, start)).or_default();
             entry.observe(
                 now - start,
@@ -1148,8 +1152,12 @@ impl Engine {
                     .details
                     .heal_skills
                     .retain(|skill| allowed.contains(&skill.actor_id));
-                record.total_damage = record.details.skills.iter()
-                    .map(|s| i64::from(s.dmg)).sum::<i64>()
+                record.total_damage = record
+                    .details
+                    .skills
+                    .iter()
+                    .map(|s| i64::from(s.dmg))
+                    .sum::<i64>()
                     .clamp(0, i64::from(i32::MAX)) as i32;
             }
         }
