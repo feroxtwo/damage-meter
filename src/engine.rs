@@ -852,7 +852,10 @@ impl Engine {
                         .get_nickname(*id)
                         .is_some_and(|n| trusted.contains(n.trim()))
             }));
-            // Healing-only party members still belong to the encounter.
+            // Healing-only party members may have no damage-context actor yet.
+            audience.extend(self.storage.get_nicknames().into_iter()
+                .filter(|(_, name)| trusted.contains(name.trim()))
+                .map(|(id, _)| id));
             audience.extend(
                 context
                     .actors
@@ -1823,6 +1826,24 @@ mod tests {
         let old = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
         assert_eq!(old["players"].as_array().unwrap().len(), 1);
         assert_eq!(old["total_damage"], 300);
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
+    fn group_healing_without_damage_is_preserved_in_history() {
+        let e = short_attempt();
+        e.storage.set_current_dungeon(600063);
+        *e.group.write() = HashSet::from(["Me".into(), "Healer".into()]);
+        e.group_known.store(true, Ordering::Relaxed);
+        e.storage.append_nickname_authoritative(2260, "Healer");
+        e.storage.append_heal(2260, 17010000, 500, false);
+        e.replay_tick();
+        assert!(e.save_fights(true));
+        let fight = e.db.fight_detail("auto_50000_1000").unwrap().unwrap();
+        let healer = fight["players"].as_array().unwrap().iter()
+            .find(|p| p["actor_id"] == 2260).unwrap();
+        assert_eq!(healer["damage"], 0);
+        assert_eq!(healer["heal"], 500);
         a2tools_dps_meter_lib::clock::set_override(None);
     }
 
