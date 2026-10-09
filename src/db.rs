@@ -1255,7 +1255,6 @@ impl Db {
         ))
     }
 
-
     /// Read-only, on-device Skill Index: comparable recorded boss and power bracket.
     /// Every distinct observed peer contributes one median across their attempts,
     /// so running the same boss repeatedly cannot dominate the reference.
@@ -1263,21 +1262,51 @@ impl Db {
     pub fn skill_index(&self, fight_id: &str) -> Result<Option<Value>> {
         let conn = self.conn.lock();
         let fight: Option<(
-            i64, i64, i64, Option<i64>, i64,
-            Option<String>, Option<String>, Option<i64>, Option<f64>,
-        )> = conn.query_row(
-            "SELECT COALESCE(f.dungeon_id, 0), COALESCE(f.mob_code, 0), f.is_train,
+            i64,
+            i64,
+            i64,
+            Option<i64>,
+            i64,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<f64>,
+        )> = conn
+            .query_row(
+                "SELECT COALESCE(f.dungeon_id, 0), COALESCE(f.mob_code, 0), f.is_train,
                     f.numeric_limited, COALESCE(f.duration_ms, 0),
                     p.name, p.job, p.combat_power, p.dps
              FROM fights f LEFT JOIN fight_players p
                ON p.fight_id = f.id AND p.is_self = 1
              WHERE f.id = ?1 ORDER BY p.damage DESC LIMIT 1",
-            params![fight_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?,
-                   r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)),
-        ).optional()?;
-        let Some((dungeon_id, mob_code, is_train, numeric_limited, duration_ms,
-                  self_name, job, cp, dps)) = fight else {
+                params![fight_id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                        r.get(7)?,
+                        r.get(8)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((
+            dungeon_id,
+            mob_code,
+            is_train,
+            numeric_limited,
+            duration_ms,
+            self_name,
+            job,
+            cp,
+            dps,
+        )) = fight
+        else {
             return Ok(None);
         };
         let combat_power = cp.unwrap_or(0);
@@ -1342,8 +1371,14 @@ impl Db {
         )?;
         let rows = stmt.query_map(
             params![dungeon_id, mob_code, cp_min, cp_max, self_name.as_deref()],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?,
-                    r.get::<_, String>(2)?, r.get::<_, f64>(3)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, f64>(3)?,
+                ))
+            },
         )?;
         let mut overall: HashMap<(String, i64), Vec<f64>> = HashMap::new();
         let mut same_class: HashMap<(String, i64), Vec<f64>> = HashMap::new();
@@ -1505,14 +1540,21 @@ mod tests {
         }
     }
 
-
     #[test]
     fn skill_index_medians_are_per_distinct_peer_and_scope_is_strict() {
         let db = Db::in_memory().unwrap();
         {
             let conn = db.conn.lock();
-            let insert = |id: &str, name: &str, job: &str, mob: i64, cp: i64,
-                          rate: f64, limited: i64, training: i64, ms: i64, self_flag: bool| {
+            let insert = |id: &str,
+                          name: &str,
+                          job: &str,
+                          mob: i64,
+                          cp: i64,
+                          rate: f64,
+                          limited: i64,
+                          training: i64,
+                          ms: i64,
+                          self_flag: bool| {
                 conn.execute(
                     "INSERT INTO fights(id,boss_name,mob_code,dungeon_id,started_at,duration_ms,is_train,numeric_limited)
                      VALUES (?1,'Kargos',?2,123,0,?3,?4,?5)",
@@ -1532,23 +1574,83 @@ mod tests {
                 insert(&id, &name, job, 77, 620_000, *rate, 0, 0, 30_000, false);
             }
             for i in 0..8 {
-                insert(&format!("repeat-{i}"), "Peer-4", "치유성", 77,
-                       620_000, 300.0, 0, 0, 30_000, false);
+                insert(
+                    &format!("repeat-{i}"),
+                    "Peer-4",
+                    "치유성",
+                    77,
+                    620_000,
+                    300.0,
+                    0,
+                    0,
+                    30_000,
+                    false,
+                );
             }
-            insert("other-boss", "WrongBoss", "치유성", 88, 620_000,
-                   1.0, 0, 0, 30_000, false);
-            insert("other-cp", "WrongPower", "치유성", 77, 640_000,
-                   1.0, 0, 0, 30_000, false);
-            insert("limited", "Limited", "치유성", 77, 620_000,
-                   1.0, 1, 0, 30_000, false);
-            insert("train", "Training", "치유성", 77, 620_000,
-                   1.0, 0, 1, 30_000, false);
-            insert("short", "Short", "치유성", 77, 620_000,
-                   1.0, 0, 0, 4_000, false);
-            insert("no-peers", "Me", "검성", 99, 620_000,
-                   260.0, 0, 0, 30_000, true);
-            insert("no-cp", "Me", "검성", 77, 0,
-                   260.0, 0, 0, 30_000, true);
+            insert(
+                "other-boss",
+                "WrongBoss",
+                "치유성",
+                88,
+                620_000,
+                1.0,
+                0,
+                0,
+                30_000,
+                false,
+            );
+            insert(
+                "other-cp",
+                "WrongPower",
+                "치유성",
+                77,
+                640_000,
+                1.0,
+                0,
+                0,
+                30_000,
+                false,
+            );
+            insert(
+                "limited",
+                "Limited",
+                "치유성",
+                77,
+                620_000,
+                1.0,
+                1,
+                0,
+                30_000,
+                false,
+            );
+            insert(
+                "train",
+                "Training",
+                "치유성",
+                77,
+                620_000,
+                1.0,
+                0,
+                1,
+                30_000,
+                false,
+            );
+            insert(
+                "short",
+                "Short",
+                "치유성",
+                77,
+                620_000,
+                1.0,
+                0,
+                0,
+                4_000,
+                false,
+            );
+            insert(
+                "no-peers", "Me", "검성", 99, 620_000, 260.0, 0, 0, 30_000, true,
+            );
+            insert("no-cp", "Me", "검성", 77, 0, 260.0, 0, 0, 30_000, true);
         }
         let result = db.skill_index("my").unwrap().unwrap();
         assert_eq!(result["status"], "ready");
@@ -1558,8 +1660,14 @@ mod tests {
         assert_eq!(result["overall"]["score"], 130.0);
         assert_eq!(result["same_class"]["status"], "insufficient");
         assert_eq!(result["same_class"]["peer_count"], 1);
-        assert_eq!(db.skill_index("no-peers").unwrap().unwrap()["status"], "insufficient");
-        assert_eq!(db.skill_index("no-cp").unwrap().unwrap()["reason"], "missing_cp");
+        assert_eq!(
+            db.skill_index("no-peers").unwrap().unwrap()["status"],
+            "insufficient"
+        );
+        assert_eq!(
+            db.skill_index("no-cp").unwrap().unwrap()["reason"],
+            "missing_cp"
+        );
         assert!(db.skill_index("missing").unwrap().is_none());
     }
 
