@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS community_snapshots (
     from_ms       INTEGER NOT NULL,
     until_ms      INTEGER NOT NULL,
     imported_at   INTEGER NOT NULL,
+    metric        TEXT NOT NULL DEFAULT 'unknown',
+    outcome       TEXT NOT NULL DEFAULT 'unknown',
+    aggregation   TEXT NOT NULL DEFAULT 'unknown',
+    patch_id      TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (source_id, balance_id)
 );
 CREATE TABLE IF NOT EXISTS community_reference_rows (
@@ -154,6 +158,10 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("runs", "favorite", "INTEGER NOT NULL DEFAULT 0"),
     // NULL: no verifiable record. Stored so history never re-parses record_json.
     ("fights", "numeric_limited", "INTEGER"),
+    ("community_snapshots", "metric", "TEXT NOT NULL DEFAULT 'unknown'"),
+    ("community_snapshots", "outcome", "TEXT NOT NULL DEFAULT 'unknown'"),
+    ("community_snapshots", "aggregation", "TEXT NOT NULL DEFAULT 'unknown'"),
+    ("community_snapshots", "patch_id", "TEXT NOT NULL DEFAULT ''"),
 ];
 
 /// Derives `fights.numeric_limited` from a saved record. `instr` skips the JSON
@@ -1441,13 +1449,19 @@ impl Db {
         let tx = conn.transaction()?;
         let source = &snapshot.source;
         let balance = &snapshot.balance;
+        let (metric, outcome, aggregation, patch_id) = snapshot.methodology.as_ref()
+            .map(|m| (m.metric.as_str(), m.outcome.as_str(), m.aggregation.as_str(), m.patch_id.as_str()))
+            .unwrap_or(("unknown", "unknown", "unknown", ""));
         tx.execute(
             "INSERT INTO community_snapshots(
-                source_id, balance_id, source_url, captured_at, from_ms, until_ms, imported_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s','now')*1000)
+                source_id, balance_id, source_url, captured_at, from_ms, until_ms,
+                metric, outcome, aggregation, patch_id, imported_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, strftime('%s','now')*1000)
              ON CONFLICT(source_id, balance_id) DO UPDATE SET
                 source_url=excluded.source_url, captured_at=excluded.captured_at,
                 from_ms=excluded.from_ms, until_ms=excluded.until_ms,
+                metric=excluded.metric, outcome=excluded.outcome,
+                aggregation=excluded.aggregation, patch_id=excluded.patch_id,
                 imported_at=excluded.imported_at",
             params![
                 source.id,
@@ -1455,7 +1469,11 @@ impl Db {
                 source.url,
                 source.captured_at,
                 balance.from_ms,
-                balance.until_ms
+                balance.until_ms,
+                metric,
+                outcome,
+                aggregation,
+                patch_id
             ],
         )?;
         tx.execute(
@@ -1507,6 +1525,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT s.source_id, s.balance_id, s.source_url, s.captured_at,
                     s.from_ms, s.until_ms, s.imported_at,
+                    s.metric, s.outcome, s.aggregation, s.patch_id,
                     COUNT(r.source_id) AS rows
              FROM community_snapshots s LEFT JOIN community_reference_rows r
                ON s.source_id=r.source_id AND s.balance_id=r.balance_id
@@ -1547,6 +1566,15 @@ impl Db {
         let dungeon = fight["dungeon_id"].as_i64().unwrap_or(0);
         let started_at = fight["started_at"].as_i64().unwrap_or(0);
         let duration = fight["duration_ms"].as_i64().unwrap_or(0);
+        let analytics: Option<String> = conn.query_row(
+            "SELECT data FROM fight_analytics WHERE fight_id=?1",
+            params![fight_id],
+            |r| r.get(0),
+        ).optional()?;
+        let analytics = analytics.and_then(|v| serde_json::from_str::<Value>(&v).ok());
+        let confirmed_kill = analytics.as_ref().is_some_and(|a| a["outcome"] == "kill");
+        let capture_partial = analytics.as_ref().is_none_or(|a| a["partial"] == true);
+
         let reason = if fight["is_train"].as_i64() != Some(0) {
             Some("training")
         } else if fight["numeric_limited"].as_i64() != Some(0) {
@@ -1570,7 +1598,9 @@ impl Db {
             "own_dps": dps,
             "class_key": class_key,
             "comparisons": [],
-            "data_origin": "manual_import"
+            "data_origin": "manual_import",
+            "fight_outcome": if confirmed_kill { "confirmed_kill" } else { "unknown" },
+            "capture_partial": capture_partial
         });
         if reason.is_some() {
             return Ok(Some(response));
@@ -1584,7 +1614,8 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT r.source_id, s.source_url, r.balance_id, r.region,
                     r.class_key, r.median_dps AS reference_dps, r.samples,
-                    r.cp_min, r.cp_max, s.captured_at
+                    r.cp_min, r.cp_max, s.captured_at,
+                    s.metric, s.outcome, s.aggregation, s.patch_id
              FROM community_reference_rows r
              JOIN community_snapshots s
                ON s.source_id=r.source_id AND s.balance_id=r.balance_id
@@ -1603,6 +1634,7 @@ impl Db {
         )?;
         let mut used = HashSet::new();
         let mut comparisons = Vec::new();
+        let mut structured_count = 0;
         for mut row in candidates {
             let source = row["source_id"].as_str().unwrap_or_default().to_string();
             let class = row["class_key"].as_str().unwrap_or_default().to_string();
@@ -1612,6 +1644,22 @@ impl Db {
             if !used.insert((source, class.clone())) {
                 continue;
             }
+            let method_claims_kill = row["outcome"] == "confirmed_kill";
+            if method_claims_kill && (!confirmed_kill || capture_partial) {
+                continue;
+            }
+            let method_matches = method_claims_kill
+                && row["metric"] == "fight_dps"
+                && row["aggregation"] == "median_unique_players"
+                && !row["patch_id"].as_str().unwrap_or_default().is_empty();
+            if method_matches {
+                structured_count += 1;
+            }
+            row["comparison_quality"] = json!(if method_matches {
+                "structured"
+            } else {
+                "legacy_unspecified"
+            });
             let reference = row["reference_dps"].as_f64().unwrap_or(0.0);
             if !reference.is_finite() || reference <= 0.0 {
                 continue;
@@ -1630,8 +1678,10 @@ impl Db {
         }
         response["status"] = json!(if comparisons.is_empty() {
             "insufficient"
-        } else {
+        } else if structured_count > 0 {
             "ready"
+        } else {
+            "indicative"
         });
         response["reason"] = json!(if comparisons.is_empty() {
             Some("no_matching_reference")
@@ -1831,7 +1881,7 @@ mod tests {
             .community_index("community-fight", "EU")
             .unwrap()
             .unwrap();
-        assert_eq!(result["status"], "ready");
+        assert_eq!(result["status"], "indicative");
         assert_eq!(result["comparisons"].as_array().unwrap().len(), 2);
         assert_eq!(result["comparisons"][0]["score"], 200.0);
         let empty = db
