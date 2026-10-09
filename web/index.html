@@ -211,6 +211,22 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
         <div id="bossReadout" class="curve-readout"></div><button id="bossOpen" class="btn" disabled>Kampfbericht öffnen</button>
         <p class="analysis-note" id="bossNote"></p>
         <details id="activityMapping" hidden><summary>Bereich selbst zuordnen</summary><p class="analysis-note" id="activityMappingNote"></p><label>Eigene Zuordnung <select id="activityOverride" aria-label="Eigene Bereichszuordnung"></select></label></details></div>
+      <div class="card community-sources-card" id="communitySourcesCard" style="grid-column:1 / -1">
+        <div class="reference-heading"><div><div class="eyebrow">DATENQUELLEN · COMMUNITY PERFORMANCE</div><h2>Leistungsvergleich mit externen Daten</h2><p class="analysis-note">Lokale Messwerte bleiben privat. Online-Anbieter werden nicht automatisch abgefragt. Berechtigte, aggregierte Referenzdaten kannst du als JSON importieren.</p></div></div>
+        <div class="reference-actions">
+          <label>Vergleichsregion (manuell wählen)
+            <select id="communityRegion" aria-label="Region für den Community Skill Index"><option value="ALL">Alle Regionen (nur gepoolte Referenzen)</option><option value="EU">Europa</option><option value="NAE">Nordamerika Ost</option><option value="NAW">Nordamerika West</option><option value="SA">Südamerika</option><option value="ASIA">Asien</option><option value="KR">Korea</option><option value="TW">Taiwan</option></select>
+          </label>
+          <label>Aggregierte Vergleichsdatei (JSON)
+            <input type="file" id="communityFile" accept=".json,application/json" aria-label="JSON mit berechtigten Referenzdaten">
+          </label>
+          <label class="community-rights"><input type="checkbox" id="communityRights"> Ich bestätige, dass ich diese Daten importieren und verwenden darf.</label>
+          <button class="btn" id="communityImport" type="button">Lokal importieren</button>
+          <button class="btn" id="communityTemplate" type="button">JSON-Vorlage</button>
+        </div>
+        <p role="status" id="communityImportStatus" class="analysis-note" aria-live="polite"></p>
+        <div id="communitySources" aria-live="polite"><p class="analysis-note">Datenquellen werden geladen …</p></div>
+      </div>
       <div class="grid" id="kpis"></div>
       <div class="card"><h2>Top 5 Mitspieler (Expeditionen)</h2><div id="partners"></div></div>
       <div class="card"><h2>Runs pro Dungeon</h2><div id="perDungeon"></div></div>
@@ -314,7 +330,7 @@ function show(t) {
   document.querySelectorAll('nav button').forEach(b => { b.classList.toggle('active', b.dataset.tab === t); if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === t));
   if (t === 'runs') { task(loadRuns(true)); if(window.loadFights) task(loadFights(true)); }
-  if (t === 'stats') { task(loadStats()); task(loadBossHistory()); }
+  if (t === 'stats') { task(loadStats()); task(loadBossHistory()); if(window.loadCommunitySources)task(loadCommunitySources()); }
   if (t === 'settings') task(loadSettings());
   if (t === 'skills' && typeof loadSkillCatalog === 'function') task(loadSkillCatalog());
 }
@@ -722,6 +738,7 @@ show(tab);
 </script>
 <script src="/skills.js"></script>
 <script src="/enhancements.js"></script>
+<script src="/community.js"></script>
 <script src="/qol.js"></script>
 <script src="/run-analysis.js"></script>
 </body>
