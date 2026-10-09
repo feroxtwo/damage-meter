@@ -1433,13 +1433,15 @@ impl Engine {
                 dps.target_id,
                 total,
                 target.map(|t| t.last_damage_time),
-            ).1,
+            )
+            .1,
             combat_state: combat_activity(
                 now_ms(),
                 dps.target_id,
                 total,
                 target.map(|t| t.last_damage_time),
-            ).0,
+            )
+            .0,
             target_mode: dps.target_mode.clone(),
             reset_notice: self.reset_notice.read().clone(),
             target_hp,
@@ -1668,10 +1670,22 @@ mod tests {
     fn combat_activity_distinguishes_pauses_from_finished_encounters() {
         assert_eq!(combat_activity(15_000, 0, 0.0, None), ("ready", None));
         assert_eq!(combat_activity(15_000, 42, 200.0, None), ("unknown", None));
-        assert_eq!(combat_activity(15_000, 42, 200.0, Some(14_999)), ("active", Some(1)));
-        assert_eq!(combat_activity(15_000, 42, 200.0, Some(12_000)), ("paused", Some(3_000)));
-        assert_eq!(combat_activity(180_000, 42, 200.0, Some(12_000)), ("paused", Some(168_000)));
-        assert_eq!(combat_activity(4_000, 42, 200.0, Some(10_000)), ("active", Some(0)));
+        assert_eq!(
+            combat_activity(15_000, 42, 200.0, Some(14_999)),
+            ("active", Some(1))
+        );
+        assert_eq!(
+            combat_activity(15_000, 42, 200.0, Some(12_000)),
+            ("paused", Some(3_000))
+        );
+        assert_eq!(
+            combat_activity(180_000, 42, 200.0, Some(12_000)),
+            ("paused", Some(168_000))
+        );
+        assert_eq!(
+            combat_activity(4_000, 42, 200.0, Some(10_000)),
+            ("active", Some(0))
+        );
     }
 
     #[test]
