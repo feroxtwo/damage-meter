@@ -239,6 +239,53 @@ async fn skill_index(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+/// List reference sources and locally imported snapshots. No third-party requests.
+async fn community_sources(State(engine): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| e.db.community_sources())
+        .await?
+        .map(Json)
+        .map_err(db_error)
+}
+
+/// Explicit local import only: the user attests that reuse is permitted.
+async fn import_community(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<crate::community::CommunitySnapshot>,
+) -> Result<Json<Value>, StatusCode> {
+    guard(&headers)?;
+    let body = body.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+    blocking(engine, move |e| e.db.import_community(body))
+        .await?
+        .map(Json)
+        .map_err(db_error)
+}
+
+#[derive(Deserialize)]
+struct CommunityRegion {
+    #[serde(default = "default_reference_region")]
+    region: String,
+}
+
+fn default_reference_region() -> String {
+    "ALL".to_string()
+}
+
+async fn community_index(
+    State(engine): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<CommunityRegion>,
+) -> Result<Json<Value>, StatusCode> {
+    if !crate::community::valid_region(&query.region) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    blocking(engine, move |e| e.db.community_index(&id, &query.region))
+        .await?
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 /// `?character=Name` limits a statistic to one of your characters.
 #[derive(Deserialize)]
 struct StatsQuery {
@@ -593,6 +640,15 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
             }),
         )
         .route(
+            "/community.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../web/community.js"),
+                )
+            }),
+        )
+        .route(
             "/run-analysis.js",
             get(|| async {
                 (
@@ -612,6 +668,9 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/fights", get(search_fights))
         .route("/api/fights/{id}", get(fight_detail))
         .route("/api/fights/{id}/skill-index", get(skill_index))
+        .route("/api/fights/{id}/community-index", get(community_index))
+        .route("/api/references/sources", get(community_sources))
+        .route("/api/references/import", post(import_community))
         .route("/api/fights/{id}/annotation", post(annotate))
         .route("/api/players/{id}", get(player))
         .route("/api/overlay/profile", post(profile))
@@ -699,6 +758,59 @@ mod tests {
             builder = builder.header(ACTION_HEADER, "1");
         }
         builder.body(Body::from(body.to_string())).unwrap()
+    }
+
+
+    #[tokio::test]
+    async fn community_sources_are_read_only_and_import_requires_action_header() {
+        let app = app();
+        let list = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/references/sources",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(list.status(), StatusCode::OK);
+        let blocked = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/references/import",
+                "localhost:8787",
+                false,
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(blocked.status(), StatusCode::FORBIDDEN);
+        let missing = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/fights/missing/community-index?region=EU",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let wrong_region = app
+            .oneshot(request(
+                "GET",
+                "/api/fights/missing/community-index?region=HACK",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(wrong_region.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

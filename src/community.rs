@@ -198,7 +198,7 @@ mod tests {
             },
             "balance": {
                 "id": "oct-2026", "from_ms": 1_780_000_000_000_i64,
-                "until_ms": 1_800_000_000_000_i64
+                "until_ms": 1_792_000_000_000_i64
             },
             "rows": [{
                 "region": "EU", "dungeon_id": 600093, "mob_code": 2300409,
