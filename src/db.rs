@@ -1492,6 +1492,16 @@ impl Db {
         }))
     }
 
+    /// Delete an imported aggregate snapshot. Cascades into its reference rows.
+    /// Never touches local fights or the local Skill Index.
+    pub fn delete_community(&self, source: &str, balance: &str) -> Result<bool> {
+        let deleted = self.conn.lock().execute(
+            "DELETE FROM community_snapshots WHERE source_id=?1 AND balance_id=?2",
+            params![source, balance],
+        )?;
+        Ok(deleted > 0)
+    }
+
     pub fn community_sources(&self) -> Result<Value> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -1830,6 +1840,13 @@ mod tests {
             .unwrap();
         assert_eq!(empty["status"], "insufficient");
         assert_eq!(db.community_sources().unwrap()["imports"][0]["rows"], 4);
+        assert!(db.delete_community("community", "patch-1").unwrap());
+        assert!(!db.delete_community("community", "patch-1").unwrap());
+        assert_eq!(
+            db.community_index("community-fight", "EU").unwrap().unwrap()["status"],
+            "insufficient"
+        );
+        assert!(db.community_sources().unwrap()["imports"].as_array().unwrap().is_empty());
         assert!(db.community_index("missing", "EU").unwrap().is_none());
     }
 

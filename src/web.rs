@@ -261,6 +261,23 @@ async fn import_community(
         .map_err(db_error)
 }
 
+/// Explicit deletion of an imported reference period, never of combat data.
+async fn delete_community(
+    State(engine): State<AppState>,
+    headers: HeaderMap,
+    Path((source, balance)): Path<(String, String)>,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    let deleted = blocking(engine, move |e| e.db.delete_community(&source, &balance))
+        .await?
+        .map_err(db_error)?;
+    Ok(if deleted {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    })
+}
+
 #[derive(Deserialize)]
 struct CommunityRegion {
     #[serde(default = "default_reference_region")]
@@ -671,6 +688,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/fights/{id}/community-index", get(community_index))
         .route("/api/references/sources", get(community_sources))
         .route("/api/references/import", post(import_community))
+        .route("/api/references/{source}/{balance}", axum::routing::delete(delete_community))
         .route("/api/fights/{id}/annotation", post(annotate))
         .route("/api/players/{id}", get(player))
         .route("/api/overlay/profile", post(profile))
@@ -817,6 +835,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(imported.status(), StatusCode::OK);
+        let removed = app
+            .clone()
+            .oneshot(request(
+                "DELETE",
+                "/api/references/community/period-1",
+                "localhost:8787",
+                true,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT);
         let missing = app
             .clone()
             .oneshot(request(

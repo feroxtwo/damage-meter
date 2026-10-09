@@ -26,7 +26,7 @@ Der Code von Community-Projekten kann Open Source sein, ohne dass damit alle zug
 
 ## Benutzung
 
-Im Dashboard unter **Statistik → Datenquellen** eine Region wählen und ein JSON auswählen. Die Rechtebestätigung muss bei **jedem Import** aktiv angeklickt werden. Beim Import prüft die Runtime den Datensatz erneut; Browserprüfungen allein reichen nicht. Der Import erfolgt über die lokale API nach SQLite, in einer Transaktion. Bereits vorhandene Snapshots für denselben Anbieter und dieselbe Balance-Periode werden ersetzt, die Kampfaufzeichnungen nicht verändert.
+Im Dashboard unter **Statistik → Datenquellen** eine Region wählen und ein JSON auswählen. Die Rechtebestätigung muss bei **jedem Import** aktiv angeklickt werden. Beim Import prüft die Runtime den Datensatz erneut; Browserprüfungen allein reichen nicht. Der Import erfolgt über die lokale API nach SQLite, in einer Transaktion. Bereits vorhandene Snapshots für denselben Anbieter und dieselbe Balance-Periode werden ersetzt, die Kampfaufzeichnungen nicht verändert. Jeder importierte Snapshot kann anschließend direkt in der Datenquellenverwaltung wieder **entfernt** werden.
 
 Die Schaltfläche **JSON-Vorlage** erzeugt absichtlich eine **leere** Vorlage und setzt `rights_confirmed: false`. Ein offizieller Download aus einem externen Portal wird **nicht vorgetäuscht**.
 
@@ -79,6 +79,7 @@ Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erze
 
 - `GET /api/references/sources`: Quelle-Registry und lokal importierte Snapshots.
 - `POST /api/references/import`: lokale JSON-Importoperation, geschützt durch den vorhandenen `x-a2m`-Header.
+- `DELETE /api/references/{source}/{balance}`: Entfernen eines importierten Snapshots, ebenfalls mit `x-a2m`-Schutz.
 - `GET /api/fights/{id}/community-index?region=EU`: Vergleich für einen gespeicherten Bosskampf.
 - `GET /api/fights/{id}/skill-index`: unabhängiger, lokaler Vergleich.
 

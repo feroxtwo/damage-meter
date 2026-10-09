@@ -341,3 +341,5 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 .community-reference strong{font-size:30px;font-variant-numeric:tabular-nums}.community-reference span,.community-ref-detail{font-size:12px;color:var(--muted)}
 .community-ref-detail a{color:var(--accent)}
 @media(max-width:640px){.reference-provider{grid-template-columns:1fr auto}.reference-provider>span{grid-column:1;grid-row:2}.reference-provider a{grid-column:2;grid-row:1}}
+
+.reference-imported .btn{margin-left:auto;font-size:11px;padding:4px 9px}

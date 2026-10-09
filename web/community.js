@@ -89,12 +89,20 @@ async function loadCommunitySources() {
     const imported = (result.imports || []).map(entry =>
       '<div class="reference-imported"><strong>' + esc(entry.source_id) + '</strong>' +
       '<span>' + esc(entry.balance_id) + ' · ' + num(entry.rows) + ' Referenzgruppen · ' +
-      date(entry.captured_at) + ' Datenstand</span></div>'
+      date(entry.captured_at) + ' Datenstand</span><button type="button" class="btn" data-remove-community="' + esc(entry.source_id) + '" data-balance="' + esc(entry.balance_id) + '">Entfernen</button></div>'
     ).join('');
     root.innerHTML = '<h3>Verfügbare Quellen</h3><div class="reference-providers">' + providers + '</div>' +
       '<h3>Auf diesem Gerät importiert</h3>' +
       (imported || '<p class="analysis-note">Noch kein berechtigter Community-Datensatz importiert.</p>') +
       '<p class="analysis-note">Automatische Uploads und Abrufe von Drittanbietern sind deaktiviert. Ein öffentlicher Webauftritt ist keine bestätigte Import-Lizenz.</p>';
+    root.querySelectorAll('[data-remove-community]').forEach(button => {
+      button.onclick = () => {
+        const source = button.dataset.removeCommunity, balance = button.dataset.balance;
+        if (!confirm('Referenzdaten von ' + source + ' (' + balance + ') wirklich lokal entfernen?')) return;
+        task(api('/api/references/' + encodeURIComponent(source) + '/' + encodeURIComponent(balance),
+          { method: 'DELETE' }).then(() => { toast('Referenzdaten entfernt.'); return loadCommunitySources(); }));
+      };
+    });
   } catch {
     if (request === communitySourceRequest) root.innerHTML = '<p class="analysis-note">Datenquellen konnten nicht geladen werden.</p>';
   }
