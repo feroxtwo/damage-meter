@@ -123,6 +123,22 @@ const server = http.createServer((req,res) => {
       assert.equal(await page.locator('#liveRows .bar').count(),3);
     });
     if(process.env.SCREENSHOT_DIR) { fs.mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true}); await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'dashboard-desktop.png'),fullPage:true}); }
+    await check('quiet boss shows zero current DPS without erasing historical damage',async()=>{
+      const paused=await context.newPage();paused.on('pageerror',e=>errors.push(e.message));
+      await paused.route('**/api/live',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        ...live,combat_state:'paused',target_idle_ms:12000,last_target_hit_ms:Date.now()-12000
+      })}));
+      try {
+        await paused.goto(base+'/#live');
+        await paused.waitForFunction(()=>document.querySelector('#livePhase')?.textContent.includes('Kampfpause'));
+        assert.equal(await paused.locator('#selfDps').textContent(),'0');
+        assert.equal(await paused.locator('#groupDps').textContent(),'0');
+        assert.notEqual(await paused.locator('#totalDamage').textContent(),'0');
+        assert.match(await paused.locator('#metricHint').textContent(),/Kampfpause/);
+        assert.match(await paused.locator('#liveSub').textContent(),/gespeichert/);
+        assert.equal(await paused.locator('#liveRows .ranking-value strong').first().textContent(),'0 DPS');
+      } finally {await paused.close();}
+    });
     await check('unknown URL tab falls back to live',async()=>{
       await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
     });

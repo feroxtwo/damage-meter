@@ -1840,6 +1840,28 @@ mod tests {
         a2tools_dps_meter_lib::clock::set_override(None);
     }
     #[test]
+    fn other_targets_cannot_make_the_selected_fight_look_active_or_clear_it() {
+        let e = short_attempt();
+        e.modify_overlay(|s| s.idle_reset_seconds = 15).unwrap();
+        hit(&e, 18_000, 2_260, "Teammate", 51_000);
+        e.replay_tick();
+        let live = e.live();
+        assert_eq!(live.target_id, 50_000);
+        assert_eq!(live.combat_state, "paused");
+        assert!(live.target_idle_ms.unwrap_or(0) >= 15_000);
+        assert_eq!(e.storage.get_combat_snapshot_light()[&50_000].total_damage, 300);
+        // Another target is still active, so the global parser must not reset yet.
+        assert_eq!(e.db.fight_detail("auto_50000_1000").unwrap(), None);
+        a2tools_dps_meter_lib::clock::set_override(Some(34_000));
+        e.replay_tick();
+        assert_eq!(
+            e.db.fight_detail("auto_50000_1000").unwrap().unwrap()["total_damage"],
+            300
+        );
+        a2tools_dps_meter_lib::clock::set_override(None);
+    }
+
+    #[test]
     fn storage_failure_prevents_reset_and_retry_retains_the_attempt() {
         let e = short_attempt();
         e.db.fail_fight_writes(true);
