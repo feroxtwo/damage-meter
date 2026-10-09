@@ -143,7 +143,12 @@ const server = http.createServer((req,res) => {
       const isolated=await context.newPage();
       isolated.on('pageerror',e=>errors.push(e.message));
       try {
-        await isolated.goto(base+'/#runs');
+        // Keep this isolated report check from polluting the shared fight-list
+        // request counters used by the pagination regression below.
+        await isolated.route('**/api/fights?*',route=>route.fulfill({
+          status:200,contentType:'application/json',body:JSON.stringify({fights:[],more:false})
+        }));
+        await isolated.goto(base+'/#live');
         await isolated.waitForFunction(()=>typeof window.openFight==='function'&&typeof window.fillPerformanceCoach==='function');
         await isolated.evaluate(()=>openFight('f1'));
         await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor({state:'attached'});
