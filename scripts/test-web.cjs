@@ -850,7 +850,7 @@ const server = http.createServer((req,res) => {
         current={...live,target_started_at:2000,battle_time_ms:1000,total_damage:105000,rows:live.rows.map(r=>({...r,damage:r.dps}))};
         await isolated.locator('#postFight').waitFor();assert.match(await isolated.locator('#postFight').textContent(),/LETZTER GESPEICHERTER VERSUCH/);
         assert.doesNotMatch(await isolated.locator('#postFight').textContent(),/Sieg|Kampf beendet/);
-        await isolated.locator('#postFight [data-story-peak]').click();await isolated.locator('#fightDialog').waitFor();assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
+        await isolated.locator('#postFight [data-story-peak]').click();await isolated.waitForFunction(()=>document.querySelector('#fightDialog')?.open && document.querySelector('#fightChartScope')?.value==='1');assert.equal(await isolated.locator('#fightChartScope').inputValue(),'1');assert.equal(await isolated.locator('[data-curve-highlight]').count(),1);
         await isolated.locator('#closeDialog').click();
         await isolated.evaluate(()=>scrollTo(0,0));
         if(process.env.SCREENSHOT_DIR)await isolated.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'telemetry-saved-moment.png'),fullPage:true});
