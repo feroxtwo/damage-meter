@@ -139,6 +139,21 @@ const server = http.createServer((req,res) => {
         assert.equal(await paused.locator('#liveRows .ranking-value strong').first().textContent(),'0 DPS');
       } finally {await paused.close();}
     });
+    await check('performance coach renders measured values without inventing casts',async()=>{
+      const isolated=await context.newPage();
+      isolated.on('pageerror',e=>errors.push(e.message));
+      try {
+        await isolated.goto(base+'/#runs');
+        await isolated.waitForFunction(()=>typeof window.openFight==='function'&&typeof window.fillPerformanceCoach==='function');
+        await isolated.evaluate(()=>openFight('f1'));
+        await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor();
+        const text=await isolated.locator('#performanceCoachPanel').textContent();
+        assert.match(text,/Eigene Kampf-DPS/);
+        assert.match(text,/Stärkster Skill/);
+        assert.match(text,/kein Cast-/i);
+        assert.doesNotMatch(text,/falsche Rotation/i);
+      } finally {await isolated.close();}
+    });
     await check('unknown URL tab falls back to live',async()=>{
       await page.goto(base+'/#unknown'); await page.locator('#live.active').waitFor();
     });
