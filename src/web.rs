@@ -818,11 +818,24 @@ mod tests {
     #[tokio::test]
     async fn offline_provider_observations_are_paged_local_reads() {
         let db = crate::db::Db::in_memory().unwrap();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("data/community/community-references.sqlite");
-        let mut bundle = crate::reference_bundle::read(&path).unwrap();
-        bundle.archives.retain(|a| a.source.id == "a2tools");
-        db.import_provider_archives(&bundle.archives).unwrap();
+        let rows: Vec<Value> = (0..12)
+            .map(|i| {
+                json!({
+                    "class_key": "gladiator", "region": if i >= 8 { "EU" } else { "ALL" },
+                    "dungeon_id": null, "mob_code": null, "cp_min": 1000 + i, "cp_max": 2000 + i,
+                    "median_dps": 9000.0, "samples": 10, "metric": "provider_dps",
+                    "scope": {}, "statistics": {}, "compatibility": ["methodology_not_a2m_v2"]
+                })
+            })
+            .collect();
+        let archive: crate::reference_bundle::ProviderArchive = serde_json::from_value(json!({
+            "schema": "a2m-provider-observations-v1",
+            "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
+                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": false},
+            "evidence": [{}], "detail": "", "rows": rows
+        }))
+        .unwrap();
+        db.import_provider_archives(&[archive]).unwrap();
         let engine = Engine::new(db, "de", std::env::temp_dir());
         let app = router(engine, "127.0.0.1:8787".parse().unwrap());
         let response = app
@@ -844,6 +857,38 @@ mod tests {
         assert_eq!(data["rows"].as_array().unwrap().len(), 2);
         assert_eq!(data["rows"][0]["region"], "EU");
         assert_eq!(data["score_eligible"], false);
+        assert_eq!(data["next_offset"], 10);
+        for query in ["limit=-1", "offset=abc", "limit=99999999999"] {
+            let response = app
+                .clone()
+                .oneshot(request(
+                    "GET",
+                    &format!("/api/references/archive/a2tools?{query}"),
+                    "localhost:8787",
+                    false,
+                    "",
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{query}");
+        }
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/references/archive/a2tools?limit=100000",
+                "localhost:8787",
+                false,
+                "",
+            ))
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let data: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(data["limit"], 200);
+        assert_eq!(data["rows"].as_array().unwrap().len(), 12);
         let response = app
             .oneshot(request(
                 "GET",

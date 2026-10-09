@@ -51,6 +51,7 @@ impl ProviderArchive {
         {
             bail!("Invalid provider observation archive");
         }
+        let mut identities = HashSet::new();
         for row in &self.rows {
             if !crate::community::valid_class(&row.class_key)
                 || row
@@ -64,14 +65,42 @@ impl ProviderArchive {
                 || row.cp_min.zip(row.cp_max).is_some_and(|(a, b)| a > b)
                 || row
                     .median_dps
-                    .is_some_and(|v| !v.is_finite() || v < 0.0 || v > 1e9)
+                    .is_some_and(|v| !v.is_finite() || !(0.0..=1e9).contains(&v))
+                || row.samples == Some(0)
                 || row.metric.is_empty()
                 || row.metric.len() > 100
+                || !row
+                    .metric
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
                 || !row.scope.is_object()
                 || !row.statistics.is_object()
                 || row.compatibility.is_empty()
+                || row.compatibility.len() > 32
+                || row.compatibility.iter().any(|flag| {
+                    flag.is_empty()
+                        || flag.len() > 64
+                        || !flag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                })
             {
                 bail!("Invalid normalized observation");
+            }
+            // Two rows that differ only in their numbers cannot be told apart by
+            // any consumer: the normalizer lost a dimension. Reject, never guess.
+            if !identities.insert((
+                &row.class_key,
+                &row.region,
+                row.dungeon_id,
+                row.mob_code,
+                row.cp_min,
+                row.cp_max,
+                &row.metric,
+                row.scope.to_string(),
+            )) {
+                bail!(
+                    "Ambiguous provider observations in {}: rows share class, scope and CP band",
+                    self.source.id
+                );
             }
         }
         Ok(self)
@@ -257,6 +286,22 @@ fn read_connection(conn: &Connection) -> Result<Bundle> {
     })
 }
 
+/// Load reference data into the meter database: a local file, otherwise the
+/// built-in database. The whole source is validated before anything is written;
+/// a failure leaves the database as it was.
+pub fn load(db: &crate::db::Db, path: Option<&Path>) -> Result<Value> {
+    let bundle = match path {
+        Some(path) => read(path).with_context(|| path.display().to_string())?,
+        None => read_bundled().context("built-in reference database")?,
+    };
+    let archives = db.import_provider_archives(&bundle.archives)?;
+    let snapshots = bundle.snapshots.len();
+    for snapshot in bundle.snapshots {
+        db.import_community(snapshot)?;
+    }
+    Ok(serde_json::json!({"archives": archives, "snapshots": snapshots}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,6 +432,185 @@ mod tests {
                 .validate()
                 .is_err()
         );
+    }
+
+    fn observation(class: &str, mob: Option<i32>, cp: (i64, i64), median: f64) -> Value {
+        json!({
+            "class_key": class, "region": "EU", "dungeon_id": 600072, "mob_code": mob,
+            "cp_min": cp.0, "cp_max": cp.1, "median_dps": median, "samples": 40,
+            "metric": "provider_dps", "scope": {"period": "bp_test"},
+            "statistics": {"median_dps": median},
+            "compatibility": ["balance_period_unconfirmed", "methodology_not_a2m_v2"]
+        })
+    }
+
+    fn provider_archive(rows: Vec<Value>) -> Value {
+        json!({
+            "schema": "a2m-provider-observations-v1",
+            "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
+                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": false},
+            "evidence": [{"url": "https://a2tools.app/stats", "sha256": "00", "captured_at": 1_790_000_000_000_i64}],
+            "detail": "Test",
+            "rows": rows
+        })
+    }
+
+    fn temp_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "a2m-reference-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn normalized_archive_rejects_invalid_and_ambiguous_rows() {
+        let valid = provider_archive(vec![
+            observation("gladiator", Some(2300812), (71000, 76000), 9000.0),
+            observation("templar", Some(2300812), (71000, 76000), 8000.0),
+        ]);
+        let parse = |v: Value| {
+            serde_json::from_value::<ProviderArchive>(v)
+                .unwrap()
+                .validate()
+        };
+        assert!(parse(valid.clone()).is_ok());
+        for (path, value) in [
+            ("class_key", json!("invented-class")),
+            ("median_dps", json!(-1)),
+            ("median_dps", json!(2e9)),
+            ("cp_min", json!(-5)),
+            ("cp_max", json!(1000)),
+            ("samples", json!(0)),
+            ("region", json!("MARS")),
+            ("mob_code", json!(0)),
+            ("metric", json!("drop table")),
+            ("compatibility", json!([])),
+            ("scope", json!("flat")),
+        ] {
+            let mut data = valid.clone();
+            data["rows"][0][path] = value;
+            assert!(parse(data).is_err(), "{path} must be rejected");
+        }
+        // Same class, scope and band but other numbers: a lost dimension.
+        let mut ambiguous = valid.clone();
+        ambiguous["rows"][1]["class_key"] = json!("gladiator");
+        assert!(parse(ambiguous).is_err());
+        let mut foreign = valid;
+        foreign["source"]["url"] = json!("https://evil.example/stats");
+        assert!(parse(foreign).is_err());
+    }
+
+    #[test]
+    fn offline_observations_never_become_scores() {
+        let dir = temp_dir();
+        let input = dir.join("a2tools.json");
+        let output = dir.join("references.sqlite");
+        std::fs::write(
+            &input,
+            provider_archive(vec![
+                observation("gladiator", Some(2300812), (60000, 80000), 9000.0),
+                observation("templar", None, (60000, 80000), 8000.0),
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(build(&output, std::slice::from_ref(&input)).unwrap(), 1);
+        let db = crate::db::Db::in_memory().unwrap();
+        assert_eq!(
+            load(&db, Some(&output)).unwrap()["archives"]["a2tools"],
+            "imported"
+        );
+        // A second start with the same file does not rewrite the cache.
+        assert_eq!(
+            load(&db, Some(&output)).unwrap()["archives"]["a2tools"],
+            "unchanged"
+        );
+        db.insert_test_fight(
+            "vakron",
+            2300812,
+            600072,
+            "검성",
+            70000,
+            18000.0,
+            r#"{"outcome":"kill","partial":false}"#,
+        );
+        let result = db.community_index("vakron", "EU").unwrap().unwrap();
+        assert_eq!(result["status"], "insufficient");
+        assert_eq!(result["reason"], "comparison_withheld");
+        assert!(result["comparisons"].as_array().unwrap().is_empty());
+        let offline = &result["offline_observations"];
+        assert_eq!(offline["rows"], 2);
+        assert_eq!(offline["same_class"], 1);
+        assert_eq!(offline["score_eligible"], false);
+        let blockers = offline["blockers"].as_array().unwrap();
+        assert!(blockers.contains(&json!("rights_unconfirmed")));
+        assert!(blockers.contains(&json!("methodology_not_a2m_v2")));
+
+        let page = db
+            .provider_observations("a2tools", 1, 5000)
+            .unwrap()
+            .unwrap();
+        assert_eq!(page["limit"], 200);
+        assert_eq!(page["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(page["next_offset"], Value::Null);
+        assert_eq!(page["rights_confirmed"], false);
+        assert_eq!(page["score_eligible"], false);
+        assert!(db.provider_observations("missing", 0, 2).unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn broken_reference_files_change_nothing() {
+        let dir = temp_dir();
+        let db = crate::db::Db::in_memory().unwrap();
+        let missing = dir.join("missing.sqlite");
+        assert!(load(&db, Some(&missing)).is_err());
+        let garbage = dir.join("garbage.sqlite");
+        std::fs::write(&garbage, b"not a database at all, just bytes").unwrap();
+        assert!(load(&db, Some(&garbage)).is_err());
+        let foreign = dir.join("foreign.sqlite");
+        Connection::open(&foreign)
+            .unwrap()
+            .execute_batch("CREATE TABLE snapshots(x); PRAGMA user_version=2;")
+            .unwrap();
+        assert!(load(&db, Some(&foreign)).is_err());
+        let empty = dir.join("empty.sqlite");
+        let conn = Connection::open(&empty).unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE snapshots (source_id TEXT, balance_id TEXT, payload TEXT);
+             CREATE TABLE archives (source_id TEXT, payload TEXT);",
+        )
+        .unwrap();
+        assert!(load(&db, Some(&empty)).is_err(), "empty reference database");
+        // One invalid archive row rejects the whole file before any write.
+        let mut bad = provider_archive(vec![observation("gladiator", Some(1), (1, 2), 1.0)]);
+        conn.execute(
+            "INSERT INTO archives VALUES ('a2tools', ?1)",
+            params![bad.to_string()],
+        )
+        .unwrap();
+        bad["source"]["id"] = json!("jameter");
+        bad["source"]["url"] = json!("https://jameter.net/ranking");
+        bad["rows"][0]["median_dps"] = json!(-3);
+        conn.execute(
+            "INSERT INTO archives VALUES ('jameter', ?1)",
+            params![bad.to_string()],
+        )
+        .unwrap();
+        drop(conn);
+        assert!(load(&db, Some(&empty)).is_err());
+        let sources = db.community_sources().unwrap();
+        assert!(sources["offline_data"].as_array().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

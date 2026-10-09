@@ -247,16 +247,18 @@ fn main() -> anyhow::Result<()> {
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
-    let bundle = if let Some(path) = cli.reference_db {
-        tracing::info!("Offline reference database: {}", path.display());
-        reference_bundle::read(&path)?
-    } else {
-        tracing::info!("Using built-in offline community reference database");
-        reference_bundle::read_bundled()?
+    // Reference data must never keep the meter from starting. A broken local
+    // file falls back to the built-in database.
+    let loaded = match cli.reference_db.as_deref() {
+        Some(path) => reference_bundle::load(&database, Some(path)).or_else(|e| {
+            tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}");
+            reference_bundle::load(&database, None)
+        }),
+        None => reference_bundle::load(&database, None),
     };
-    database.import_provider_archives(&bundle.archives)?;
-    for snapshot in bundle.snapshots {
-        database.import_community(snapshot)?;
+    match loaded {
+        Ok(result) => tracing::info!("Offline reference data: {result}"),
+        Err(e) => tracing::warn!("Offline-Referenzdaten nicht geladen: {e:#}"),
     }
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {

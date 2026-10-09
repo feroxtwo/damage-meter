@@ -160,3 +160,52 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
+
+# A broken local reference file must never keep the meter from starting; the
+# built-in database stays in use. A newer local capture replaces one provider.
+with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
+    tmp = Path(tmp)
+    archive = {
+        "schema": "a2m-provider-observations-v1",
+        "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
+                   "captured_at": 2000000000000, "rights_confirmed": False},
+        "evidence": [{"url": "https://a2tools.app/stats"}], "detail": "Smoke test",
+        "rows": [{"class_key": "gladiator", "region": "EU", "dungeon_id": 600072, "mob_code": 2300812,
+                  "cp_min": 70000, "cp_max": 76000, "median_dps": 9000.0, "samples": 40,
+                  "metric": "provider_dps", "scope": {}, "statistics": {},
+                  "compatibility": ["methodology_not_a2m_v2"]}],
+    }
+    (tmp / "a2tools.json").write_text(json.dumps(archive))
+    built = tmp / "references.sqlite"
+    subprocess.run([binary, "build-references", "--output", str(built), str(tmp / "a2tools.json")],
+                   check=True, capture_output=True, timeout=20)
+    garbage = tmp / "garbage.sqlite"
+    garbage.write_bytes(b"definitely not sqlite")
+    for reference, expected in [(garbage, 1), (tmp / "missing.sqlite", 1), (built, 0)]:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        proc = subprocess.Popen(
+            [binary, "--no-overlay", "--db", str(tmp / "meter.db"), "--port", str(port),
+             "--reference-db", str(reference)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/references/sources", timeout=1) as r:
+                        offline = json.load(r)["offline_data"]
+                    break
+                except OSError:
+                    assert proc.poll() is None, f"meter exited with --reference-db {reference.name}"
+                    assert time.monotonic() < deadline
+                    time.sleep(0.1)
+            assert len(offline) == 6, (reference.name, offline)
+            a2tools = next(o for o in offline if o["source_id"] == "a2tools")
+            assert (a2tools["row_count"] > 1) == bool(expected), (reference.name, a2tools)
+            assert all(o["score_eligible"] == 0 and o["rights_confirmed"] == 0 for o in offline)
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+    print("PASS reference database: invalid files fall back to the built-in data, a newer local capture replaces its provider, all reference-only")

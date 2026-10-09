@@ -238,6 +238,15 @@ def main():
             [source_record(path, 'https://questlog.gg/aion-2/en/armory/meta?region=eu')], rows,
             'Alle acht Klassen der europäischen Tier-List; normalisierter Boss-DPS-Index, kein absoluter DPS-Median.'))
     for dataset in datasets:
+        # The Rust builder rejects rows it cannot tell apart; fail here first so a
+        # lost provider dimension is fixed in this script, not hidden in the data.
+        seen = set()
+        for row in dataset['rows']:
+            key = json.dumps([row[k] for k in ('class_key', 'region', 'dungeon_id', 'mob_code',
+                              'cp_min', 'cp_max', 'metric', 'scope')], sort_keys=True)
+            if key in seen:
+                raise ValueError(f"{dataset['source']['id']}: ambiguous rows, a provider dimension is missing")
+            seen.add(key)
         dest = out / (dataset['source']['id']+'.json')
         dest.write_text(json.dumps(dataset, ensure_ascii=False, sort_keys=True, separators=(',', ':'))+'\n')
         print(dataset['source']['id'], len(dataset['rows']), dest.stat().st_size)
