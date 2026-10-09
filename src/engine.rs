@@ -84,6 +84,12 @@ pub struct Live {
     pub target_name: String,
     pub target_id: i32,
     pub target_started_at: Option<i64>,
+    /// The displayed target's hit clock, not the newest hit on any target.
+    pub last_target_hit_ms: Option<i64>,
+    /// Time since the displayed target was last damaged. None means unverified.
+    pub target_idle_ms: Option<i64>,
+    /// "active", "paused", "ready" or "unknown"; cumulative totals are unaffected.
+    pub combat_state: &'static str,
     pub target_mode: String,
     pub reset_notice: Option<String>,
     /// 0..=1, or `None` when the target's HP is unknown.
@@ -101,6 +107,30 @@ pub struct Live {
     pub capture: CaptureStatus,
     pub overlay: OverlaySettings,
     pub numeric_limited: bool,
+}
+
+/// The UI may mark an encounter quiet without ending or deleting it.
+/// A long invulnerability phase should not be misclassified as a completed kill.
+const COMBAT_QUIET_MS: i64 = 3_000;
+
+fn combat_activity(
+    now: i64,
+    target_id: i32,
+    total_damage: f64,
+    last_hit: Option<i64>,
+) -> (&'static str, Option<i64>) {
+    if target_id <= 0 || total_damage <= 0.0 {
+        return ("ready", None);
+    }
+    let Some(last_hit) = last_hit.filter(|v| *v > 0) else {
+        return ("unknown", None);
+    };
+    let age = now.saturating_sub(last_hit).max(0);
+    if age >= COMBAT_QUIET_MS {
+        ("paused", Some(age))
+    } else {
+        ("active", Some(age))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
@@ -1258,10 +1288,11 @@ impl Engine {
             .or_else(|| self.storage.local_character_name());
         let dead = self.storage.get_dead_entities();
 
-        let start = context
+        let target = context
             .targets
             .iter()
-            .find(|t| t.target_id == dps.target_id)
+            .find(|t| t.target_id == dps.target_id);
+        let start = target
             .map(|t| t.last_damage_time - t.battle_time)
             .unwrap_or(0);
         let mut heals: HashMap<i32, i64> = HashMap::new();
@@ -1396,6 +1427,19 @@ impl Engine {
             target_name: self.target_name(dps),
             target_id: dps.target_id,
             target_started_at: (total > 0.0).then_some(start),
+            last_target_hit_ms: target.map(|t| t.last_damage_time),
+            target_idle_ms: combat_activity(
+                now_ms(),
+                dps.target_id,
+                total,
+                target.map(|t| t.last_damage_time),
+            ).1,
+            combat_state: combat_activity(
+                now_ms(),
+                dps.target_id,
+                total,
+                target.map(|t| t.last_damage_time),
+            ).0,
             target_mode: dps.target_mode.clone(),
             reset_notice: self.reset_notice.read().clone(),
             target_hp,
@@ -1444,12 +1488,10 @@ impl Engine {
                     target.last_damage_time - target.battle_time,
                 ),
                 now: now_ms(),
-                last_damage: context
-                    .targets
-                    .iter()
-                    .map(|t| t.last_damage_time)
-                    .max()
-                    .unwrap_or(target.last_damage_time),
+                // Encounter identity is target-specific. Damage dealt to a
+                // different mob must not keep the selected boss "active".
+                // The final reset still guards ALL targets before clearing data.
+                last_damage: target.last_damage_time,
                 hp: if live.hp_estimated {
                     None
                 } else {
@@ -1622,6 +1664,16 @@ pub fn metric_value(row: &LiveRow, metric: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn combat_activity_distinguishes_pauses_from_finished_encounters() {
+        assert_eq!(combat_activity(15_000, 0, 0.0, None), ("ready", None));
+        assert_eq!(combat_activity(15_000, 42, 200.0, None), ("unknown", None));
+        assert_eq!(combat_activity(15_000, 42, 200.0, Some(14_999)), ("active", Some(1)));
+        assert_eq!(combat_activity(15_000, 42, 200.0, Some(12_000)), ("paused", Some(3_000)));
+        assert_eq!(combat_activity(180_000, 42, 200.0, Some(12_000)), ("paused", Some(168_000)));
+        assert_eq!(combat_activity(4_000, 42, 200.0, Some(10_000)), ("active", Some(0)));
+    }
+
     #[test]
     fn profiles_and_position_survive_engine_restart() {
         let path = std::env::temp_dir().join(format!("a2m-settings-{}.db", std::process::id()));
