@@ -377,7 +377,7 @@ async function pollLive() {
       $('#liveTarget').textContent = l.target_name || 'Kein Ziel';
       if(window.renderLiveMetrics)renderLiveMetrics(l);
       $('#battleDuration').textContent = dur(l.battle_time_ms);
-      $('#liveSub').textContent = [l.dungeon,
+      $('#liveSub').textContent = [l.combat_state==='paused'?'Kampfpause · bisheriger Schaden gespeichert':null,l.dungeon,
         l.ping_ms != null ? l.ping_ms + ' ms' : null, l.hp_estimated ? 'HP geschätzt' : null, l.capture.stream_gaps ? 'Datenlücken: ' + l.capture.stream_gaps : null, l.character ? 'Charakter: ' + l.character : null].filter(Boolean).join(' · ');
       $('#liveHp').style.display = l.target_hp == null ? 'none' : 'block';
       if (l.target_hp != null) $('#liveHp div').style.width = (l.target_hp * 100).toFixed(1) + '%';

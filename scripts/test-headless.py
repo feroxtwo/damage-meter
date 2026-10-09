@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
         assert restored["position"] == [123,456]
         assert restored["theme"] == "ember" and restored["compact"]
         assert restored["idle_reset_seconds"] == 30 and restored["wipe_reset"]
-        assert get("/api/version")["parser_version"] == "2.0.52"
+        assert get("/api/version")["parser_version"] == "2.0.54"
         assert restored["hide_names"] and restored["metric"] == "heal"
         post("/api/overlay/profile", {"key":"Main", "save":False})
         # Legacy captures remain readable without permissions or a running game.

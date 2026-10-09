@@ -87,18 +87,19 @@ async function tick() {
     const me=ranked.find(r=>r.is_self);
     if(s.pin_self!==false && me && !selected.some(r=>r.is_self)) {selected.pop();selected.push(me);}
     const top = Math.max(1, ...ranked.map(r => r.value)), sum=ranked.reduce((n,r)=>n+r.value,0)||1;
-    el('groupRate').textContent='Gruppe · '+num(ranked.reduce((n,r)=>n+r.value,0)*1000/Math.max(l.battle_time_ms,1000))+' '+(metric==='heal'?'HPS':metric==='damage_received'?'erlitten/s':'DPS');
+    const paused=metric==='damage'&&l.combat_state==='paused';
+    el('groupRate').textContent='Gruppe · '+(paused?'0':num(ranked.reduce((n,r)=>n+r.value,0)*1000/Math.max(l.battle_time_ms,1000)))+' '+(metric==='heal'?'HPS':metric==='damage_received'?'erlitten/s':'DPS')+(paused?' · Kampfpause':'');
     el('rows').innerHTML = selected.map((r, i) => {
       const key = /^[a-z]+$/.test(r.class_key) ? r.class_key : 'unknown';
       const name = s.hide_names && !r.is_self ? masked(r.name) : r.name;
-      const rate=metric==='heal'?r.hps:metric==='damage_received'?r.value*1000/Math.max(l.battle_time_ms,1000):r.dps;
+      const rate=metric==='heal'?r.hps:metric==='damage_received'?r.value*1000/Math.max(l.battle_time_ms,1000):paused?0:r.dps;
       return `<div class="row ${r.is_self ? 'me' : ''} ${r.dead?'dead':''}">
       <div class="f" style="width:${clamp(r.value / top * 100, 0, 100)}%;background:var(--${key})"></div>
       <div class="t"><span class="rk">${String(r.rank).padStart(2,'0')}</span><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.dead ? '† ' : ''}${esc(name)}</span><span class="n"><strong>${s.show_dps?num(rate)+'<span class="u">/s</span>':num(r.value)}</strong><small>${!s.compact&&s.show_dps?num(r.value)+' · ':''}${(r.value*100/sum).toFixed(0)} %</small></span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
     const c = l.capture;
-    el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : l.numeric_limited ? 'Zahlengrenze: Näherungswerte' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
-    el('foot').hidden = Boolean(s.locked) && !c.error && c.permission && Boolean(c.locked_port) && !l.numeric_limited && !c.recording;
+    el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : l.numeric_limited ? 'Zahlengrenze: Näherungswerte' : paused ? 'Kampfpause · '+Math.floor(Number(l.target_idle_ms||0)/1000)+' s ohne Treffer' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
+    el('foot').hidden = Boolean(s.locked) && !c.error && c.permission && Boolean(c.locked_port) && !l.numeric_limited && !c.recording && !paused;
     el('ping').textContent = [c.recording ? '● REC' : '', l.ping_ms != null ? l.ping_ms + ' ms' : ''].filter(Boolean).join(' · ');
   } catch (e) {
     el('foot').hidden = false; el('state').textContent = 'Meter nicht erreichbar';

@@ -343,3 +343,7 @@ rect[data-curve-highlight] {fill:var(--gold);fill-opacity:.16;stroke:var(--gold)
 @media(max-width:640px){.reference-provider{grid-template-columns:1fr auto}.reference-provider>span{grid-column:1;grid-row:2}.reference-provider a{grid-column:2;grid-row:1}}
 
 .reference-imported .btn{margin-left:auto;font-size:11px;padding:4px 9px}
+
+/* Target inactivity is not a kill; distinguish current DPS from encounter totals. */
+#live.combat-paused #livePhase{color:var(--gold)}
+#live.combat-paused .personal-rate>.v{color:var(--muted)}
