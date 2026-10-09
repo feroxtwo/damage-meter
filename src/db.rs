@@ -356,7 +356,7 @@ fn skill_median(values: &mut [f64]) -> Option<f64> {
     }
     values.sort_by(f64::total_cmp);
     let middle = values.len() / 2;
-    Some(if values.len() % 2 == 0 {
+    Some(if values.len().is_multiple_of(2) {
         (values[middle - 1] + values[middle]) / 2.0
     } else {
         values[middle]
@@ -1259,6 +1259,7 @@ impl Db {
     /// Every distinct observed peer contributes one median across their attempts,
     /// so running the same boss repeatedly cannot dominate the reference.
     /// This is not a global ranking or a claim that an attempt was a kill.
+    #[allow(clippy::type_complexity)]
     pub fn skill_index(&self, fight_id: &str) -> Result<Option<Value>> {
         let conn = self.conn.lock();
         let fight: Option<(
