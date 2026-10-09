@@ -40,7 +40,7 @@ struct Cli {
     /// SQLite database [default: ~/.local/share/aion2-meter/meter.db]
     #[arg(long)]
     db: Option<PathBuf>,
-    /// Override the built-in offline community reference database with a local file.
+    /// Load an offline community reference database (built with build-references).
     #[arg(long)]
     reference_db: Option<PathBuf>,
     /// Language of skill and monster names.
@@ -247,18 +247,13 @@ fn main() -> anyhow::Result<()> {
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
-    // Reference data must never keep the meter from starting. A broken local
-    // file falls back to the built-in database.
-    let loaded = match cli.reference_db.as_deref() {
-        Some(path) => reference_bundle::load(&database, Some(path)).or_else(|e| {
-            tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}");
-            reference_bundle::load(&database, None)
-        }),
-        None => reference_bundle::load(&database, None),
-    };
-    match loaded {
-        Ok(result) => tracing::info!("Offline reference data: {result}"),
-        Err(e) => tracing::warn!("Offline-Referenzdaten nicht geladen: {e:#}"),
+    // Reference data must never keep the meter from starting; a broken local
+    // file is ignored. No provider data ships with the meter.
+    if let Some(path) = cli.reference_db.as_deref() {
+        match reference_bundle::load(&database, path) {
+            Ok(result) => tracing::info!("Offline reference data: {result}"),
+            Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
+        }
     }
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {

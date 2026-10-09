@@ -214,21 +214,6 @@ pub fn read(path: &Path) -> Result<Bundle> {
     read_connection(&conn)
 }
 
-/// The database travels with the binary, including standalone and packaged installs.
-pub fn read_bundled() -> Result<Bundle> {
-    let conn = bundled_connection()?;
-    read_connection(&conn)
-}
-
-fn bundled_connection() -> Result<Connection> {
-    let mut conn = Connection::open_in_memory()?;
-    conn.deserialize_bytes(
-        rusqlite::MAIN_DB,
-        include_bytes!("../data/community/community-references.sqlite"),
-    )?;
-    Ok(conn)
-}
-
 fn read_connection(conn: &Connection) -> Result<Bundle> {
     let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
     let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -286,14 +271,11 @@ fn read_connection(conn: &Connection) -> Result<Bundle> {
     })
 }
 
-/// Load reference data into the meter database: a local file, otherwise the
-/// built-in database. The whole source is validated before anything is written;
-/// a failure leaves the database as it was.
-pub fn load(db: &crate::db::Db, path: Option<&Path>) -> Result<Value> {
-    let bundle = match path {
-        Some(path) => read(path).with_context(|| path.display().to_string())?,
-        None => read_bundled().context("built-in reference database")?,
-    };
+/// Load a local reference file into the meter database. No provider data ships
+/// with the meter. The whole file is validated before anything is written; a
+/// failure leaves the database as it was.
+pub fn load(db: &crate::db::Db, path: &Path) -> Result<Value> {
+    let bundle = read(path).with_context(|| path.display().to_string())?;
     let archives = db.import_provider_archives(&bundle.archives)?;
     let snapshots = bundle.snapshots.len();
     for snapshot in bundle.snapshots {
@@ -308,115 +290,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn embedded_database_is_read_only_and_keeps_weekly_cohorts_distinct() {
-        let conn = bundled_connection().unwrap();
-        assert!(conn.execute("DELETE FROM archives", []).is_err());
-        let bundle = read_bundled().unwrap();
-        assert_eq!(bundle.archives.len(), 6);
-        let notmeter = bundle
-            .archives
-            .iter()
-            .find(|a| a.source.id == "notmeter")
-            .unwrap();
-        assert_eq!(notmeter.rows.len(), 9133);
-        let identities: HashSet<_> = notmeter
-            .rows
-            .iter()
-            .map(|r| {
-                serde_json::to_string(&serde_json::json!([
-                    r.class_key,
-                    r.scope["dungeon_key"],
-                    r.scope["boss_index"],
-                    r.scope["cp_tier"]["index"],
-                    r.scope["period"],
-                    r.scope["period_label"],
-                    r.scope["generated_at"]
-                ]))
-                .unwrap()
-            })
-            .collect();
-        assert_eq!(identities.len(), notmeter.rows.len());
-        assert_eq!(
-            notmeter
-                .rows
-                .iter()
-                .filter(|r| r.scope["period_kind"] == "weekly")
-                .count(),
-            2232
-        );
-    }
-
-    #[test]
-    fn shipped_provider_database_has_six_sources_and_normalized_observations() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("data/community/community-references.sqlite");
-        let bundle = read(&path).unwrap();
-        assert!(bundle.snapshots.is_empty());
-        assert_eq!(bundle.archives.len(), 6);
-        assert_eq!(
-            bundle.archives.iter().map(|a| a.rows.len()).sum::<usize>(),
-            9272
-        );
-        let a2 = bundle
-            .archives
-            .iter()
-            .find(|a| a.source.id == "a2tools")
-            .unwrap();
-        let scoped = a2
-            .rows
-            .iter()
-            .find(|r| r.region.as_deref() == Some("EU"))
-            .unwrap();
-        assert_eq!(scoped.dungeon_id, Some(600072));
-        assert_eq!(scoped.mob_code, Some(2300812));
-        assert_eq!(scoped.cp_min, Some(71000));
-        let quest = bundle
-            .archives
-            .iter()
-            .find(|a| a.source.id == "questlog")
-            .unwrap();
-        assert!(
-            quest
-                .rows
-                .iter()
-                .all(|r| r.metric == "boss_dps_index" && r.median_dps.is_none())
-        );
-        let not = bundle
-            .archives
-            .iter()
-            .find(|a| a.source.id == "notmeter")
-            .unwrap();
-        let bounded = not
-            .rows
-            .iter()
-            .find(|r| r.scope["cp_tier"]["maxCombatPowerExclusive"].is_number())
-            .unwrap();
-        assert_eq!(
-            bounded.cp_max.unwrap() + 1,
-            bounded.scope["cp_tier"]["maxCombatPowerExclusive"]
-                .as_i64()
-                .unwrap()
-        );
-        let db = crate::db::Db::in_memory().unwrap();
-        db.import_provider_archives(&bundle.archives).unwrap();
-        // Idempotent reload, paged access, and no automatic promotion to scores.
-        db.import_provider_archives(&bundle.archives).unwrap();
-        let sources = db.community_sources().unwrap();
-        assert_eq!(sources["offline_data"].as_array().unwrap().len(), 6);
-        assert!(sources["imports"].as_array().unwrap().is_empty());
-        let page = db.provider_observations("notmeter", 1, 2).unwrap().unwrap();
-        assert_eq!(page["row_count"], 9133);
-        assert_eq!(page["rows"].as_array().unwrap().len(), 2);
-        assert_eq!(page["score_eligible"], false);
-        assert!(db.provider_observations("missing", 0, 2).unwrap().is_none());
-    }
-
-    #[test]
     fn normalized_archive_rejects_false_class_and_non_numeric_median() {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("data/community/providers/a2tools.json");
-        let mut data: Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let mut data = provider_archive(vec![observation("gladiator", Some(1), (1, 2), 1.0)]);
+        assert!(
+            serde_json::from_value::<ProviderArchive>(data.clone())
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
         data["rows"][0]["class_key"] = json!("invented-class");
         assert!(
             serde_json::from_value::<ProviderArchive>(data.clone())
@@ -523,12 +404,12 @@ mod tests {
         assert_eq!(build(&output, std::slice::from_ref(&input)).unwrap(), 1);
         let db = crate::db::Db::in_memory().unwrap();
         assert_eq!(
-            load(&db, Some(&output)).unwrap()["archives"]["a2tools"],
+            load(&db, &output).unwrap()["archives"]["a2tools"],
             "imported"
         );
         // A second start with the same file does not rewrite the cache.
         assert_eq!(
-            load(&db, Some(&output)).unwrap()["archives"]["a2tools"],
+            load(&db, &output).unwrap()["archives"]["a2tools"],
             "unchanged"
         );
         db.insert_test_fight(
@@ -570,16 +451,16 @@ mod tests {
         let dir = temp_dir();
         let db = crate::db::Db::in_memory().unwrap();
         let missing = dir.join("missing.sqlite");
-        assert!(load(&db, Some(&missing)).is_err());
+        assert!(load(&db, &missing).is_err());
         let garbage = dir.join("garbage.sqlite");
         std::fs::write(&garbage, b"not a database at all, just bytes").unwrap();
-        assert!(load(&db, Some(&garbage)).is_err());
+        assert!(load(&db, &garbage).is_err());
         let foreign = dir.join("foreign.sqlite");
         Connection::open(&foreign)
             .unwrap()
             .execute_batch("CREATE TABLE snapshots(x); PRAGMA user_version=2;")
             .unwrap();
-        assert!(load(&db, Some(&foreign)).is_err());
+        assert!(load(&db, &foreign).is_err());
         let empty = dir.join("empty.sqlite");
         let conn = Connection::open(&empty).unwrap();
         conn.pragma_update(None, "application_id", APPLICATION_ID)
@@ -590,7 +471,7 @@ mod tests {
              CREATE TABLE archives (source_id TEXT, payload TEXT);",
         )
         .unwrap();
-        assert!(load(&db, Some(&empty)).is_err(), "empty reference database");
+        assert!(load(&db, &empty).is_err(), "empty reference database");
         // One invalid archive row rejects the whole file before any write.
         let mut bad = provider_archive(vec![observation("gladiator", Some(1), (1, 2), 1.0)]);
         conn.execute(
@@ -607,29 +488,9 @@ mod tests {
         )
         .unwrap();
         drop(conn);
-        assert!(load(&db, Some(&empty)).is_err());
+        assert!(load(&db, &empty).is_err());
         let sources = db.community_sources().unwrap();
         assert!(sources["offline_data"].as_array().unwrap().is_empty());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn committed_database_is_exactly_what_the_builder_makes_from_its_sources() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/community");
-        let mut inputs: Vec<PathBuf> = std::fs::read_dir(root.join("providers"))
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|e| e == "json"))
-            .collect();
-        inputs.sort();
-        let dir = temp_dir();
-        let output = dir.join("rebuilt.sqlite");
-        build(&output, &inputs).unwrap();
-        assert!(
-            std::fs::read(&output).unwrap()
-                == std::fs::read(root.join("community-references.sqlite")).unwrap(),
-            "rebuild data/community/community-references.sqlite with build-references"
-        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

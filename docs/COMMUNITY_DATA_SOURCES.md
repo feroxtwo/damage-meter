@@ -129,31 +129,16 @@ gebildet. Die Datenbank übernimmt die Rechtebestätigung aus den Eingabedateien
 sie bestätigt diese nicht selbst. Die Berechtigung muss auch die gewünschte
 Weitergabe der gebündelten Daten umfassen.
 
-## Mitgelieferter Anbieter-Datenstand: 9. Oktober 2026
+## Keine mitgelieferten Anbieterdaten
 
-`data/community/community-references.sqlite` enthält **9.272 normalisierte
-Datengruppen aus allen sechs aufgeführten Community-Anbietern**. Sie wurde einmalig
-für diesen Auftrag aus öffentlichen Seiten bzw. den von diesen Seiten geladenen
-öffentlichen Datenantworten erstellt. Der laufende Meter ruft keinen Anbieter ab.
-Dies ist ein konkreter Ausschnitt, kein vollständiger Spiegel sämtlicher Anbieter,
-Regionen oder historischer Datenstände.
-
-| Anbieter | Datengruppen | Erfasster Umfang |
-| --- | ---: | --- |
-| A2 Tools | 16 | 8 Klassen in der Standardansicht sowie 8 Klassen für Vakron, EU, Dungeon 600072, Boss 2300812, KP 71000–76000 |
-| Aion DPS | 3 | Vakron-Ranglistenaggregate: Runzahl, beste Gruppen-iDPS, mittlere Dauer |
-| Abyss Logs | 25 | Vakron-Klassenmediane und Verteilungen nach Anbieter-KP-Bändern, All-Time, Build `global` |
-| Questlog | 8 | EU-Klassenübersicht, normalisierter Boss-DPS-Index |
-| JaMeter | 87 | Öffentliche KP/DPS-Referenztabellen aller neun Klassen |
-| NotMeter | 9.133 | Alle Klassenaggregate der veröffentlichten Kampf-Filteransichten der KR/TW-Cachegeneration `578d3695ce598fe2` |
-
-Die Anbieter-JSON-Dateien unter `data/community/providers/` enthalten Quellen-URLs,
-Erfassungszeitpunkte, SHA-256 der Eingabeantworten, Originalfilter und Zahlen. Der
-Questlog-Beleg stammt aus der im Browser gerenderten EU-Klassentabelle; sein Hash
-bezieht sich auf die daraus erfassten Tabellenwerte, nicht auf einen HTML-Download.
-Bei NotMeter wurden Spielerlisten, Namen, Charakterprofile und Rohkämpfe aus der
-Antwort ausgeschlossen. Anbieter-Datenstand und Erfassungszeit sind getrennt.
-Hashes dokumentieren die Eingabedateien; sie sind keine Anbieter-Signaturen.
+Der Meter enthält und lädt **keine** Anbieterdaten. Weder das Repository noch
+das Binary noch die Pakete bringen eine Referenzdatenbank mit. Ohne
+`--reference-db` gibt es keine Offline-Anbieterdaten, und der Kampfbericht
+zeigt keinen Community-Vergleich. Wer eigene, berechtigte Daten nutzen will,
+normalisiert sie lokal (siehe [NotMeter-Normalisierung](NOTMETER_NORMALIZATION.md)),
+baut daraus mit `build-references` eine SQLite-Datei und lädt sie mit
+`--reference-db`. Ein Normalisierungslauf bestätigt keine Weitergaberechte und
+keine Score-Kompatibilität.
 
 ### Kompatibilität mit unserem Datenmodell
 
@@ -176,29 +161,21 @@ bleiben `null`. Ein Index (Questlog), Gruppen-iDPS (Aion DPS), Training (NotMete
 und absolute Klassen-DPS bleiben getrennte Kennzahlen. Aus einem Quartil wird kein
 Median erzeugt; ein 50.000er-KP-Band wird nicht in erfundene 20.000er-Kohorten zerlegt.
 
-**Aktuell 0 freigegebene Kampf-Score-Kohorten:** Die Werte sind strukturell
-vereinheitlicht und lokal abrufbar. Keiner der erfassten Datensätze belegt jedoch
-alle für `a2m-community-v2` erforderlichen Vergleichsbedingungen. Unter anderem
-fehlen feste Balance-Zeitgrenzen, bestätigte Methodengleichheit oder die genaue
-regionale Kohorte. Das Archive enthält daher keine automatisch freigegebenen
-`snapshots`; `rights_confirmed` bleibt `false`. Eine Quellenkopie stellt keine
-Bestätigung von Weitergaberechten dar. Geprüfte V1/V2-Snapshots können zusätzlich
+Beobachtungen im Schema `a2m-provider-observations-v1` werden nie zu
+Kampf-Scores. Dafür müssen alle für `a2m-community-v2` erforderlichen
+Vergleichsbedingungen belegt sein (feste Balance-Zeitgrenzen, bestätigte
+Methodengleichheit, genaue regionale Kohorte). Geprüfte V1/V2-Snapshots können
 in derselben SQLite-Datei gebündelt werden.
 
 ### Nutzung und Prüfung
 
 ```sh
-# Die eingebettete Datenbank wird ohne zusätzliche Datei automatisch geladen:
-aion2-meter --no-overlay
-
-# Optional eine eigene Datei statt der eingebetteten Datenbank verwenden:
+# Aus eigenen normalisierten Anbieter-JSON-Dateien bauen und laden:
+aion2-meter build-references --output /pfad/community-references.sqlite /pfad/normalisiert/*.json
 aion2-meter --reference-db /pfad/community-references.sqlite --no-overlay
-
-# Aus den enthaltenen Anbieter-JSON-Dateien reproduzierbar neu bauen:
-aion2-meter build-references --output /tmp/community-rebuilt.sqlite data/community/providers/*.json
 ```
 
-Unter Community-Daten erscheint anschließend die eigene Offline-Anbieterdatenbank
+Unter Community-Daten erscheint anschließend die geladene Offline-Anbieterdatenbank
 mit Quellennamen, Datengruppenzahl und Erfassungsdatum. `Daten ansehen` öffnet die
 lokale JSON-Ansicht. `GET /api/references/archive/{source}?offset=0&limit=50`
 liefert die normalisierten Werte paginiert (maximal 200 pro Anfrage).
@@ -216,20 +193,16 @@ WHERE source_id = 'a2tools' AND region = 'EU';
 ```
 
 `scripts/normalize-community.py` normalisiert gespeicherte Rohantworten ohne
-Netzwerkzugriff. Es erwartet die im Skript bezeichneten Eingabedateien und den
-koreanischen NPC-Katalog des gepinnten Parsers. Für die gebündelte SQLite-Datei
-reichen die mitgelieferten normalisierten JSON-Dateien; Rohantworten und der
-152-MB-NotMeter-Gesamtdownload werden nicht mitgeliefert. Der Normalisierungslauf
-ist kein automatischer Updatefeed.
-
-Die SQLite-Datei wird beim Build in das Binary eingebettet und schreibgeschützt im Speicher gelesen. Tar-, DEB-, RPM- und Einzelbinary-Installationen besitzen daher dieselben Offline-Daten, auch ohne Repository-Verzeichnis. Beim Start werden die validierten Beobachtungen in die lokale Meter-Datenbank übernommen. `--reference-db` ersetzt die eingebettete Sammlung für diesen Start. NotMeter-Zeiträume erhalten `period_label` und explizite Wochen-Grenzen; Inklusivität bleibt unbestätigt. Eine Normalisierung bestätigt keine Weitergaberechte oder Score-Kompatibilität. Details: [NotMeter-Normalisierung](NOTMETER_NORMALIZATION.md).
+Netzwerkzugriff. Es ist kein automatischer Updatefeed. NotMeter-Zeiträume
+erhalten `period_label` und explizite Wochen-Grenzen; Inklusivität bleibt
+unbestätigt.
 
 ### Robustheit, Aktualisierung und API
 
-- Eine fehlende, beschädigte, fremde oder leere `--reference-db` verhindert den Start nicht; sie wird protokolliert und die eingebettete Datenbank verwendet. Jede Quelle wird vollständig geprüft, bevor etwas in die Meter-Datenbank geschrieben wird.
+- Eine fehlende, beschädigte, fremde oder leere `--reference-db` verhindert den Start nicht; sie wird protokolliert und ignoriert. Jede Quelle wird vollständig geprüft, bevor etwas in die Meter-Datenbank geschrieben wird.
 - Ein unveränderter Datenstand wird nicht bei jedem Start neu geschrieben. Ein älterer Erfassungsstand (`captured_at`) ersetzt nie einen neueren derselben Quelle; pro Anbieter ist genau ein Datenstand aktiv, alte und neue Stände werden nicht gemischt.
 - Der Builder lehnt Zeilen ab, die sich nur in ihren Zahlen unterscheiden (verlorene Dimension), außerdem Stichprobe 0 und ungültige Kennzeichen. `scripts/normalize-community.py` prüft dasselbe für alle Anbieter vor dem Schreiben.
-- Ein Rust-Test baut die SQLite-Datei aus `data/community/providers/*.json` neu und verlangt eine byte-identische Datei; die committete Datenbank kann damit nicht unbemerkt von ihrer Quelle abweichen.
+- `build-references` erzeugt aus denselben Eingaben byte-identische Dateien.
 - `GET /api/references/archive/{source}` liefert höchstens 200 Zeilen je Seite, dazu `limit`, `next_offset`, `rights_confirmed` und immer `score_eligible: false`. Ungültige Parameter ergeben 400, unbekannte Anbieter 404.
 - `GET /api/fights/{id}/community-index` meldet `withheld` (passende, aber nicht freigegebene Referenzzeilen mit Grund) und `offline_observations` (Anzahl, Anbieter, Gründe). So bleiben „keine Daten“ und „Daten vorhanden, Vergleich nicht freigegeben“ unterscheidbar.
-- Alle eingebetteten Anbieterdaten tragen `rights_confirmed: false`. Einbetten heißt, dass jede Installation sie weitergibt; eine Rechtebestätigung ist damit nicht verbunden.
+- Der Meter setzt `rights_confirmed` nie selbst; er übernimmt den Wert aus der geladenen Datei.
