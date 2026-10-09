@@ -227,6 +227,18 @@ async fn fight_detail(
     .ok_or(StatusCode::NOT_FOUND)
 }
 
+/// Personal or overall local peer reference for a stored boss fight.
+async fn skill_index(
+    State(engine): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    blocking(engine, move |e| e.db.skill_index(&id))
+        .await?
+        .map_err(db_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 /// `?character=Name` limits a statistic to one of your characters.
 #[derive(Deserialize)]
 struct StatsQuery {
@@ -599,6 +611,7 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/runs/{id}/favorite", post(run_favorite))
         .route("/api/fights", get(search_fights))
         .route("/api/fights/{id}", get(fight_detail))
+        .route("/api/fights/{id}/skill-index", get(skill_index))
         .route("/api/fights/{id}/annotation", post(annotate))
         .route("/api/players/{id}", get(player))
         .route("/api/overlay/profile", post(profile))

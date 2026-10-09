@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS fights (
 );
 CREATE INDEX IF NOT EXISTS fights_started ON fights(started_at);
 CREATE INDEX IF NOT EXISTS fights_run ON fights(run_id);
+CREATE INDEX IF NOT EXISTS fights_boss_index ON fights(dungeon_id, mob_code);
 CREATE TABLE IF NOT EXISTS fight_annotations (
  fight_id TEXT PRIMARY KEY REFERENCES fights(id) ON DELETE CASCADE,
  favorite INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT ''
@@ -346,6 +347,39 @@ fn rows_to_json(
         Ok(Value::Object(obj))
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Median of observed values, also when the count is even.
+fn skill_median(values: &mut [f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    let middle = values.len() / 2;
+    Some(if values.len() % 2 == 0 {
+        (values[middle - 1] + values[middle]) / 2.0
+    } else {
+        values[middle]
+    })
+}
+
+fn skill_reference(peers: &mut HashMap<(String, i64), Vec<f64>>, own_dps: f64) -> Value {
+    let mut values: Vec<f64> = peers
+        .values_mut()
+        .filter_map(|observations| skill_median(observations))
+        .collect();
+    let count = values.len();
+    if count < 5 {
+        return json!({"status":"insufficient","peer_count":count,
+                      "reference_dps":null,"score":null});
+    }
+    let reference = skill_median(&mut values).unwrap_or(0.0);
+    if !reference.is_finite() || reference <= 0.0 {
+        return json!({"status":"insufficient","peer_count":count,
+                      "reference_dps":null,"score":null});
+    }
+    json!({"status":"ready","peer_count":count,"reference_dps":reference,
+           "score":own_dps / reference * 100.0})
 }
 
 /// Adds the display fields the UI wants to rows carrying `job` (Korean class
@@ -1221,6 +1255,124 @@ impl Db {
         ))
     }
 
+
+    /// Read-only, on-device Skill Index: comparable recorded boss and power bracket.
+    /// Every distinct observed peer contributes one median across their attempts,
+    /// so running the same boss repeatedly cannot dominate the reference.
+    /// This is not a global ranking or a claim that an attempt was a kill.
+    pub fn skill_index(&self, fight_id: &str) -> Result<Option<Value>> {
+        let conn = self.conn.lock();
+        let fight: Option<(
+            i64, i64, i64, Option<i64>, i64,
+            Option<String>, Option<String>, Option<i64>, Option<f64>,
+        )> = conn.query_row(
+            "SELECT COALESCE(f.dungeon_id, 0), COALESCE(f.mob_code, 0), f.is_train,
+                    f.numeric_limited, COALESCE(f.duration_ms, 0),
+                    p.name, p.job, p.combat_power, p.dps
+             FROM fights f LEFT JOIN fight_players p
+               ON p.fight_id = f.id AND p.is_self = 1
+             WHERE f.id = ?1 ORDER BY p.damage DESC LIMIT 1",
+            params![fight_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?,
+                   r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)),
+        ).optional()?;
+        let Some((dungeon_id, mob_code, is_train, numeric_limited, duration_ms,
+                  self_name, job, cp, dps)) = fight else {
+            return Ok(None);
+        };
+        let combat_power = cp.unwrap_or(0);
+        let own_dps = dps.unwrap_or(0.0);
+        let class_key = names::class_info(job.as_deref().unwrap_or("")).key;
+        let cp_min = combat_power.saturating_sub(10_000).max(1);
+        let cp_max = combat_power.saturating_add(10_000);
+        let mut result = json!({
+            "source": "local",
+            "status": "unavailable",
+            "reason": null,
+            "own_dps": own_dps,
+            "combat_power": combat_power,
+            "cp_min": cp_min,
+            "cp_max": cp_max,
+            "class_key": class_key,
+            "required_peers": 5,
+            "overall": null,
+            "same_class": null
+        });
+        let reason = if is_train != 0 {
+            Some("training")
+        } else if numeric_limited != Some(0) {
+            Some("limited_data")
+        } else if mob_code <= 0 {
+            Some("unknown_boss")
+        } else if duration_ms < 10_000 {
+            Some("short_fight")
+        } else if combat_power <= 0 {
+            Some("missing_cp")
+        } else if !own_dps.is_finite() || own_dps <= 0.0 {
+            Some("missing_dps")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            result["reason"] = json!(reason);
+            return Ok(Some(result));
+        }
+        let world_mob: bool =
+            conn.query_row("SELECT world_mob(?1)", params![mob_code], |r| r.get(0))?;
+        if world_mob {
+            result["reason"] = json!("not_boss");
+            return Ok(Some(result));
+        }
+
+        // No external upload or service: comparisons use only locally saved
+        // fight players. Self characters, anonymized names, incomplete fights
+        // and peers without known combat power never enter the reference.
+        let mut stmt = conn.prepare(
+            "SELECT p.name, COALESCE(p.server_id, 0), COALESCE(p.job, ''), p.dps
+             FROM fights f JOIN fight_players p ON p.fight_id = f.id
+             WHERE f.dungeon_id = ?1 AND f.mob_code = ?2
+               AND f.is_train = 0 AND f.numeric_limited = 0
+               AND f.duration_ms >= 10000
+               AND p.combat_power BETWEEN ?3 AND ?4 AND p.dps > 0
+               AND p.is_self = 0
+               AND p.name IS NOT NULL AND length(p.name) > 0
+               AND p.name NOT LIKE '#%' AND p.name NOT LIKE '%*%'
+               AND p.name <> COALESCE(?5, '')
+               AND p.name NOT IN (SELECT name FROM my_characters)",
+        )?;
+        let rows = stmt.query_map(
+            params![dungeon_id, mob_code, cp_min, cp_max, self_name.as_deref()],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?, r.get::<_, f64>(3)?)),
+        )?;
+        let mut overall: HashMap<(String, i64), Vec<f64>> = HashMap::new();
+        let mut same_class: HashMap<(String, i64), Vec<f64>> = HashMap::new();
+        for row in rows {
+            let (name, server, peer_job, peer_dps) = row?;
+            if !peer_dps.is_finite() || peer_dps <= 0.0 {
+                continue;
+            }
+            if class_key != "unknown" && names::class_info(&peer_job).key == class_key {
+                same_class
+                    .entry((name.clone(), server))
+                    .or_default()
+                    .push(peer_dps);
+            }
+            overall.entry((name, server)).or_default().push(peer_dps);
+        }
+        result["overall"] = skill_reference(&mut overall, own_dps);
+        if class_key != "unknown" {
+            result["same_class"] = skill_reference(&mut same_class, own_dps);
+        }
+        if result["overall"]["status"] == "ready" {
+            result["status"] = json!("ready");
+        } else {
+            result["status"] = json!("insufficient");
+            result["reason"] = json!("few_peers");
+        }
+        Ok(Some(result))
+    }
+
     /// Ended runs only. Match run-detail's shared recorded fight windows,
     /// including zero contribution in fights the selected character missed.
     pub fn run_history(&self, character: &str) -> Result<Value> {
@@ -1351,6 +1503,64 @@ mod tests {
             dbid: 1,
             is_self,
         }
+    }
+
+
+    #[test]
+    fn skill_index_medians_are_per_distinct_peer_and_scope_is_strict() {
+        let db = Db::in_memory().unwrap();
+        {
+            let conn = db.conn.lock();
+            let insert = |id: &str, name: &str, job: &str, mob: i64, cp: i64,
+                          rate: f64, limited: i64, training: i64, ms: i64, self_flag: bool| {
+                conn.execute(
+                    "INSERT INTO fights(id,boss_name,mob_code,dungeon_id,started_at,duration_ms,is_train,numeric_limited)
+                     VALUES (?1,'Kargos',?2,123,0,?3,?4,?5)",
+                    params![id, mob, ms, training, limited],
+                ).unwrap();
+                conn.execute(
+                    "INSERT INTO fight_players(fight_id,actor_id,name,job,damage,dps,combat_power,server_id,is_self)
+                     VALUES (?1,1,?2,?3,10000,?4,?5,1304,?6)",
+                    params![id, name, job, rate, cp, self_flag],
+                ).unwrap();
+            };
+            insert("my", "Me", "검성", 77, 620_000, 260.0, 0, 0, 30_000, true);
+            for (i, rate) in [100.0, 150.0, 200.0, 250.0, 300.0].iter().enumerate() {
+                let id = format!("peer-{i}");
+                let name = format!("Peer-{i}");
+                let job = if i == 0 { "검성" } else { "치유성" };
+                insert(&id, &name, job, 77, 620_000, *rate, 0, 0, 30_000, false);
+            }
+            for i in 0..8 {
+                insert(&format!("repeat-{i}"), "Peer-4", "치유성", 77,
+                       620_000, 300.0, 0, 0, 30_000, false);
+            }
+            insert("other-boss", "WrongBoss", "치유성", 88, 620_000,
+                   1.0, 0, 0, 30_000, false);
+            insert("other-cp", "WrongPower", "치유성", 77, 640_000,
+                   1.0, 0, 0, 30_000, false);
+            insert("limited", "Limited", "치유성", 77, 620_000,
+                   1.0, 1, 0, 30_000, false);
+            insert("train", "Training", "치유성", 77, 620_000,
+                   1.0, 0, 1, 30_000, false);
+            insert("short", "Short", "치유성", 77, 620_000,
+                   1.0, 0, 0, 4_000, false);
+            insert("no-peers", "Me", "검성", 99, 620_000,
+                   260.0, 0, 0, 30_000, true);
+            insert("no-cp", "Me", "검성", 77, 0,
+                   260.0, 0, 0, 30_000, true);
+        }
+        let result = db.skill_index("my").unwrap().unwrap();
+        assert_eq!(result["status"], "ready");
+        assert_eq!(result["source"], "local");
+        assert_eq!(result["overall"]["peer_count"], 5);
+        assert_eq!(result["overall"]["reference_dps"], 200.0);
+        assert_eq!(result["overall"]["score"], 130.0);
+        assert_eq!(result["same_class"]["status"], "insufficient");
+        assert_eq!(result["same_class"]["peer_count"], 1);
+        assert_eq!(db.skill_index("no-peers").unwrap().unwrap()["status"], "insufficient");
+        assert_eq!(db.skill_index("no-cp").unwrap().unwrap()["reason"], "missing_cp");
+        assert!(db.skill_index("missing").unwrap().is_none());
     }
 
     #[test]
