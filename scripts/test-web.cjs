@@ -146,7 +146,12 @@ const server = http.createServer((req,res) => {
         await isolated.goto(base+'/#runs');
         await isolated.waitForFunction(()=>typeof window.openFight==='function'&&typeof window.fillPerformanceCoach==='function');
         await isolated.evaluate(()=>openFight('f1'));
-        await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor();
+        try {
+          await isolated.locator('#performanceCoachPanel .coach-cell').first().waitFor({timeout:5000});
+        } catch (error) {
+          console.error('Performance coach state:', await isolated.locator('#performanceCoachPanel').textContent().catch(()=>'(absent)'), 'browser errors:', errors.slice(-5));
+          throw error;
+        }
         const text=await isolated.locator('#performanceCoachPanel').textContent();
         assert.match(text,/Eigene Kampf-DPS/);
         assert.match(text,/Stärkster Skill/);
