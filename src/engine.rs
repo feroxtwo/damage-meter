@@ -537,26 +537,40 @@ impl Engine {
         self.sync_group();
         let names = self.storage.get_nicknames();
         if let Some(me) = self.storage.local_profile().name {
-            let newest = self.storage.get_combat_snapshot_light().values()
+            let newest = self
+                .storage
+                .get_combat_snapshot_light()
+                .values()
                 .flat_map(|t| t.actors.iter())
                 .filter(|(id, _)| names.get(id).is_some_and(|name| name.trim() == me.trim()))
                 .max_by_key(|(_, actor)| actor.last_damage_time)
                 .map(|(&id, _)| id);
             if let Some(id) = newest {
-                self.storage.set_local_identity_from_game(i64::from(id), Some(me));
+                self.storage
+                    .set_local_identity_from_game(i64::from(id), Some(me));
             }
         }
         let mut calc = self.calc.lock();
         let mut dps = calc.get_dps();
         let context = calc.get_details_context();
         let local = self.storage.local_player_id().map(|id| id as i32);
-        let newer_own_target = local.is_some_and(|id| context.targets.iter().any(|t|
-            t.target_id != dps.target_id && t.actor_damage.contains_key(&id)
-                && t.last_damage_time > context.targets.iter().find(|t| t.target_id == dps.target_id)
-                    .map_or(0, |t| t.last_damage_time)));
+        let newer_own_target = local.is_some_and(|id| {
+            context.targets.iter().any(|t| {
+                t.target_id != dps.target_id
+                    && t.actor_damage.contains_key(&id)
+                    && t.last_damage_time
+                        > context
+                            .targets
+                            .iter()
+                            .find(|t| t.target_id == dps.target_id)
+                            .map_or(0, |t| t.last_damage_time)
+            })
+        });
         let mode = self.target_mode.read().clone();
-        if local.is_some() && (mode == "bossTargets" && dps.map.is_empty()
-            || self.storage.is_entity_dead(dps.target_id) && newer_own_target) {
+        if local.is_some()
+            && (mode == "bossTargets" && dps.map.is_empty()
+                || self.storage.is_entity_dead(dps.target_id) && newer_own_target)
+        {
             calc.set_target_selection_mode("lastHitByMe");
             dps = calc.get_dps();
             calc.set_target_selection_mode(&mode);
@@ -711,7 +725,8 @@ impl Engine {
     pub fn note_packet(&self, payload: &[u8], at_ms: i64) {
         if let Some(map) = crate::instances::map_load(payload) {
             self.note_map_load(map, at_ms);
-        } else if let Some(names) = crate::instances::group_list(payload).filter(|n| !n.is_empty()) {
+        } else if let Some(names) = crate::instances::group_list(payload).filter(|n| !n.is_empty())
+        {
             let next: HashSet<String> = names.into_iter().collect();
             let was_party = self.group.read().len() >= 2;
             if was_party && next.len() <= 1 {
@@ -827,8 +842,14 @@ impl Engine {
             }
             let start = target.last_damage_time - target.battle_time;
             let audience = audiences.entry((target.target_id, start)).or_default();
-            audience.extend(target.actor_damage.keys().copied().filter(|id|
-                (self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others) || Some(*id) == local || self.storage.get_nickname(*id).is_some_and(|n| trusted.contains(n.trim()))));
+            audience.extend(target.actor_damage.keys().copied().filter(|id| {
+                (self.storage.current_dungeon_id() <= 0 && self.overlay.read().open_world_others)
+                    || Some(*id) == local
+                    || self
+                        .storage
+                        .get_nickname(*id)
+                        .is_some_and(|n| trusted.contains(n.trim()))
+            }));
             let entry = series.entry((target.target_id, start)).or_default();
             entry.observe(
                 now - start,
@@ -915,20 +936,32 @@ impl Engine {
     }
 
     fn sync_group(&self) {
-        if !self.group_known.load(Ordering::Relaxed) { return; }
+        if !self.group_known.load(Ordering::Relaxed) {
+            return;
+        }
         let group = self.group.read().clone();
         // The upstream complete-solo setter flushes combat and clears the
         // instance. Membership filtering belongs here; preserve the last fight.
-        if group.len() <= 1 { return; }
+        if group.len() <= 1 {
+            return;
+        }
         let roster = self.storage.get_party_members();
-        if roster.keys().cloned().collect::<HashSet<_>>() == group { return; }
-        let members = group.into_iter().enumerate().map(|(i, name)| {
-            let member = roster.get(&name).cloned().unwrap_or(
-                a2tools_dps_meter_lib::combat::data_storage::PartyMember {
-                    slot: (i + 1) as u8, ..Default::default()
-                });
-            (name, member)
-        }).collect();
+        if roster.keys().cloned().collect::<HashSet<_>>() == group {
+            return;
+        }
+        let members = group
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let member = roster.get(&name).cloned().unwrap_or(
+                    a2tools_dps_meter_lib::combat::data_storage::PartyMember {
+                        slot: (i + 1) as u8,
+                        ..Default::default()
+                    },
+                );
+                (name, member)
+            })
+            .collect();
         self.storage.set_party_roster(members, true);
     }
 
@@ -1101,8 +1134,14 @@ impl Engine {
         for record in &mut records {
             if let Some(allowed) = audiences.get(&(record.target_id, record.start_time_ms)) {
                 record.actors.retain(|a| allowed.contains(&a.actor_id));
-                record.details.skills.retain(|skill| allowed.contains(&skill.actor_id));
-                record.details.heal_skills.retain(|skill| allowed.contains(&skill.actor_id));
+                record
+                    .details
+                    .skills
+                    .retain(|skill| allowed.contains(&skill.actor_id));
+                record
+                    .details
+                    .heal_skills
+                    .retain(|skill| allowed.contains(&skill.actor_id));
                 record.total_damage = record.details.skills.iter().map(|s| s.dmg).sum::<i32>();
             }
         }

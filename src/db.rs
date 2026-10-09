@@ -231,10 +231,12 @@ fn register_functions(conn: &Connection) -> Result<()> {
                 .unwrap_or_default())
         },
     )?;
-    conn.create_scalar_function("required_bosses", 1,
-        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| {
-            Ok(serde_json::to_string(&names::dungeon_bosses(ctx.get(0)?)).unwrap())
-        })?;
+    conn.create_scalar_function(
+        "required_bosses",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| Ok(serde_json::to_string(&names::dungeon_bosses(ctx.get(0)?)).unwrap()),
+    )?;
     set_world_mob_check(conn, |_| false)?;
     set_activity_check(conn, |id, _| {
         names::dungeon_activity(id).unwrap_or("unclassified").into()
@@ -336,12 +338,16 @@ fn migrate(conn: &Connection) -> Result<()> {
         ),
         [],
     )?;
-    let ids: Vec<i32> = conn.prepare("SELECT DISTINCT dungeon_id FROM runs")?
-        .query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    let ids: Vec<i32> = conn
+        .prepare("SELECT DISTINCT dungeon_id FROM runs")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
     for id in ids {
         if names::dungeon_activity(id) == Some("transcendence") {
-            conn.execute("UPDATE runs SET difficulty = ?1 WHERE dungeon_id = ?2",
-                params![names::dungeon_difficulty(id), id])?;
+            conn.execute(
+                "UPDATE runs SET difficulty = ?1 WHERE dungeon_id = ?2",
+                params![names::dungeon_difficulty(id), id],
+            )?;
         }
     }
     repair_masked_names_once(conn)
@@ -1028,7 +1034,13 @@ impl Db {
             WHERE f.run_id=r.id AND f.mob_code=expected.value AND f.is_train=0
               AND f.numeric_limited=0 AND json_extract(a.data,'$.outcome')='kill')) FROM runs r WHERE r.id=?1",
             params![run_id], |row| row.get(0))?;
-        run["outcome"] = json!(if run["ended_at"].is_null() { "active" } else if complete { "completed" } else { "incomplete" });
+        run["outcome"] = json!(if run["ended_at"].is_null() {
+            "active"
+        } else if complete {
+            "completed"
+        } else {
+            "incomplete"
+        });
         let mut stmt = conn.prepare(
             "SELECT name, job, server_id, level, gear_score, combat_power, is_self FROM run_members
              WHERE run_id = ?1 ORDER BY is_self DESC, name",
@@ -2132,10 +2144,19 @@ mod tests {
                     params![format!("boss{i}")]).unwrap();
             }
         }
-        assert_eq!(db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"], 10000);
+        assert_eq!(
+            db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"],
+            10000
+        );
         assert_eq!(db.run_detail(1).unwrap().unwrap()["outcome"], "incomplete");
         assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "completed");
-        db.conn.lock().execute("UPDATE fight_analytics SET data='{\"outcome\":\"wipe\"}' WHERE fight_id='boss0'", []).unwrap();
+        db.conn
+            .lock()
+            .execute(
+                "UPDATE fight_analytics SET data='{\"outcome\":\"wipe\"}' WHERE fight_id='boss0'",
+                [],
+            )
+            .unwrap();
         assert!(db.summary("").unwrap()["per_dungeon"][0]["fastest_ms"].is_null());
         assert_eq!(db.run_detail(2).unwrap().unwrap()["outcome"], "incomplete");
     }

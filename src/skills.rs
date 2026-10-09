@@ -60,8 +60,12 @@ pub fn metadata(code: i64) -> Option<Value> {
     if de.is_none() && en.is_none() {
         return None;
     }
-    let family_icon = (code >= 10_000_000).then(|| BY_ID.get(&(code - code % 10_000)))
-        .flatten().and_then(|s| s.get("icon")).cloned().unwrap_or(Value::Null);
+    let family_icon = (code >= 10_000_000)
+        .then(|| BY_ID.get(&(code - code % 10_000)))
+        .flatten()
+        .and_then(|s| s.get("icon"))
+        .cloned()
+        .unwrap_or(Value::Null);
     Some(json!({"names":{"de":de,"en":en},"icon":family_icon}))
 }
 /// Enrich only skill/effect display rows. Raw names stay available in storage;

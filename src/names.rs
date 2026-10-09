@@ -104,10 +104,16 @@ static BOSS_METADATA: LazyLock<Value> = LazyLock::new(|| {
 });
 
 pub fn dungeon_bosses(id: i32) -> Vec<i32> {
-    BOSS_METADATA.as_object().unwrap().iter().filter_map(|(code, entry)| {
-        (entry["isBoss"] == true && entry["dungeonId"].as_i64() == Some(i64::from(id)))
-            .then(|| code.parse().ok()).flatten()
-    }).collect()
+    BOSS_METADATA
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter_map(|(code, entry)| {
+            (entry["isBoss"] == true && entry["dungeonId"].as_i64() == Some(i64::from(id)))
+                .then(|| code.parse().ok())
+                .flatten()
+        })
+        .collect()
 }
 
 /// Use explicit NPC tiers for transcendence; map ID suffixes are not stages.
@@ -115,10 +121,15 @@ pub fn dungeon_difficulty(id: i32) -> Option<String> {
     let entry = DUNGEONS.get(&id)?;
     let n = id % 10;
     if entry.activity.as_deref() == Some("transcendence") {
-        let tiers: HashSet<_> = BOSS_METADATA.as_object().unwrap().values()
+        let tiers: HashSet<_> = BOSS_METADATA
+            .as_object()
+            .unwrap()
+            .values()
             .filter(|npc| npc["dungeonId"].as_i64() == Some(i64::from(id)) && npc["isBoss"] == true)
-            .filter_map(|npc| npc["tier"].as_str()).collect();
-        return (tiers.len() == 1).then(|| tiers.iter().next().unwrap().replace("Stage ", "Stufe "));
+            .filter_map(|npc| npc["tier"].as_str())
+            .collect();
+        return (tiers.len() == 1)
+            .then(|| tiers.iter().next().unwrap().replace("Stage ", "Stufe "));
     }
     let key = entry.difficulty.clone().or_else(|| {
         match n {
