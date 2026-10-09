@@ -46,7 +46,7 @@ function communityComparisonMarkup(response) {
       '<div><span class="eyebrow">' + esc(row.source_id) + ' · ' + (row.scope === 'same_class' ? 'Gleiche Klasse' : 'Alle Klassen') + '</span>' +
       '<strong class="' + (score >= 100 ? 'compare-positive' : 'compare-negative') + '">' + communityRatio(score) + '</strong>' +
       '<span>' + sign + delta + ' % zum Median · ' + num(row.reference_dps) + ' Referenz-DPS' + (row.comparison_quality==='legacy_unspecified'?' · Richtwert, DPS-Methode unbekannt':' · dokumentierte Kampf-DPS') + '</span></div>' +
-      '<div class="community-ref-detail">' + num(row.samples) + ' Vergleichsspieler · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
+      '<div class="community-ref-detail">' + num(row.samples) + (row.comparison_quality==='legacy_unspecified'?' Beobachtungen (Stichprobe unbestätigt)':' unabhängige Spieler laut Quelle') + ' · KP ' + num(row.cp_min) + '–' + num(row.cp_max) +
       ' · ' + esc(row.region) + ' · ' + esc(row.balance_id) + '<div><a href="' + esc(row.source_url) +
       '" target="_blank" rel="noopener noreferrer">Quelle ansehen ↗</a></div></div></div>';
   }).join('');
