@@ -247,14 +247,6 @@ fn main() -> anyhow::Result<()> {
     let db_path = cli.db.unwrap_or_else(default_db);
     let database =
         db::Db::open(&db_path).with_context(|| format!("Datenbank {}", db_path.display()))?;
-    // Reference data must never keep the meter from starting; a broken local
-    // file is ignored. No provider data ships with the meter.
-    if let Some(path) = cli.reference_db.as_deref() {
-        match reference_bundle::load(&database, path) {
-            Ok(result) => tracing::info!("Offline reference data: {result}"),
-            Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
-        }
-    }
     tracing::info!("Database: {}", db_path.display());
     let lang = match cli.lang {
         Lang::De => "de",
@@ -276,6 +268,26 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("Dashboard-Adresse {addr} ist nicht verfügbar"))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
+
+    // Reference data must never keep the meter from starting or delay it:
+    // it loads in the background, the built-in datasets first, then an
+    // optional local file. A broken file is ignored.
+    {
+        let engine = engine.clone();
+        let extra = cli.reference_db.clone();
+        std::thread::spawn(move || {
+            match reference_bundle::load_embedded(&engine.db) {
+                Ok(result) => tracing::info!("Integrierte Vergleichsdaten: {result}"),
+                Err(e) => tracing::warn!("Integrierte Vergleichsdaten nicht geladen: {e:#}"),
+            }
+            if let Some(path) = extra.as_deref() {
+                match reference_bundle::load(&engine.db, path) {
+                    Ok(result) => tracing::info!("Offline reference data: {result}"),
+                    Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
+                }
+            }
+        });
+    }
 
     // Capture → parser
     let permission = capture::has_capture_permission();

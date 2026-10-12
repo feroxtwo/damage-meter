@@ -147,8 +147,8 @@ CREATE TABLE IF NOT EXISTS fight_effects (
 );
 "#;
 
-/// Offline provider observations: reference information only, never a score
-/// cohort. A local cache of `--reference-db`, so an older layout is rebuilt.
+/// Provider observations from the built-in datasets and `--reference-db`.
+/// A local cache, so an older layout is rebuilt.
 const PROVIDER_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS provider_archives (
     source_id       TEXT PRIMARY KEY,
@@ -484,6 +484,62 @@ fn skill_median(values: &mut [f64]) -> Option<f64> {
     } else {
         values[middle]
     })
+}
+
+/// The fight a provider median is matched against.
+#[derive(Clone, Copy)]
+struct ProviderFight<'a> {
+    dungeon: i64,
+    mob: i64,
+    class_key: &'a str,
+    cp: i64,
+    dps: f64,
+    region: &'a str,
+    confirmed_kill: bool,
+}
+
+/// Where own DPS falls within a dataset's published quantiles. Only the
+/// quantiles the dataset states are used, never interpolated.
+fn percentile_band(stats: &Value, median: f64, dps: f64) -> &'static str {
+    let num = |keys: &[&str]| keys.iter().find_map(|k| stats[*k].as_f64());
+    let mut p25 = num(&["p25Dps", "top75"]);
+    let mut p75 = num(&["p75Dps", "top25"]);
+    let p90 = num(&["p90Dps", "top10"]);
+    if let Some(text) = stats["middle_half_display"].as_str() {
+        let parse = |v: &str| {
+            let v = v.trim().trim_end_matches("/s");
+            let (n, m) = match v.strip_suffix(['k', 'K']) {
+                Some(n) => (n, 1000.0),
+                None => (v, 1.0),
+            };
+            n.trim().parse::<f64>().ok().map(|n| n * m)
+        };
+        if let Some((low, high)) = text.split_once(" to ") {
+            p25 = p25.or(parse(low));
+            p75 = p75.or(parse(high));
+        }
+    }
+    if p90.is_some_and(|v| dps >= v) {
+        "above_p90"
+    } else if p75.is_some_and(|v| dps >= v) {
+        if p90.is_some() {
+            "p75_p90"
+        } else {
+            "above_p75"
+        }
+    } else if dps >= median {
+        if p75.is_some() {
+            "p50_p75"
+        } else {
+            "above_median"
+        }
+    } else if p25.is_some_and(|v| dps >= v) {
+        "p25_p50"
+    } else if p25.is_some() {
+        "below_p25"
+    } else {
+        "below_median"
+    }
 }
 
 fn skill_reference(peers: &mut HashMap<(String, i64), Vec<f64>>, own_dps: f64) -> Value {
@@ -1777,13 +1833,11 @@ impl Db {
         result["offset"] = json!(offset);
         result["limit"] = json!(limit);
         result["next_offset"] = json!((next < total).then_some(next));
-        // Structural: provider observations are never a score cohort.
-        result["score_eligible"] = json!(false);
         Ok(Some(result))
     }
 
-    /// Offline provider data about this boss or dungeon. Information only: the
-    /// caller reports why it is not comparable and never derives a score.
+    /// Provider data about this boss or dungeon, for explaining why none of it
+    /// fits when no comparison was possible.
     fn offline_observations(
         conn: &Connection,
         dungeon: i64,
@@ -1791,7 +1845,7 @@ impl Db {
         class_key: &str,
     ) -> Result<Value> {
         let mut stmt = conn.prepare(
-            "SELECT o.source_id, o.class_key, a.rights_confirmed,
+            "SELECT o.source_id, o.class_key,
                     json_extract(o.payload, '$.compatibility') AS compatibility
              FROM provider_observations o JOIN provider_archives a USING(source_id)
              WHERE (o.mob_code=?1 AND ?1>0)
@@ -1807,21 +1861,160 @@ impl Db {
             if row.get::<_, String>(1)? == class_key {
                 same_class += 1;
             }
-            if row.get::<_, i64>(2)? != 1 {
-                blockers.insert("rights_unconfirmed".to_string());
-            }
             let flags: Vec<String> =
-                serde_json::from_str(&row.get::<_, String>(3).unwrap_or_default())
+                serde_json::from_str(&row.get::<_, String>(2).unwrap_or_default())
                     .unwrap_or_default();
             blockers.extend(flags);
         }
+        let sources: Vec<_> = sources
+            .iter()
+            .map(|s| crate::community::dataset_label(s))
+            .collect();
         Ok(json!({
             "rows": rows,
             "same_class": same_class,
             "sources": sources,
-            "blockers": blockers,
-            "score_eligible": false
+            "blockers": blockers
         }))
+    }
+
+    /// Integrated provider medians that fit this fight: the same class, the
+    /// same boss (and difficulty where the dataset names one) or, failing
+    /// that, the same instance, a CP band covering the own CP and a compatible
+    /// region. Training data, class indices and rows without a boss are never
+    /// compared. One reference per dataset; differences in method stay listed
+    /// as caveats next to the score.
+    fn provider_comparisons(conn: &Connection, fight: ProviderFight<'_>) -> Result<Vec<Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT source_id, payload FROM provider_observations
+             WHERE class_key=?1 AND ((mob_code=?2 AND ?2>0)
+                OR (mob_code IS NULL AND dungeon_id=?3 AND ?3>0))",
+        )?;
+        let korean = matches!(fight.region, "KR" | "TW");
+        let mut best: HashMap<String, (Vec<i64>, Value)> = HashMap::new();
+        let mut query = stmt.query(params![fight.class_key, fight.mob, fight.dungeon])?;
+        while let Some(row) = query.next()? {
+            let source: String = row.get(0)?;
+            let Ok(obs) = serde_json::from_str::<Value>(&row.get::<_, String>(1)?) else {
+                continue;
+            };
+            let flags: Vec<&str> = obs["compatibility"]
+                .as_array()
+                .map(|v| v.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let median = obs["median_dps"].as_f64().unwrap_or(0.0);
+            if obs["metric"] != "provider_dps"
+                || !median.is_finite()
+                || median <= 0.0
+                || flags.iter().any(|f| {
+                    matches!(
+                        *f,
+                        "training" | "index_not_absolute_dps" | "boss_and_difficulty_unspecified"
+                    )
+                })
+            {
+                continue;
+            }
+            let boss_level = obs["mob_code"].as_i64() == Some(fight.mob);
+            if obs["dungeon_id"]
+                .as_i64()
+                .is_some_and(|d| d != fight.dungeon)
+            {
+                continue;
+            }
+            let (cp_min, cp_max) = (obs["cp_min"].as_i64(), obs["cp_max"].as_i64());
+            if cp_min.is_some_and(|v| fight.cp < v) || cp_max.is_some_and(|v| fight.cp > v) {
+                continue;
+            }
+            let row_region = obs["region"].as_str();
+            let row_korean =
+                flags.contains(&"KR_TW_combined") || matches!(row_region, Some("KR" | "TW"));
+            if korean != row_korean {
+                continue;
+            }
+            // "All regions" asks for no particular region: every non-KR/TW row fits.
+            let exact_region = (fight.region == "ALL" && !row_korean)
+                || row_region == Some(fight.region)
+                || (row_korean && korean && row_region.is_none());
+            if !exact_region
+                && fight.region != "ALL"
+                && row_region.is_some_and(|r| r != "ALL" && !row_korean)
+            {
+                continue;
+            }
+            let width = match (cp_min, cp_max) {
+                (Some(a), Some(b)) => b - a,
+                _ => i64::MAX,
+            };
+            let samples = obs["samples"].as_i64().unwrap_or(0);
+            let period = obs["scope"]["period"].as_str().unwrap_or_default();
+            let weekly = obs["scope"]["period_kind"].is_string();
+            let period_rank = match period {
+                "Recent14Days" => 0,
+                "All" if !weekly => 1,
+                "Today" => 3,
+                _ => 2,
+            };
+            let key = vec![
+                i64::from(!boss_level),
+                i64::from(!exact_region),
+                width,
+                period_rank,
+                -samples,
+            ];
+            if best.get(&source).is_some_and(|(k, _)| *k <= key) {
+                continue;
+            }
+            let mut caveats: Vec<String> = flags
+                .iter()
+                .filter(|f| !matches!(**f, "boss_id_ambiguous_or_aggregate"))
+                .map(|f| f.to_string())
+                .collect();
+            if !boss_level {
+                caveats.push("instance_level".into());
+            }
+            if !exact_region && !flags.contains(&"region_scope_unconfirmed") {
+                caveats.push("pooled_region".into());
+            }
+            if !fight.confirmed_kill {
+                caveats.push("kill_unconfirmed".into());
+            }
+            let score = fight.dps / median * 100.0;
+            if !score.is_finite() {
+                continue;
+            }
+            let region = match row_region {
+                Some(r) if r != "ALL" => r.to_string(),
+                _ if row_korean => "KR/TW".to_string(),
+                _ => "global".to_string(),
+            };
+            best.insert(
+                source.clone(),
+                (
+                    key,
+                    json!({
+                        "source_id": source,
+                        "dataset": crate::community::dataset_label(&source),
+                        "comparison_quality": "reference",
+                        "level": if boss_level { "boss" } else { "instance" },
+                        "scope": "same_class",
+                        "class_key": fight.class_key,
+                        "region": region,
+                        "reference_dps": median,
+                        "samples": obs["samples"],
+                        "cp_min": cp_min,
+                        "cp_max": cp_max,
+                        "period": period,
+                        "score": score,
+                        "band": percentile_band(&obs["statistics"], median, fight.dps),
+                        "caveats": caveats,
+                    }),
+                ),
+            );
+        }
+        let mut rows: Vec<_> = best.into_values().collect();
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(rows.into_iter().map(|(_, v)| v).collect())
     }
 
     pub fn community_sources(&self) -> Result<Value> {
@@ -1838,11 +2031,14 @@ impl Db {
         )?;
         let imports = rows_to_json(&mut stmt, [])?;
         let mut archives = conn.prepare(
-            "SELECT source_id, source_url, captured_at, detail, row_count,
-                    rights_confirmed = 1 AS rights_confirmed, 0 AS score_eligible
+            "SELECT source_id, captured_at, row_count
             FROM provider_archives ORDER BY source_id",
         )?;
-        let offline_data = rows_to_json(&mut archives, [])?;
+        let mut offline_data = rows_to_json(&mut archives, [])?;
+        for entry in &mut offline_data {
+            let label = crate::community::dataset_label(entry["source_id"].as_str().unwrap_or(""));
+            entry["dataset"] = json!(label);
+        }
         Ok(json!({
             "offline_data": offline_data,
             "providers": crate::community::provider_catalog(),
@@ -1994,6 +2190,18 @@ impl Db {
             row["scope"] = json!("same_class");
             comparisons.push(row);
         }
+        comparisons.extend(Self::provider_comparisons(
+            &conn,
+            ProviderFight {
+                dungeon,
+                mob,
+                class_key,
+                cp,
+                dps,
+                region,
+                confirmed_kill: confirmed_kill && !capture_partial,
+            },
+        )?);
         let offline = Self::offline_observations(&conn, dungeon, mob, class_key)?;
         let has_unscored = !withheld.is_empty() || offline["rows"].as_u64().unwrap_or(0) > 0;
         response["status"] = json!(if comparisons.is_empty() {

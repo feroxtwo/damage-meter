@@ -1,4 +1,5 @@
-//! Distributable offline reference database. Only aggregate snapshots, no fights.
+//! Offline reference data: the built-in datasets and optional local files.
+//! Only aggregate class statistics, no fights.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -110,6 +111,8 @@ impl ProviderArchive {
 pub struct Bundle {
     pub snapshots: Vec<CommunitySnapshot>,
     pub archives: Vec<ProviderArchive>,
+    /// Datasets that failed validation and were left out.
+    pub skipped: Vec<String>,
 }
 
 fn decode(payload: &str) -> Result<CommunitySnapshot> {
@@ -243,6 +246,7 @@ fn read_connection(conn: &Connection) -> Result<Bundle> {
         snapshots.push(snapshot);
     }
     let mut archives = Vec::new();
+    let mut skipped = Vec::new();
     if version == 2 {
         let mut stmt =
             conn.prepare("SELECT source_id, payload FROM archives ORDER BY source_id LIMIT 8")?;
@@ -255,7 +259,17 @@ fn read_connection(conn: &Connection) -> Result<Bundle> {
             if total > MAX_BYTES || archives.len() == 7 {
                 bail!("Provider archive limit exceeded");
             }
-            let archive = serde_json::from_str::<ProviderArchive>(&payload)?.validate()?;
+            // One unusable dataset must not hide the others: skip it, keep going.
+            let archive = match serde_json::from_str::<ProviderArchive>(&payload)
+                .map_err(anyhow::Error::from)
+                .and_then(ProviderArchive::validate)
+            {
+                Ok(archive) => archive,
+                Err(e) => {
+                    skipped.push(format!("{source}: {e:#}"));
+                    continue;
+                }
+            };
             if source != archive.source.id || !archive_keys.insert(source) {
                 bail!("Archive provenance mismatch or duplicate");
             }
@@ -263,17 +277,21 @@ fn read_connection(conn: &Connection) -> Result<Bundle> {
         }
     }
     if snapshots.is_empty() && archives.is_empty() {
-        bail!("Reference database is empty");
+        match skipped.first() {
+            Some(reason) => bail!("No usable reference data ({reason})"),
+            None => bail!("Reference database is empty"),
+        }
     }
     Ok(Bundle {
         snapshots,
         archives,
+        skipped,
     })
 }
 
-/// Load a local reference file into the meter database. No provider data ships
-/// with the meter. The whole file is validated before anything is written; a
-/// failure leaves the database as it was.
+/// Load an additional local reference file into the meter database. Every
+/// dataset is validated before anything is written; an invalid one is skipped
+/// and reported, a broken file leaves the database as it was.
 pub fn load(db: &crate::db::Db, path: &Path) -> Result<Value> {
     let bundle = read(path).with_context(|| path.display().to_string())?;
     let archives = db.import_provider_archives(&bundle.archives)?;
@@ -281,7 +299,37 @@ pub fn load(db: &crate::db::Db, path: &Path) -> Result<Value> {
     for snapshot in bundle.snapshots {
         db.import_community(snapshot)?;
     }
-    Ok(serde_json::json!({"archives": archives, "snapshots": snapshots}))
+    Ok(serde_json::json!({"archives": archives, "snapshots": snapshots, "skipped": bundle.skipped}))
+}
+
+/// Reference observations built into the meter. Prepared from the normalized
+/// archives by scripts/prepare-embedded-references.py; each archive keeps its
+/// source and evidence, so the data stays reproducible.
+const EMBEDDED: &[&[u8]] = &[
+    include_bytes!("../data/community/a2tools.json.gz"),
+    include_bytes!("../data/community/abysslogs.json.gz"),
+    include_bytes!("../data/community/aiondps.json.gz"),
+    include_bytes!("../data/community/jameter.json.gz"),
+    include_bytes!("../data/community/notmeter.json.gz"),
+    include_bytes!("../data/community/questlog.json.gz"),
+];
+
+/// Decode and validate the built-in datasets.
+pub fn embedded_archives() -> Result<Vec<ProviderArchive>> {
+    EMBEDDED
+        .iter()
+        .map(|bytes| {
+            let mut json = String::new();
+            std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(*bytes), &mut json)?;
+            serde_json::from_str::<ProviderArchive>(&json)?.validate()
+        })
+        .collect()
+}
+
+/// Import the built-in datasets. An unchanged dataset is not rewritten and a
+/// newer one loaded with `--reference-db` is kept.
+pub fn load_embedded(db: &crate::db::Db) -> Result<Value> {
+    db.import_provider_archives(&embedded_archives()?)
 }
 
 #[cfg(test)]
@@ -388,15 +436,25 @@ mod tests {
     }
 
     #[test]
-    fn offline_observations_never_become_scores() {
+    fn fitting_provider_medians_score_with_caveats() {
         let dir = temp_dir();
         let input = dir.join("a2tools.json");
         let output = dir.join("references.sqlite");
+        let mut training = observation("gladiator", None, (60000, 80000), 1.0);
+        training["compatibility"] = json!(["training"]);
+        let mut korean = observation("gladiator", Some(2300812), (60000, 80000), 1.0);
+        korean["region"] = json!("KR");
+        korean["scope"] = json!({"period": "kr"});
+        let mut other_difficulty = observation("gladiator", Some(2300812), (60000, 80000), 1.0);
+        other_difficulty["dungeon_id"] = json!(600073);
         std::fs::write(
             &input,
             provider_archive(vec![
                 observation("gladiator", Some(2300812), (60000, 80000), 9000.0),
                 observation("templar", None, (60000, 80000), 8000.0),
+                training,
+                korean,
+                other_difficulty,
             ])
             .to_string(),
         )
@@ -422,26 +480,49 @@ mod tests {
             r#"{"outcome":"kill","partial":false}"#,
         );
         let result = db.community_index("vakron", "EU").unwrap().unwrap();
+        assert_eq!(result["status"], "ready");
+        let comparisons = result["comparisons"].as_array().unwrap();
+        assert_eq!(comparisons.len(), 1, "{comparisons:?}");
+        let row = &comparisons[0];
+        assert_eq!(row["score"], 200.0);
+        assert_eq!(row["level"], "boss");
+        assert_eq!(row["region"], "EU");
+        assert_eq!(row["dataset"], "Datensatz Boss & Instanz");
+        assert_eq!(row["band"], "above_median");
+        let caveats = row["caveats"].as_array().unwrap();
+        assert!(caveats.contains(&json!("methodology_not_a2m_v2")));
+        assert!(!caveats.contains(&json!("kill_unconfirmed")));
+        // Korean data only for a Korean region selection.
+        let korean = db.community_index("vakron", "KR").unwrap().unwrap();
+        assert_eq!(korean["comparisons"][0]["reference_dps"], 1.0);
+        assert_eq!(korean["comparisons"].as_array().unwrap().len(), 1);
+        // Another region's explicit data never stands in for this one.
+        let other = db.community_index("vakron", "NAE").unwrap().unwrap();
+        assert_eq!(other["status"], "insufficient");
+        assert_eq!(other["reason"], "comparison_withheld");
+        // Outside every CP band: data exists, nothing is scored.
+        db.insert_test_fight(
+            "strong",
+            2300812,
+            600072,
+            "검성",
+            95000,
+            18000.0,
+            r#"{"outcome":"kill","partial":false}"#,
+        );
+        let result = db.community_index("strong", "EU").unwrap().unwrap();
         assert_eq!(result["status"], "insufficient");
-        assert_eq!(result["reason"], "comparison_withheld");
         assert!(result["comparisons"].as_array().unwrap().is_empty());
-        let offline = &result["offline_observations"];
-        assert_eq!(offline["rows"], 2);
-        assert_eq!(offline["same_class"], 1);
-        assert_eq!(offline["score_eligible"], false);
-        let blockers = offline["blockers"].as_array().unwrap();
-        assert!(blockers.contains(&json!("rights_unconfirmed")));
-        assert!(blockers.contains(&json!("methodology_not_a2m_v2")));
+        assert_eq!(result["offline_observations"]["rows"], 5);
 
         let page = db
             .provider_observations("a2tools", 1, 5000)
             .unwrap()
             .unwrap();
         assert_eq!(page["limit"], 200);
-        assert_eq!(page["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(page["rows"].as_array().unwrap().len(), 4);
         assert_eq!(page["next_offset"], Value::Null);
         assert_eq!(page["rights_confirmed"], false);
-        assert_eq!(page["score_eligible"], false);
         assert!(db.provider_observations("missing", 0, 2).unwrap().is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -472,7 +553,6 @@ mod tests {
         )
         .unwrap();
         assert!(load(&db, &empty).is_err(), "empty reference database");
-        // One invalid archive row rejects the whole file before any write.
         let mut bad = provider_archive(vec![observation("gladiator", Some(1), (1, 2), 1.0)]);
         conn.execute(
             "INSERT INTO archives VALUES ('a2tools', ?1)",
@@ -488,9 +568,17 @@ mod tests {
         )
         .unwrap();
         drop(conn);
-        assert!(load(&db, &empty).is_err());
+        // An invalid dataset is skipped, the valid one still loads.
+        let loaded = load(&db, &empty).unwrap();
+        assert_eq!(loaded["archives"]["a2tools"], "imported");
+        assert!(
+            loaded["skipped"][0]
+                .as_str()
+                .unwrap()
+                .starts_with("jameter")
+        );
         let sources = db.community_sources().unwrap();
-        assert!(sources["offline_data"].as_array().unwrap().is_empty());
+        assert_eq!(sources["offline_data"].as_array().unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -545,5 +633,47 @@ mod tests {
         assert!(build(&bad_output, &[input]).is_err());
         assert!(!bad_output.exists());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn embedded_datasets_load_and_compare_a_vakron_kill() {
+        let archives = embedded_archives().unwrap();
+        assert_eq!(archives.len(), EMBEDDED.len());
+        // Provenance stays in the data: every dataset names source and evidence.
+        assert!(
+            archives
+                .iter()
+                .all(|a| !a.source.url.is_empty() && !a.evidence.is_empty())
+        );
+        let db = crate::db::Db::in_memory().unwrap();
+        load_embedded(&db).unwrap();
+        assert!(
+            load_embedded(&db)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|v| v == "unchanged")
+        );
+        db.insert_test_fight(
+            "vakron",
+            2300812,
+            600072,
+            "호법성",
+            73000,
+            15000.0,
+            r#"{"outcome":"kill","partial":false}"#,
+        );
+        let result = db.community_index("vakron", "EU").unwrap().unwrap();
+        assert_eq!(result["status"], "ready");
+        let rows = result["comparisons"].as_array().unwrap();
+        let exact = rows
+            .iter()
+            .find(|r| r["region"] == "EU")
+            .expect("EU boss median for the CP band");
+        assert_eq!(exact["level"], "boss");
+        assert_eq!(exact["cp_min"], 71000);
+        assert!(rows.iter().all(|r| r["class_key"] == "chanter"));
+        assert!(rows.iter().all(|r| r["region"] != "KR/TW"));
     }
 }
