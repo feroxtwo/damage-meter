@@ -864,7 +864,6 @@ mod tests {
         let data: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(data["rows"].as_array().unwrap().len(), 2);
         assert_eq!(data["rows"][0]["region"], "EU");
-        assert_eq!(data["score_eligible"], false);
         assert_eq!(data["next_offset"], 10);
         for query in ["limit=-1", "offset=abc", "limit=99999999999"] {
             let response = app

@@ -1,59 +1,50 @@
 # AION2 Meter
 
-Eigenständiger Damage Meter für **AION 2 unter Linux** (Zielplattform: Fedora mit KDE Plasma, Wayland).
+Eigenständiger Damage Meter für **AION 2 unter Linux** (Zielplattform: Fedora/Bazzite mit KDE Plasma, Wayland).
 Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und speichert jede
 **Expedition** mit Gruppe und Bosskämpfen in einer **SQLite-Datenbank**, die du im Browser auswerten kannst.
 
 | | |
 |---|---|
-| **Overlay** | Kleines, transparentes Fenster über dem Spiel: Ziel mit HP-Balken, Kampfzeit, Gruppen-DPS, pro Spieler Schaden, DPS und Anteil (Klassenicons/-farben, eigene Zeile hervorgehoben; Kompaktmodus mit dominanter Rate), Ping und aktueller Dungeon. |
-| **Dashboard** | `http://127.0.0.1:8787/` im Browser: Live-Meter, alle Runs mit Gruppe und Bossen, Skill-Aufschlüsselung pro Kampf (Krit/Rücken/Perfekt), Statistiken. |
-| **Statistik** | Persönlicher Boss-Verlauf mit Versuchsauswahl, vergleichbarer Leistungseinordnung und Konstanz; **Top 5 Mitspieler**, mit denen du am häufigsten in Expeditionen warst, Runs pro Dungeon mit Bestzeit, deine beste DPS pro Boss, Aktivität der letzten 30 Tage. |
+| **Overlay** | Kleines, transparentes Fenster über dem Spiel: Ziel mit HP-Balken, Kampfzeit, Gruppen-DPS, pro Spieler Schaden, DPS und Anteil (Klassenicons/-farben, eigene Zeile hervorgehoben; Kompaktmodus), Ping und aktueller Dungeon. Drei Designs. |
+| **Dashboard** | `http://127.0.0.1:8787/` im Browser: Live-Meter, alle Runs mit Gruppe und Bossen, Kampfbericht mit Skills, Schadensverlauf, Buffs und Export (Text, Chat, PNG, CSV, JSON). |
+| **Leistung einordnen** | Performance Coach, Vergleich mit deinen eigenen Aufzeichnungen und **Vergleich mit Community-Werten** aus der eingebauten Vergleichsdatenbank: deine DPS gegen den Median deiner Klasse beim selben Boss und ähnlicher Kampfkraft. |
+| **Statistik** | Boss-Verlauf mit Versuchsauswahl, DPS-Entwicklung nach Bereich und Expedition, **Top 5 Mitspieler**, Runs pro Dungeon mit Bestzeit, Bestwerte pro Boss, Aktivität der letzten 30 Tage. |
 | **Datenbank** | `~/.local/share/aion2-meter/meter.db` (SQLite). Ein Run beginnt beim Betreten einer Instanz und endet beim Verlassen. |
 
 Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
 
-## Community Skill Index (experimentell)
+## Neu in 0.4.0
 
-Der gespeicherte Kampfbericht bietet einen **lokalen Skill Index** mit Vergleich gegen eigene beobachtete Mitspieler bei ähnlicher Kampfkraft. Zusätzlich können berechtigte, aggregierte Community-Referenzwerte über **Statistik → Community-Daten und Vergleichsregion verwalten** freiwillig als JSON importiert werden. Alle Vergleichswerte sind explizit nach Herkunft gekennzeichnet, bleiben lokal und benötigen exakt passende Boss-/Schwierigkeits-/Klassen-/KP-/Region-/Balance-Daten. Ohne passende Stichproben wird kein Index erfunden. **Keine automatische Fremd-API, kein Webscraping, kein Upload.** Der Meter liefert keine Anbieterdaten mit. Selbst normalisierte Anbieterbeobachtungen bleiben markiert und werden nicht automatisch zu Kampf-Scores. Eine eigene Offline-SQLite-Referenzdatenbank lässt sich mit `build-references --output community-references.sqlite <snapshots oder normalisierte Anbieterdateien...>` erstellen und mit `--reference-db community-references.sqlite` laden. [Quellen, Schema und Grenzen](docs/COMMUNITY_DATA_SOURCES.md).
+- **Vergleichsdatenbank eingebaut:** Klassen-Mediane je Boss, Instanz und Kampfkraft sind im Programm enthalten. Der Kampfbericht zeigt unter *Leistung einordnen* deinen Wert gegen den Median deiner Klasse (100 = Median), ob du in der oberen oder unteren Hälfte, im oberen Viertel oder in den Top 10 % liegst, und welche Abweichungen der Datensatz hat. Es wird nichts online abgefragt. Details unten unter [Vergleich mit Community-Werten](#vergleich-mit-community-werten).
+- **Eigene Referenzdatei:** Ist in einer Datei für `--reference-db` ein Datensatz fehlerhaft, wird nur dieser übersprungen statt der ganzen Datei.
+- **Gruppen und Runs:** Gruppenzugehörigkeit aus der Party-Liste des Spiels, Heiler ohne Schaden bleiben in der Gruppe, Runs enden beim Auflösen der Gruppe, Bosse zählen je Name einmal, unbekannter Run-Ausgang wird neutral angezeigt.
+- **Oberfläche:** Combat Studio mit Kampfbericht in Abschnitten, OBS-Vorschau in den Einstellungen, Statistik nach Bereich und Expedition, Performance Coach mit Skillsymbolen.
 
-## Kampfqualität & Performance Coach
+Ältere Änderungen: [0.3.1](docs/RELEASE_REVIEW_0.3.1.md) · [0.3.0](docs/QOL_0.3.0.md) · [Fähigkeitskatalog](docs/SKILL_CATALOG.md) · [Statistik und Schadensverläufe](docs/STATISTICS_QOL.md) · [Combat Telemetry](docs/COMBAT-TELEMETRY-ACCEPTANCE.md) · [DPS-Entwicklung nach Bereich](docs/PERFORMANCE_ACTIVITY_FILTERS.md) · [Performance Coach](docs/COMBAT_FIDELITY_AND_COACH.md).
 
-Der Kampfbericht ergänzt deine gespeicherten Messwerte um einen persönlichen **Performance Coach** mit aktiver Schadenszeit aus kumulativen 500-ms-Beobachtungen, 5-Sekunden-Peak, DPS-Vergleich mit demselben Boss und derselben Schwierigkeit, Skillanteilen und dokumentierten Buff-Änderungen. Fehlende oder begrenzte Daten werden nicht durch Schätzwerte ersetzt.
+**Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft. Reale AION-2-Messgenauigkeit und KDE/Wayland-Verhalten sind noch nicht final verifiziert ([offene Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md)). Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen; das Dashboard warnt bei erkennbaren Zahlengrenzen.
 
-Bei einer **Kampfpause** zeigt der Meter nach 3 Sekunden ohne Treffer am ausgewählten Ziel **0 aktuelle Schadens-DPS** im Browser und in beiden Overlays. Historischer Schaden und bisheriger Kampf-DPS bleiben erhalten; ein Leerlauf gilt nicht automatisch als Sieg oder Kampfabbruch. Der Parser verwendet die geprüfte A2Tools-Version 2.0.54 mit Fixes für fremde Bosse, Namen und DoT-Effekte. Der automatische destruktive Idle-Reset bleibt optional.
+## Installation
 
-Community-DPS-Vergleiche unterscheiden nun zwischen **Methodik belegt** (Importformat v2) und **Richtwert** (älteres Importformat v1). [Technische Grenzen und Abnahme](docs/COMBAT_FIDELITY_AND_COACH.md).
+### Fertige Pakete (empfohlen)
 
-## Neu in 0.3.1
+Unter [Releases](https://github.com/feroxtwo/damage-meter/releases) liegen für jede Version:
 
-Einheitliche Zeitfenster auch bei kurzen Kämpfen, sichere Speicherung beim regulären Beenden, korrigierte Overlay-Skalierung mit stabiler Position und Updateinstallation bei laufendem Meter. Skilldetails haben Suche, Sortierung, Durchschnitt, Anteil und Skill-DPS/HPS; zusätzliche Treffermerkmale sind auf Wunsch sichtbar. Statushilfen erklären fehlende Pakete. Laufende Runs können nicht gelöscht werden, Bossstatistiken trennen Schwierigkeitsgrade und zählen erfasste Versuche.
+| System | Datei | Installation |
+|---|---|---|
+| **Bazzite, Kinoite, Silverblue** | `aion2-meter-<version>-1.x86_64.rpm` | `rpm-ostree install ./aion2-meter-*.rpm`, danach neu starten |
+| **Fedora** | `aion2-meter-<version>-1.x86_64.rpm` | `sudo dnf install ./aion2-meter-*.rpm` |
+| **Ubuntu / Debian** | `aion2-meter_<version>_amd64.deb` | `sudo apt install ./aion2-meter_*.deb` |
+| **Andere** | `aion2-meter-<version>-linux-x86_64.tar.gz` | entpacken, `./scripts/install-binary.sh` |
 
-[Releaseprüfung und Testmatrix](docs/RELEASE_REVIEW_0.3.1.md) · [Noch offene reale Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md).
+Die Pakete setzen die Capture-Berechtigung selbst. Einstellungen und Kämpfe bleiben beim Update erhalten. Update auf Bazzite: `rpm-ostree uninstall aion2-meter --install ./aion2-meter-<neue version>-1.x86_64.rpm`, danach neu starten. Im Dashboard unter **Einstellungen → Version und Updates** lässt sich GitHub auf Klick nach einer neuen Version fragen.
 
-Neu: [Fähigkeitskatalog, deutsche/englische Namen und Offline-Symbole](docs/SKILL_CATALOG.md) · [Abnahmematrix dieser Erweiterung](docs/RELEASE_REVIEW_SKILL_CATALOG.md).
+Das Archiv setzt die nativen Bibliotheken voraus. Debian/Ubuntu: `sudo apt install libxkbcommon0 libxkbcommon-x11-0 libegl1 libgl1 libcap2-bin xdg-utils`. Fedora: `sudo dnf install libxkbcommon libxkbcommon-x11 libglvnd-egl libglvnd-glx libcap xdg-utils`. Die Systempakete bringen diese Abhängigkeiten selbst mit.
 
-[Übersichtlichere Statistik und Schadensverläufe](docs/STATISTICS_QOL.md): Gruppe oder Spieler, DPS oder Gesamtschaden, 5-Sekunden-Glättung, bedienbare Zeit-/Versuchsauswahl und Bosskennzahlen.
+Bei Systempaketen richtest du KWin-Regel und Tastenkürzel einmal selbst ein: `/usr/lib/aion2-meter/install-kwin-rule.sh` und `/usr/lib/aion2-meter/install-shortcuts.sh`.
 
-[Premium Combat Experience und technische Abnahmematrix](docs/PREMIUM-UX-ACCEPTANCE.md): eigene Leistung/Rang zuerst, anklickbare beobachtete 5s-Peaks, Treffer/Ticks im gewählten Fenster, persönliche Boss-Einordnung und das bestehende native Overlay mit 312-Pixel-Kompaktmodus. Dashboard und natives Fenster laufen weiterhin parallel.
-
-[Combat Telemetry: Abschluss, Vorher/Nachher und Abnahmematrix](docs/COMBAT-TELEMETRY-ACCEPTANCE.md): offene Live-Komposition mit eigener Rate/Rang, lokal beobachtetem Burst-Signal, passendem gespeichertem Versuch und Training mit tatsächlichem Fortschritt. Das bestehende native Fenster erhält offene Zeilen, Zahlenkontrast und Hover-Aktionen; alle drei Themes bleiben verfügbar.
-
-[DPS-Entwicklung nach Bereich und Expedition](docs/PERFORMANCE_ACTIVITY_FILTERS.md): Feldbosse/Open World und Instanzmodi filtern, innerhalb einer Expedition deren gesamte erfasste Leistung oder einzelne Bosse auswählen. Unbekannte IDs bleiben sichtbar und können selbst eingeordnet werden.
-
-**Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft; reale AION-2-Korrektheit und KDE/Wayland-Verhalten sind noch nicht final verifiziert. Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen. Das Dashboard warnt bei erkennbaren Zahlengrenzen.
-
-## Neu in 0.3.0
-
-Aktualisierter A2Tools-Parser 2.0.52, optionale Leerlauf-/Wipe-Resets mit vorherigem Speichern, PNG-Berichte und Chatzeilen, zwei Spieler nebeneinander, gemeinsame Gruppen-DPS-Kurven, zusätzliche Treffermerkmale und drei Designs mit kompakter Ansicht. [Funktionsgrenzen und Ingame-Messvergleich](docs/QOL_0.3.0.md).
-
-Fertige Linux-Pakete entstehen in GitHub Actions als `aion2-meter-linux-packages`. Nach Freigabe durch den Maintainer erscheinen sie unter [Releases](https://github.com/feroxtwo/damage-meter/releases). Für Ubuntu/Debian: `.deb`, Fedora: `.rpm`, Bazzite: `.rpm` per `rpm-ostree install` und Neustart. Alternativ das Linux-Archiv entpacken und `./scripts/install-binary.sh` ausführen, ohne Rust/Node. Einstellungen und Kämpfe bleiben beim Update erhalten. KWin-/Shortcut-Einrichtung für Systempakete siehe Funktionsdokumentation.
-
-Im Dashboard unter **Overlay → Version und Updates** lässt sich GitHub auf Klick prüfen. Ohne veröffentlichtes Release gibt es noch keinen Download über diesen Weg.
-
-Archivinstallation setzt die nativen Grafik-/Tastaturbibliotheken voraus. Debian/Ubuntu: `sudo apt install libxkbcommon0 libxkbcommon-x11-0 libegl1 libgl1 libcap2-bin xdg-utils`. Fedora: `sudo dnf install libxkbcommon libxkbcommon-x11 libglvnd-egl libglvnd-glx libcap xdg-utils`. Systempakete deklarieren diese Abhängigkeiten automatisch.
-
-## Installation (Fedora / KDE)
+### Selbst bauen
 
 **Fedora Workstation / KDE Spin:**
 
@@ -74,9 +65,6 @@ cd damage-meter
 ```
 
 Das Skript lädt `~/.cargo/env` selbst, ein neues Terminal nach rustup ist also nicht nötig.
-
-> Solange das Repository **privat** ist, braucht `git clone` eine Anmeldung: entweder `gh auth login` und dann
-> `gh repo clone feroxtwo/damage-meter`, oder auf GitHub *Code → Download ZIP* und das Archiv entpacken.
 
 Das Skript
 
@@ -136,8 +124,8 @@ zeigt alle zusammen. Deine eigenen Charaktere zählen nie als Mitspieler.
 - **Live:** aktueller Kampf; Spieler anklicken für dessen Skills.
 - **Verlauf → Dungeon-Runs:** Run öffnen: oben Gruppe und Bosse des Runs, darunter Gesamtwerte, Skill-Summen und Schadensverlauf. **Zurück zu Dungeon-Runs** führt zur vorherigen Listenseite. Die zuletzt gewählte Ansicht (Runs oder Einzelkämpfe) bleibt erhalten.
 - **Verlauf → Einzelkämpfe:** Bosse, Training und Welt-Mobs suchen (die Liste filtert beim Tippen) und per Klick auf die Zeile den Kampfbericht öffnen. Der Bericht zeigt zuerst die Gruppe als Rangliste; deine eigene Zeile ist mit deinen Skills schon aufgeklappt.
-- **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und importierte Community-Referenzen. **Vergleichen** lädt sofort den vorherigen Versuch und bietet den Spielervergleich. **Exportieren** merkt sich Format und Anonymisierung.
-- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Community-Dateien und Vergleichsregion stehen unter **Community-Daten verwalten**; aus dem Kampfbericht führt „← Zurück zum Kampfbericht“ wieder zurück.
+- **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und Vergleich mit Community-Werten. **Vergleichen** lädt sofort den vorherigen Versuch und bietet den Spielervergleich. **Exportieren** merkt sich Format und Anonymisierung.
+- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Vergleichsregion, integrierte Vergleichsdaten und eigene Importe stehen unter **Vergleichsdaten verwalten**; aus dem Kampfbericht führt „← Zurück zum Kampfbericht“ wieder zurück.
 - **Skill-Katalog:** Namen und IDs nachschlagen; gemessene Skills stehen in Live und Verlauf.
 - **Einstellungen:** links alles zum Overlay im Spiel (Sichtbarkeit, „Overlay zurückholen“, Größe, Inhalt, Aussehen), rechts Sprache, Messung, Profile, Diagnose und Updates. Änderungen werden automatisch gespeichert.
 
@@ -154,7 +142,21 @@ bis du ihn entfernst; über 2 GB werden die ältesten Mitschnitte gelöscht. Die
 mit Zeitstempel) landen in `~/.local/share/aion2-meter/captures/`. Sie enthalten alles, was der Server
 deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zeigen willst.
 
-### Kampfanalyse und Komfort (0.2.0)
+## Vergleich mit Community-Werten
+
+Im Kampfbericht unter **Leistung einordnen → Vergleich mit Community-Werten** steht für Bosskämpfe deine DPS im Verhältnis zum Median deiner Klasse. 100 ist der Median, 124,6 heißt 24,6 % darüber. Darunter steht, wo du innerhalb der vom Datensatz genannten Quantile liegst (zum Beispiel „Top 25 %“).
+
+Die Vergleichsdatenbank ist im Programm enthalten und wird beim Start im Hintergrund in deine lokale Datenbank übernommen. Verglichen wird nur, was zu deinem Kampf passt:
+
+- **gleiche Klasse** und **gleicher Boss**; nennt ein Datensatz die Schwierigkeit, muss auch sie stimmen. Ohne Bosswert dient ein Wert für die ganze Instanz als Richtwert,
+- dein **Kampfkraftbereich** liegt im Bereich der Vergleichsgruppe,
+- die **Region** passt (Auswahl unter *Statistik → Vergleichsdaten verwalten*; Standard sind alle Regionen außer Korea/Taiwan, deren Werte nur bei Auswahl Korea oder Taiwan zählen).
+
+Jeder Datensatz wird einzeln gezeigt, nie zu einem Durchschnitt gemischt. Was nicht exakt unserer Messung entspricht, etwa ein nicht belegter Patch-Zeitraum, eine leicht andere DPS-Berechnung oder ein breiter Kampfkraftbereich, steht als Hinweis neben dem Wert. Lies den Vergleich deshalb als Richtwert. Training, Kämpfe unter 10 Sekunden, Welt-Mobs und Kämpfe ohne Kampfkraft werden nicht verglichen.
+
+Eigene aggregierte Daten lassen sich zusätzlich als JSON importieren oder mit `aion2-meter build-references --output referenzen.sqlite <dateien...>` zu einer SQLite-Datei bündeln und mit `--reference-db referenzen.sqlite` laden. Schema, Regeln und Herkunft der Daten: [Vergleichsdaten](docs/COMMUNITY_DATA_SOURCES.md).
+
+## Kampfanalyse und Komfort
 
 - **Overlay:** Einstellungen und Position bleiben nach Neustarts erhalten. Benannte Profile, eigene Zeile trotz Top-N-Limit, Auswahl Schaden/Heilung/erlittener Schaden und „Overlay zurückholen“ im Dashboard. Klick auf einen Spieler im entsperrten nativen Overlay öffnet dessen Details im Browser.
 - **Live:** Schadens- und Heilungsranglisten, Spielerdetails und eigene 5s-Burst-DPS. Heilung wird seit dem letzten Parser-Reset erfasst, einschließlich Selbstheilung. HPS teilt diese erfasste Heilung durch die angezeigte Kampfdauer. Es ist keine effektive Heilung und kein Overheal-Abzug.
@@ -176,16 +178,17 @@ Die TCP-Sortierung puffert bis 2 MiB beziehungsweise 2048 Segmente. Bei einer be
 
 [Technische Details und Testumfang](docs/COMBAT_ANALYSIS.md).
 
-### Optionen
+## Optionen
 
 ```
-aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de|en] [--db PFAD] [--any-process] [--record]
+aion2-meter [--no-overlay] [--x11] [--port 8787] [--listen 127.0.0.1] [--lang de|en] [--db PFAD] [--reference-db DATEI] [--any-process] [--record]
 ```
 
 - `--no-overlay` nur Mitschnitt + Dashboard (z. B. Dashboard auf zweitem Monitor).
 - `--x11` Overlay über XWayland, dort klappt „immer im Vordergrund“ auch ohne KWin-Regel.
 - `--listen 0.0.0.0` Dashboard im Heimnetz erreichbar (Handy, Zweit-PC). Ohne Passwort, also nur im eigenen Netz.
 - `--lang en` Skill- und Monsternamen auf Englisch.
+- `--reference-db DATEI` zusätzliche eigene Vergleichsdaten laden (siehe oben). Ein neuerer Datensatz ersetzt den eingebauten gleichen Ursprungs.
 - `--any-process` nicht auf einen `AION2.exe`-Prozess warten (z. B. Spiel in VM/Container).
 - `--record` gleich beim Start mitschneiden (siehe oben).
 - `/overlay` im Dashboard ist eine Browser-Variante des Overlays, z. B. als OBS-Browserquelle.
@@ -229,27 +232,19 @@ Netzwerk ──AF_PACKET──▶ capture.rs ──▶ dispatcher.rs ──▶ A
 
 Die Datei kann jederzeit mit `sqlite3` oder DB Browser for SQLite geöffnet werden.
 
+## Zeitfenster und Messgrenzen
+
+DPS/HPS verwenden die Zeit vom ersten bis zum letzten erfassten Schaden am Ziel, mindestens eine Sekunde. Leerlauf danach vergrößert dieses Fenster nicht. Run-Gesamt-DPS verwenden die Summe dieser gemeinsamen Kampfzeitfenster; nicht teilgenommene Kämpfe zählen mit null Schaden. Die persönliche DPS in der Run-Liste ist ausdrücklich der Durchschnitt der einzelnen Kämpfe. Burst ist eine eigene gleitende Fünfsekunden-Kennzahl.
+
+Heilung umfasst erfasste Heilung seit Parser-Reset, mit der angezeigten Ziel-Kampfdauer als HPS-Nenner; Overheal wird nicht abgezogen. Buffs beruhen auf Anwendung und gemeldeter Dauer. Frühes Entfernen bleibt unbekannt. Fehlende Treffermerkmale erscheinen als „—“; dies beweist keine null Prozent.
+
 ## Entwicklung
 
 ```bash
-cargo test
 cargo run -- --no-overlay --any-process   # ohne setcap: Dashboard läuft, Mitschnitt meldet fehlende Berechtigung
 ```
 
-## Lizenz
-
-GPL-3.0-or-later, wie A2Tools DPS Meter, dessen Parser und Daten dieses Projekt nutzt.
-Die Nutzung von Drittanbieter-Tools kann gegen die Nutzungsbedingungen des Spiels verstoßen; Verwendung auf eigenes Risiko.
-
-## Modernisiertes Dashboard und technische Prüfung
-
-Die Live-Ansicht zeigt Gruppen-DPS, eigene DPS, Gesamtschaden und Kampfdauer direkt als Kennzahlen. Runs und Statistik sind auch auf kleinen Bildschirmen bedienbar. Das Browser-Overlay unter `/overlay` berücksichtigt jetzt die gleichen Anzeige- und Streaming-Einstellungen wie das native Overlay.
-
-![Dashboard mit Testdaten](docs/images/dashboard-desktop.png)
-
-Befunde, Änderungen, Prüfungen und verbleibende Grenzen stehen in der [technischen Prüfung](docs/TECHNICAL_REVIEW.md).
-
-### Entwicklung prüfen
+Prüfungen wie in der CI:
 
 ```bash
 cargo fmt --all --check
@@ -262,16 +257,11 @@ npx playwright install chromium
 npm test
 ```
 
-Node.js (ab Version 20) und Playwright werden ausschließlich für die Browserprüfungen benötigt. Die Anwendung selbst bleibt eine Rust-Binary mit eingebettetem HTML. `Cargo.lock` und `package-lock.json` gehören zum Repo.
+Node.js (ab Version 20) und Playwright werden nur für die Browserprüfungen gebraucht. Die Anwendung selbst ist eine Rust-Binary mit eingebettetem HTML und eingebetteten Vergleichsdaten. `Cargo.lock` und `package-lock.json` gehören zum Repo.
 
 Der HTTP-Server akzeptiert `localhost`, Loopback-IP-Adressen und die gebundene IP mit dem richtigen Port. Bei `--listen 0.0.0.0` sind IP-Adressen im Netzwerk erlaubt. Beliebige Domainnamen werden zum Schutz gegen DNS-Rebinding abgewiesen.
 
-
-### Zeitfenster und Messgrenzen
-
-DPS/HPS verwenden die Zeit vom ersten bis zum letzten erfassten Schaden am Ziel, mindestens eine Sekunde. Leerlauf danach vergrößert dieses Fenster nicht. Run-Gesamt-DPS verwenden die Summe dieser gemeinsamen Kampfzeitfenster; nicht teilgenommene Kämpfe zählen mit null Schaden. Die persönliche DPS in der Run-Liste ist ausdrücklich der Durchschnitt der einzelnen Kämpfe. Burst ist eine eigene gleitende Fünfsekunden-Kennzahl.
-
-Heilung umfasst erfasste Heilung seit Parser-Reset, mit der angezeigten Ziel-Kampfdauer als HPS-Nenner; Overheal wird nicht abgezogen. Buffs beruhen auf Anwendung und gemeldeter Dauer. Frühes Entfernen bleibt unbekannt. Fehlende Treffermerkmale erscheinen als „—“; dies beweist keine null Prozent.
+**Release:** Version in `Cargo.toml` erhöhen, mergen, dann ein Tag `v<version>` auf `main` pushen. Der Workflow *Linux Release* testet, baut `.tar.gz`, `.deb` und `.rpm` und veröffentlicht das Release.
 
 ### Zusätzliche Releaseprüfungen
 
@@ -290,3 +280,10 @@ python3 scripts/test-packages.py
 Das Installer-Testskript simuliert den privilegierten setcap-Schritt. Reale Paketinstallation und Capture-Rechte müssen zusätzlich auf dem Zielsystem geprüft werden. Der Kurzbenchmark erzeugt eine isolierte synthetische Historie; er ist kein Langzeit- oder Ingame-Performancebeweis.
 
 Deinstallation: Systempakete mit dem Paketmanager entfernen. Für die Benutzerinstallation zuerst das Meter beenden, mit `./scripts/install-shortcuts.sh --remove` die KDE-Kürzel entfernen und Binary sowie die drei installierten Desktop-/Icon-Dateien unter dem gewählten Prefix löschen. `~/.local/share/aion2-meter/` enthält deine Daten und bleibt erhalten; vor bewusstem Löschen sichern. KWin-Regeln bei Bedarf in der Fensterverwaltung entfernen.
+
+Befunde früherer Prüfungen: [technische Prüfung](docs/TECHNICAL_REVIEW.md).
+
+## Lizenz
+
+GPL-3.0-or-later, wie A2Tools DPS Meter, dessen Parser und Daten dieses Projekt nutzt.
+Die Nutzung von Drittanbieter-Tools kann gegen die Nutzungsbedingungen des Spiels verstoßen; Verwendung auf eigenes Risiko.

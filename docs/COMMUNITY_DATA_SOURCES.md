@@ -5,13 +5,15 @@
 Das Dashboard kombiniert zwei **strikt getrennte** Bewertungsarten:
 
 1. **Lokaler Skill Index:** eigene aufgezeichnete Bosskämpfe gegen den Median anderer lokal beobachteter Spieler im selben KP-Bereich. Kein weltweiter Rang.
-2. **Community-Referenzen:** Aggregierte Statistiken eines externen Anbieters, die der Nutzer **mit nachgewiesener Nutzungsberechtigung selbst als JSON** in die lokale Meter-Datenbank importiert. Die Werte werden nicht durch die Anwendung unabhängig verifiziert. Ein aus Referenz-Median errechneter Score ist **kein Perzentil**.
+2. **Community-Referenzen:** die im Programm enthaltene Vergleichsdatenbank (Klassen-Mediane je Boss, Instanz und Kampfkraft, siehe [Integrierte Vergleichsdatenbank](#integrierte-vergleichsdatenbank)) und optional eigene, als JSON importierte Aggregate. Ein aus einem Referenz-Median errechneter Score ist **kein Perzentil**; wo der Datensatz Quantile nennt, zeigt der Bericht nur, zwischen welchen genannten Quantilen die eigene DPS liegt.
 
 Das Programm fragt keine Community-Seiten automatisiert ab. Es verschickt weder Charakterprofile noch Pakete, Logs oder Kämpfe an einen Drittanbieter. Das ist bewusst so: Für A2 Tools ist der Upload eines konformen Evidence Slice dokumentiert, aber kein autorisierter Statistik-Download. Aion DPS hat öffentliche API-Routen im GitHub-Quellcode, doch der Zugriff und die Wiederverwendung externer Daten sind nicht bestätigt. Die Community-Referenz-Erweiterung ist für eine später genehmigte JSON/API-Zufuhr vorbereitet.
 
 Spielmetadaten (Dungeon-, NPC- und Skillkataloge) sind bereits integriert und bleiben unabhängig von importierten DPS-Statistiken. Die inoffizielle Bibliothek [aion2-api](https://github.com/nuriland/aion2-api) ist eine mögliche Grundlage für **optionale** Charakterabfragen, aber sie ist absichtlich nicht stillschweigend aktiv: Charaktername und Server dürfen nicht ohne ausdrücklichen Nutzerwunsch abgefragt werden. Historische Kampfkraft wird niemals durch einen aktuellen Profilwert ersetzt.
 
 ## Quellen
+
+Herkunft der integrierten Daten. Die Oberfläche nennt diese Websites nicht; jede Datei unter `data/community/` enthält ihre Quelle, Erfassungszeit und Prüfsummen.
 
 | Quelle | Einsatz | Status |
 | --- | --- | --- |
@@ -79,7 +81,7 @@ Akzeptierte Regionen: `ALL` (bereits über Regionen aggregiert), `EU`, `NAE`, `N
 
 ## Vergleichsregeln und Datenschutz
 
-Ein Community-Score erscheint nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, genau die gewählte Region, genau die eigene Klasse, Kampfkraftfenster, Balance-Zeitraum, deklarierte Kampf-DPS-Methode und ein bestätigter Kill mit vollständiger Aufzeichnung** passen. Es gibt keine automatische Lockerung: Zeilen für `ALL` (bei gewählter Einzelregion) oder Klasse `all`, Datensätze ohne Methodenangabe und Kämpfe ohne bestätigten Kill werden als „Vergleich nicht freigegeben“ mit Grund gemeldet, aber nie verrechnet. Das entscheidet die Geschäftslogik (`Db::community_index`), nicht die Oberfläche. Anbieterbeobachtungen liegen in eigenen Tabellen und werden dort nur gezählt und mit Grund gemeldet. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
+Für **eigene importierte Snapshots** erscheint ein Community-Score nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, genau die gewählte Region, genau die eigene Klasse, Kampfkraftfenster, Balance-Zeitraum, deklarierte Kampf-DPS-Methode und ein bestätigter Kill mit vollständiger Aufzeichnung** passen. Es gibt keine automatische Lockerung: Zeilen für `ALL` (bei gewählter Einzelregion) oder Klasse `all`, Datensätze ohne Methodenangabe und Kämpfe ohne bestätigten Kill werden als „Vergleich nicht freigegeben“ mit Grund gemeldet, aber nie verrechnet. Das entscheidet die Geschäftslogik (`Db::community_index`), nicht die Oberfläche. Für die integrierte Vergleichsdatenbank gelten die eigenen Regeln im nächsten Abschnitt. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
 
 Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erzeugt einen Netzwerkaufruf zu A2 Tools oder Aion DPS. Die gespeicherten Daten bleiben in der lokalen SQLite-Datei des Meters.
 
@@ -129,16 +131,44 @@ gebildet. Die Datenbank übernimmt die Rechtebestätigung aus den Eingabedateien
 sie bestätigt diese nicht selbst. Die Berechtigung muss auch die gewünschte
 Weitergabe der gebündelten Daten umfassen.
 
-## Keine mitgelieferten Anbieterdaten
+## Integrierte Vergleichsdatenbank
 
-Der Meter enthält und lädt **keine** Anbieterdaten. Weder das Repository noch
-das Binary noch die Pakete bringen eine Referenzdatenbank mit. Ohne
-`--reference-db` gibt es keine Offline-Anbieterdaten, und der Kampfbericht
-zeigt keinen Community-Vergleich. Wer eigene, berechtigte Daten nutzen will,
-normalisiert sie lokal (siehe [NotMeter-Normalisierung](NOTMETER_NORMALIZATION.md)),
-baut daraus mit `build-references` eine SQLite-Datei und lädt sie mit
-`--reference-db`. Ein Normalisierungslauf bestätigt keine Weitergaberechte und
-keine Score-Kompatibilität.
+Seit 0.4.0 bringt der Meter seine Vergleichsdatenbank mit. Die normalisierten
+Beobachtungen liegen als `data/community/*.json.gz` im Repository, werden beim
+Bauen ins Binary eingebettet und beim Start im Hintergrund in die lokale
+SQLite-Datenbank übernommen. Ein unveränderter Datensatz wird nicht neu
+geschrieben; ein neuerer aus `--reference-db` bleibt erhalten. Es gibt keine
+Netzwerkabfrage.
+
+Erzeugt werden die Dateien reproduzierbar aus den normalisierten Archiven:
+
+```sh
+python3 scripts/prepare-embedded-references.py --input-dir /pfad/zu/normalisiert
+```
+
+Das Skript ist deterministisch. Ältere Erfassungen ohne Wochenlabel erhalten für
+Wochenkohorten (erkennbar am Vorwochenvergleich) `period_kind: weekly_inferred`.
+Zeilen, die danach weiterhin nicht unterscheidbar sind, werden verworfen und im
+`detail` des Datensatzes gezählt (2026-10-09: 44 von 9133 KR/TW-Zeilen).
+
+**Wann verglichen wird.** Eine Gruppe ergibt einen Score, wenn sie
+
+- absolute DPS enthält (`provider_dps`, Median > 0); Klassenindizes, Bestwerte und Trainingsdaten nie,
+- genau die eigene Klasse beschreibt,
+- denselben Boss (`mob_code`) nennt, bei angegebenem Dungeon auch dieselbe Schwierigkeit; ohne Bossangabe nur als Wert für die ganze Instanz desselben Dungeons,
+- mit ihrem KP-Bereich die eigene Kampfkraft einschließt (ohne Bereich: alle KP),
+- regional passt: KR/TW-Daten nur bei gewählter Region Korea oder Taiwan, Daten einer anderen ausdrücklich genannten Region nie, globale Daten als „mehrere Regionen gemeinsam“.
+
+Je Datensatz zählt eine Gruppe: zuerst Boss vor Instanz, dann passende Region,
+schmalerer KP-Bereich, längerer Zeitraum, mehr Spieler. Mehrere Datensätze werden
+nie zu einem Durchschnitt gemischt. Was abweicht (Patch-Zeitraum nicht belegt,
+andere DPS-Berechnung, breiter KP-Bereich, kein bestätigter Kill) steht als
+Hinweis neben dem Score. Passt nichts, meldet der Bericht, wie viele Gruppen es
+zu Boss oder Dungeon gibt und dass keine zu Klasse, Schwierigkeit, Kampfkraft
+und Region passt.
+
+`--reference-db` lädt zusätzlich eine selbst gebaute Datei. Ein ungültiger
+Datensatz darin wird übersprungen und im Log genannt; die übrigen werden geladen.
 
 ### Kompatibilität mit unserem Datenmodell
 

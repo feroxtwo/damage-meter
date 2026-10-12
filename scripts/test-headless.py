@@ -81,9 +81,15 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             with urllib.request.urlopen(base + asset, timeout=2) as response:
                 assert mime in response.headers["Content-Type"]
                 assert response.read()
-        # No provider data ships with the meter.
-        sources = get("/api/references/sources")
-        assert sources["offline_data"] == [] and sources["imports"] == [], sources
+        # The built-in reference datasets load in the background, without
+        # naming their websites in the dashboard.
+        deadline = time.monotonic() + 20
+        while len((sources := get("/api/references/sources"))["offline_data"]) < 6:
+            assert time.monotonic() < deadline, sources
+            time.sleep(.1)
+        assert sources["imports"] == [], sources
+        assert all(o["dataset"] and "url" not in o for o in sources["offline_data"]), sources
+        assert not any(p.get("url") for p in sources["providers"]), sources
         settings = get("/api/overlay")
         settings.update({"theme":"ember","compact":True,"idle_reset_seconds":30,"wipe_reset":True,"position":[123,456], "hide_names":True, "metric":"heal", "max_rows":2})
         post("/api/overlay", settings)
@@ -157,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             proc.wait()
 
 # A broken local reference file must never keep the meter from starting and
-# changes nothing; a valid one is loaded as reference-only observations.
+# changes nothing; a valid, newer one replaces the built-in dataset.
 with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
     tmp = Path(tmp)
     archive = {
@@ -176,7 +182,8 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
                    check=True, capture_output=True, timeout=20)
     garbage = tmp / "garbage.sqlite"
     garbage.write_bytes(b"definitely not sqlite")
-    for reference, expected in [(garbage, 0), (tmp / "missing.sqlite", 0), (built, 1)]:
+    # A broken file leaves the built-in data (16 rows); a newer valid file wins.
+    for reference, expected in [(garbage, 16), (tmp / "missing.sqlite", 16), (built, 1)]:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
@@ -186,20 +193,19 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         try:
-            deadline = time.monotonic() + 10
-            while True:
+            deadline = time.monotonic() + 20
+            rows = None
+            while rows != expected:
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/references/sources", timeout=1) as r:
                         offline = json.load(r)["offline_data"]
-                    break
+                    rows = next((o["row_count"] for o in offline if o["source_id"] == "a2tools"), None)
                 except OSError:
-                    assert proc.poll() is None, f"meter exited with --reference-db {reference.name}"
-                    assert time.monotonic() < deadline
-                    time.sleep(0.1)
-            assert len(offline) == expected, (reference.name, offline)
-            assert all(o["source_id"] == "a2tools" and o["row_count"] == 1 for o in offline)
-            assert all(o["score_eligible"] == 0 and o["rights_confirmed"] == 0 for o in offline)
+                    pass
+                assert proc.poll() is None, f"meter exited with --reference-db {reference.name}"
+                assert time.monotonic() < deadline, (reference.name, rows)
+                time.sleep(0.1)
         finally:
             proc.terminate()
             proc.wait(timeout=5)
-    print("PASS reference database: invalid files are ignored, a valid file loads, all reference-only")
+    print("PASS reference database: built-in data loads, invalid files are ignored, a newer valid file wins")

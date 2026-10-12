@@ -194,8 +194,8 @@ impl CommunitySnapshot {
     }
 }
 
-/// Source capabilities are declared, not inferred from public pages.
-/// A third-party upload endpoint is not necessarily a statistics download API.
+/// Sources shown in the dashboard. The integrated reference data is one entry;
+/// its origin stays in the archives under data/community, not in the UI.
 pub fn provider_catalog() -> Value {
     json!([
         {
@@ -215,70 +215,35 @@ pub fn provider_catalog() -> Value {
             "detail": "Vorhandene Skill-, NPC- und Instanzkataloge"
         },
         {
-            "id": "a2tools",
-            "name": "A2 Tools",
+            "id": "reference_data",
+            "name": "Integrierte Vergleichsdatenbank",
             "kind": "community",
-            "status": "permission_required",
-            "url": "https://a2tools.app/stats",
-            "detail": "Community-Mediane öffentlich sichtbar; Datenexport/API nicht zugesagt"
-        },
-        {
-            "id": "aiondps",
-            "name": "Aion DPS",
-            "kind": "community",
-            "status": "api_unverified",
-            "url": "https://aiondps.com",
-            "detail": "Öffentliche Ranglisten-Routen im Quellcode, Datenabruf nicht verifiziert"
-        },
-        {
-            "id": "abysslogs",
-            "name": "Abyss Logs",
-            "kind": "community",
-            "status": "permission_required",
-            "url": "https://abysslogs.com",
-            "detail": "Boss-Logs und Klassenstatistiken; API und Datenrechte nicht bestätigt"
-        },
-        {
-            "id": "questlog",
-            "name": "Questlog Combat Logs",
-            "kind": "community",
-            "status": "permission_required",
-            "url": "https://questlog.gg/aion-2/en/app",
-            "detail": "Leistungsberichte; keine freigegebene Statistik-Download-API bestätigt"
-        },
-        {
-            "id": "jameter",
-            "name": "JaMeter",
-            "kind": "community",
-            "status": "permission_required",
-            "url": "https://jameter.net/en",
-            "detail": "Anonyme Leistungsranglisten; Wiederverwendungsrechte ungeklärt"
-        },
-        {
-            "id": "notmeter",
-            "name": "NotMeter",
-            "kind": "community",
-            "status": "permission_required",
-            "url": "https://notmeter.com",
-            "detail": "Bereinigte und rohe DPS-Indikatoren; Downloadrechte ungeklärt"
-        },
-        {
-            "id": "ncsoft",
-            "name": "AION 2 Charakterprofile",
-            "kind": "character",
-            "status": "not_connected",
-            "url": "https://github.com/nuriland/aion2-api",
-            "detail": "Inoffizielle Client-Bibliothek; kein ungefragter Charakterlookup"
+            "status": "active",
+            "url": null,
+            "detail": "Klassen-Mediane je Boss, Instanz und Kampfkraft; im Programm enthalten, kein Online-Abruf"
         },
         {
             "id": "community",
-            "name": "Berechtigter JSON-Datensatz",
+            "name": "Eigener JSON-Datensatz",
             "kind": "community",
             "status": "import_ready",
             "url": null,
             "detail": "Aggregierte Referenzdaten lokal und freiwillig importieren"
         }
     ])
+}
+
+/// Neutral name of an integrated dataset for the dashboard.
+pub fn dataset_label(source: &str) -> &'static str {
+    match source {
+        "a2tools" => "Datensatz Boss & Instanz",
+        "abysslogs" => "Datensatz Boss-Logs",
+        "notmeter" => "Datensatz KR/TW",
+        "jameter" => "Datensatz Kampfkraftstufen",
+        "questlog" => "Klassenindex",
+        "aiondps" => "Bestwerte",
+        _ => "Eigener Datensatz",
+    }
 }
 
 #[cfg(test)]
