@@ -261,7 +261,7 @@ Node.js (ab Version 20) und Playwright werden nur für die Browserprüfungen geb
 
 Der HTTP-Server akzeptiert `localhost`, Loopback-IP-Adressen und die gebundene IP mit dem richtigen Port. Bei `--listen 0.0.0.0` sind IP-Adressen im Netzwerk erlaubt. Beliebige Domainnamen werden zum Schutz gegen DNS-Rebinding abgewiesen.
 
-**Release:** Version in `Cargo.toml` erhöhen, mergen, dann ein Tag `v<version>` auf `main` pushen. Der Workflow *Linux Release* testet, baut `.tar.gz`, `.deb` und `.rpm` und veröffentlicht das Release.
+**Release:** Version in `Cargo.toml` erhöhen und mergen. Dann in GitHub unter *Actions → Linux Release → Run workflow* auf `main` starten (oder ein Tag `v<version>` pushen). Der Workflow testet, baut `.tar.gz`, `.deb` und `.rpm`, legt das Tag an und veröffentlicht das Release.
 
 ### Zusätzliche Releaseprüfungen
 
