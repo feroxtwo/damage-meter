@@ -433,6 +433,7 @@ const server = http.createServer((req,res) => {
       slowSettingsRead=true;
       const stale=page.evaluate(()=>loadSettings());
       await delay(50);
+      await page.evaluate(()=>{document.querySelector('#toast').textContent='';});
       await page.locator('#loadProfile').click();
       await page.waitForFunction(()=>document.querySelector('#toast').textContent==='Profil geladen.');
       await stale;

@@ -63,7 +63,8 @@ function renderInsightLive(l){
  const details=document.querySelector('#protocolFamilies');if(details){details.textContent=(l.health?.families||[]).map(f=>f.family+': '+f.count+' aktuell, '+f.previous_count+' im vorigen Fenster').join(' · ');}
  const contrast=document.querySelector('#overlayContrast');if(contrast){const ratio=overlayContrast(l.overlay||{});contrast.textContent='Haupttext im ungünstigsten Hintergrund: '+ratio.toFixed(1)+':1'+(ratio<4.5?' · Für bessere Lesbarkeit „Hoher Kontrast“ einschalten.':' · Ausreichender berechneter Kontrast.');}
 }
-async function loadInsightSettings(){const s=await api('/api/overlay');const skills=document.querySelector('#cooldownSkills'),factor=document.querySelector('#cooldownFactor');if(skills&&document.activeElement!==skills)skills.value=(s.cooldown_skills||[]).join(', ');if(factor&&document.activeElement!==factor)factor.value=s.cooldown_factor??'';renderCooldownSelection();}
+function applyInsightSettings(s){const skills=document.querySelector('#cooldownSkills'),factor=document.querySelector('#cooldownFactor');if(skills&&document.activeElement!==skills)skills.value=(s.cooldown_skills||[]).join(', ');if(factor&&document.activeElement!==factor)factor.value=s.cooldown_factor??'';renderCooldownSelection();}
+async function loadInsightSettings(){applyInsightSettings(await api('/api/overlay'));}
 async function copyStreamLink(){const config=await api('/api/stream');if(!config.available){toast('OBS-Port nicht verfügbar. Starte das Meter mit freiem --stream-port.',true);return;}if(!config.enabled){toast('Zuerst die geschützte OBS-Freigabe einschalten.',true);return;}const url=new URL(config.url),host=document.querySelector('#streamHost').value.trim();if(host)url.hostname=host;await copyText(url.href);}
 function renderCooldownSelection(){
  const root=document.querySelector('#cooldownSelection'),input=document.querySelector('#cooldownSkills');if(!root||!input)return;
@@ -83,5 +84,5 @@ function installInsightSettings(){
  document.querySelector('#copyStreamLink')?.addEventListener('click',()=>task(copyStreamLink()));document.querySelector('#rotateStreamKey')?.addEventListener('click',()=>task(api('/api/stream/rotate',{method:'POST'}).then(()=>toast('OBS-Schlüssel erneuert. Alte Links sind ungültig.'))));
  loadInsightSettings().catch(()=>{});
 }
-window.installCombatInsights=installCombatInsights;window.renderInsightLive=renderInsightLive;window.loadInsightSettings=loadInsightSettings;
+window.installCombatInsights=installCombatInsights;window.renderInsightLive=renderInsightLive;window.applyInsightSettings=applyInsightSettings;
 if(typeof document!=='undefined')installInsightSettings();
