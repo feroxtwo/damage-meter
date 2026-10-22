@@ -5,7 +5,7 @@
 Das Dashboard kombiniert zwei **strikt getrennte** Bewertungsarten:
 
 1. **Lokaler Skill Index:** eigene aufgezeichnete Bosskämpfe gegen den Median anderer lokal beobachteter Spieler im selben KP-Bereich. Kein weltweiter Rang.
-2. **Community-Referenzen:** die im Programm enthaltene Vergleichsdatenbank (Klassen-Mediane je Boss, Instanz und Kampfkraft, siehe [Integrierte Vergleichsdatenbank](#integrierte-vergleichsdatenbank)) und optional eigene, als JSON importierte Aggregate. Ein aus einem Referenz-Median errechneter Score ist **kein Perzentil**; wo der Datensatz Quantile nennt, zeigt der Bericht nur, zwischen welchen genannten Quantilen die eigene DPS liegt.
+2. **Community-Referenzen:** ausschließlich eigene zulässige Referenzdaten, optional über `--reference-db` oder als JSON importiert. Ein aus einem Referenz-Median errechneter Score ist **kein Perzentil**; wo der Datensatz Quantile nennt, zeigt der Bericht nur, zwischen welchen genannten Quantilen die eigene DPS liegt.
 
 Das Programm fragt keine Community-Seiten automatisiert ab. Es verschickt weder Charakterprofile noch Pakete, Logs oder Kämpfe an einen Drittanbieter. Das ist bewusst so: Für A2 Tools ist der Upload eines konformen Evidence Slice dokumentiert, aber kein autorisierter Statistik-Download. Aion DPS hat öffentliche API-Routen im GitHub-Quellcode, doch der Zugriff und die Wiederverwendung externer Daten sind nicht bestätigt. Die Community-Referenz-Erweiterung ist für eine später genehmigte JSON/API-Zufuhr vorbereitet.
 
@@ -13,7 +13,7 @@ Spielmetadaten (Dungeon-, NPC- und Skillkataloge) sind bereits integriert und bl
 
 ## Quellen
 
-Herkunft der integrierten Daten. Die Oberfläche nennt diese Websites nicht; jede Datei unter `data/community/` enthält ihre Quelle, Erfassungszeit und Prüfsummen.
+Mögliche Quellen für ausdrücklich berechtigte eigene Importe. Es werden keine Anbieterarchive mitgeliefert. Die sechs früher eingebetteten Archive hatten sämtlich `rights_confirmed: false`. Der [Prüfbericht](COMMUNITY_DATA_AUDIT.md) trennt ihre Herkunft von nachgewiesenen Weitergaberechten.
 
 | Quelle | Einsatz | Status |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ Akzeptierte Regionen: `ALL` (bereits über Regionen aggregiert), `EU`, `NAE`, `N
 
 ## Vergleichsregeln und Datenschutz
 
-Für **eigene importierte Snapshots** erscheint ein Community-Score nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, genau die gewählte Region, genau die eigene Klasse, Kampfkraftfenster, Balance-Zeitraum, deklarierte Kampf-DPS-Methode und ein bestätigter Kill mit vollständiger Aufzeichnung** passen. Es gibt keine automatische Lockerung: Zeilen für `ALL` (bei gewählter Einzelregion) oder Klasse `all`, Datensätze ohne Methodenangabe und Kämpfe ohne bestätigten Kill werden als „Vergleich nicht freigegeben“ mit Grund gemeldet, aber nie verrechnet. Das entscheidet die Geschäftslogik (`Db::community_index`), nicht die Oberfläche. Für die integrierte Vergleichsdatenbank gelten die eigenen Regeln im nächsten Abschnitt. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
+Für **eigene importierte Snapshots** erscheint ein Community-Score nur, wenn **Boss-NPC-ID, Dungeon-ID inklusive Schwierigkeit, genau die gewählte Region, genau die eigene Klasse, Kampfkraftfenster, Balance-Zeitraum, deklarierte Kampf-DPS-Methode und ein bestätigter Kill mit vollständiger Aufzeichnung** passen. Es gibt keine automatische Lockerung: Zeilen für `ALL` (bei gewählter Einzelregion) oder Klasse `all`, Datensätze ohne Methodenangabe und Kämpfe ohne bestätigten Kill werden als „Vergleich nicht freigegeben“ mit Grund gemeldet, aber nie verrechnet. Das entscheidet die Geschäftslogik (`Db::community_index`), nicht die Oberfläche. Für optional importierte Anbieterbeobachtungen gelten die eigenen Regeln im Abschnitt „Optionale lokale Vergleichsdaten“. Training, kurze Kämpfe, unbekannte Kampfkraft und begrenzte Parserwerte bleiben ausgeschlossen. Kein Mischen verschiedener Provider zu einem künstlichen Durchschnitt. Wenn nichts passt, steht bewusst **kein** Community-Score.
 
 Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erzeugt einen Netzwerkaufruf zu A2 Tools oder Aion DPS. Die gespeicherten Daten bleiben in der lokalen SQLite-Datei des Meters.
 
@@ -99,7 +99,7 @@ Die lokale Quelle wird niemals von einem Import überschrieben. Kein Import erze
 ## Eigene Offline-Referenzdatenbank (#22)
 
 Anbieterwerte können einmalig als geprüfte JSON-Snapshots im oben beschriebenen
-Format zusammengetragen und zu einer eigenen, verteilbaren SQLite-Datei gebündelt
+Format zusammengetragen und zu einer eigenen SQLite-Datei gebündelt
 werden. Der Meter benötigt beim Vergleich keine Verbindung zum Anbieter.
 
 ```sh
@@ -131,25 +131,28 @@ gebildet. Die Datenbank übernimmt die Rechtebestätigung aus den Eingabedateien
 sie bestätigt diese nicht selbst. Die Berechtigung muss auch die gewünschte
 Weitergabe der gebündelten Daten umfassen.
 
-## Integrierte Vergleichsdatenbank
+## Optionale lokale Vergleichsdaten
 
-Seit 0.4.0 bringt der Meter seine Vergleichsdatenbank mit. Die normalisierten
-Beobachtungen liegen als `data/community/*.json.gz` im Repository, werden beim
-Bauen ins Binary eingebettet und beim Start im Hintergrund in die lokale
-SQLite-Datenbank übernommen. Ein unveränderter Datensatz wird nicht neu
-geschrieben; ein neuerer aus `--reference-db` bleibt erhalten. Es gibt keine
-Netzwerkabfrage.
+Es gibt keine eingebetteten Anbieterarchive, keinen automatischen Download und
+keine versteckte Standard-Referenzdatei. `--reference-db` importiert ausschließlich
+die ausdrücklich angegebene lokale SQLite-Datei im Hintergrund. Ohne diesen
+Parameter bleiben bereits zulässig importierte Daten erhalten. Ein frischer
+Standardstart enthält keine Community-Vergleichswerte.
 
-Erzeugt werden die Dateien reproduzierbar aus den normalisierten Archiven:
+Sowohl `build-references` als auch das Laden prüfen für Anbieterarchive
+`source.rights_confirmed: true`. Ohne Bestätigung lehnt der Builder den Datensatz
+ab. Beim Lesen einer bestehenden SQLite-Datei werden unbestätigte oder ungültige
+Anbieterarchive mit protokolliertem Grund übersprungen, während gültige Datensätze geladen werden.
+Das Flag ist eine Erklärung des Importierenden, kein Beleg oder automatisch
+erteiltes Nutzungsrecht. Es darf nur bei vorhandener Berechtigung gesetzt werden.
+Für eine Weitergabe über GitHub, Quellarchive oder Linux-Pakete muss auch diese
+Weitergabe erlaubt und nachweisbar sein.
 
-```sh
-python3 scripts/prepare-embedded-references.py --input-dir /pfad/zu/normalisiert
-```
-
-Das Skript ist deterministisch. Ältere Erfassungen ohne Wochenlabel erhalten für
-Wochenkohorten (erkennbar am Vorwochenvergleich) `period_kind: weekly_inferred`.
-Zeilen, die danach weiterhin nicht unterscheidbar sind, werden verworfen und im
-`detail` des Datensatzes gezählt (2026-10-09: 44 von 9133 KR/TW-Zeilen).
+Die mit v0.4.0 automatisch angelegten lokalen Archive werden nicht gelöscht oder
+nachträglich als genehmigt markiert. Sie bleiben einsehbar, liefern mit
+`rights_confirmed: false` aber keine Vergleichswerte. Eine berechtigte, ausdrücklich
+importierte Datei kann sie ersetzen, auch bei gleichem Erfassungszeitpunkt.
+Eigene Kämpfe, lokaler Skill Index und Performance Coach bleiben erhalten.
 
 **Wann verglichen wird.** Eine Gruppe ergibt einen Score, wenn sie
 
@@ -167,7 +170,7 @@ Hinweis neben dem Score. Passt nichts, meldet der Bericht, wie viele Gruppen es
 zu Boss oder Dungeon gibt und dass keine zu Klasse, Schwierigkeit, Kampfkraft
 und Region passt.
 
-`--reference-db` lädt zusätzlich eine selbst gebaute Datei. Ein ungültiger
+`--reference-db` lädt eine eigene, zulässige Datei. Ein ungültiger
 Datensatz darin wird übersprungen und im Log genannt; die übrigen werden geladen.
 
 ### Kompatibilität mit unserem Datenmodell
@@ -191,11 +194,11 @@ bleiben `null`. Ein Index (Questlog), Gruppen-iDPS (Aion DPS), Training (NotMete
 und absolute Klassen-DPS bleiben getrennte Kennzahlen. Aus einem Quartil wird kein
 Median erzeugt; ein 50.000er-KP-Band wird nicht in erfundene 20.000er-Kohorten zerlegt.
 
-Beobachtungen im Schema `a2m-provider-observations-v1` werden nie zu
-Kampf-Scores. Dafür müssen alle für `a2m-community-v2` erforderlichen
-Vergleichsbedingungen belegt sein (feste Balance-Zeitgrenzen, bestätigte
-Methodengleichheit, genaue regionale Kohorte). Geprüfte V1/V2-Snapshots können
-in derselben SQLite-Datei gebündelt werden.
+Berechtigte Beobachtungen im Schema `a2m-provider-observations-v1` können seit
+PR #31 indikative Vergleichswerte mit `comparison_quality: reference` ergeben.
+Das ist keine Bestätigung der strengeren `a2m-community-v2`-Methodik und kein
+weltweites Perzentil. Die V2-Prüfregeln bleiben unverändert. Geprüfte V1/V2-Snapshots
+können in derselben SQLite-Datei gebündelt werden.
 
 ### Nutzung und Prüfung
 
@@ -206,8 +209,8 @@ aion2-meter --reference-db /pfad/community-references.sqlite --no-overlay
 ```
 
 Unter Community-Daten erscheint anschließend die geladene Offline-Anbieterdatenbank
-mit Quellennamen, Datengruppenzahl und Erfassungsdatum. `Daten ansehen` öffnet die
-lokale JSON-Ansicht. `GET /api/references/archive/{source}?offset=0&limit=50`
+mit Datensatzbezeichnung, Datengruppenzahl, Erfassungsdatum und Hinweis auf
+unbestätigte Datenrechte. `GET /api/references/archive/{source}?offset=0&limit=50`
 liefert die normalisierten Werte paginiert (maximal 200 pro Anfrage).
 Der Quellenkatalog unter `/api/references/sources` ergänzt `offline_data`.
 Wiederholtes Laden ersetzt die jeweilige Anbieter-Beobachtungssammlung innerhalb
@@ -233,6 +236,6 @@ unbestätigt.
 - Ein unveränderter Datenstand wird nicht bei jedem Start neu geschrieben. Ein älterer Erfassungsstand (`captured_at`) ersetzt nie einen neueren derselben Quelle; pro Anbieter ist genau ein Datenstand aktiv, alte und neue Stände werden nicht gemischt.
 - Der Builder lehnt Zeilen ab, die sich nur in ihren Zahlen unterscheiden (verlorene Dimension), außerdem Stichprobe 0 und ungültige Kennzeichen. `scripts/normalize-community.py` prüft dasselbe für alle Anbieter vor dem Schreiben.
 - `build-references` erzeugt aus denselben Eingaben byte-identische Dateien.
-- `GET /api/references/archive/{source}` liefert höchstens 200 Zeilen je Seite, dazu `limit`, `next_offset`, `rights_confirmed` und immer `score_eligible: false`. Ungültige Parameter ergeben 400, unbekannte Anbieter 404.
+- `GET /api/references/archive/{source}` liefert höchstens 200 Zeilen je Seite, dazu `limit`, `next_offset` und `rights_confirmed`. Ungültige Parameter ergeben 400, unbekannte Anbieter 404.
 - `GET /api/fights/{id}/community-index` meldet `withheld` (passende, aber nicht freigegebene Referenzzeilen mit Grund) und `offline_observations` (Anzahl, Anbieter, Gründe). So bleiben „keine Daten“ und „Daten vorhanden, Vergleich nicht freigegeben“ unterscheidbar.
-- Der Meter setzt `rights_confirmed` nie selbst; er übernimmt den Wert aus der geladenen Datei.
+- Der Meter setzt `rights_confirmed` nie selbst. Anbieterarchive mit `false` werden nicht neu importiert und auch aus alten lokalen Datenbanken nicht verglichen.

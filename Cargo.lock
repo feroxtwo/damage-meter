@@ -70,7 +70,6 @@ dependencies = [
  "axum",
  "clap",
  "eframe",
- "flate2",
  "libc",
  "parking_lot",
  "reqwest",
