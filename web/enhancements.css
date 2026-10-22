@@ -509,3 +509,9 @@ html[data-theme] .card{background:linear-gradient(140deg,color-mix(in srgb,var(-
 @media(max-width:1000px){.app-rail .brand h1{font-size:12px}}
 @media(max-width:760px){.app-rail{padding-top:14px;gap:12px}.app-rail .brand{margin-bottom:0}.app-rail nav button{padding-block:9px}.app-rail .brand h1{font-size:14px}#runAnalysis{scroll-margin-top:180px}}
 @media(max-width:400px){.app-rail .brand h1{font-size:12px}}
+
+/* Event analysis remains behind one expandable section. */
+.insight-timeline,.replay-map{display:block;width:100%;min-height:120px;background:#09121d;border:1px solid #ffffff20;border-radius:8px;margin:12px 0}
+.insight-timeline text,.replay-map text{fill:#edf3fb;font:12px system-ui}.replay-map{touch-action:none;cursor:grab}.replay-map:active{cursor:grabbing}
+.opener-skill{display:inline-flex;align-items:center;gap:6px;margin:4px;padding:6px;background:#ffffff0a;border-radius:5px}.opener-skill small{color:#c4cedb}
+.combat-insights input[type=range]{max-width:240px}.warning{color:#ffb77d}.replay-panel label{display:flex;gap:8px;align-items:center}

@@ -14,6 +14,16 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 
 Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
 
+## Neue Kampfanalyse (Entwicklungsstand)
+
+Rotation mit tatsächlichen Skill-Nutzungen, Opener und Buff-Beiträgen, Bossfähigkeiten und Todesanalyse, HP-Plausibilität sowie ein räumliches Replay sind im Kampfbericht unter **Rotation, Bossanalyse und Replay** verfügbar. Neue Kämpfe erhalten eine begrenzte Ereignisaufzeichnung. Ältere Kämpfe bleiben lesbar.
+
+Unter **Einstellungen → Kampfhilfen** lassen sich Boss-Cast, bis zu acht Cooldown-Skills und hoher Kontrast einschalten. Cooldown-Sekunden benötigen einen selbst gewählten Faktor und bleiben ausdrücklich geschätzt. Diagnose zeigt Paketfamilien getrennt. Die Schadens-/Heilungssummen im mitgelieferten Parser-Kern sind auf 64 Bit erweitert.
+
+Die **geschützte OBS-Freigabe** ist separat, nur lesend und zunächst ausgeschaltet. Für einen zweiten PC: `--stream-listen 0.0.0.0`, dann den Link in Einstellungen kopieren und die lokale IP des Spiel-PCs angeben. Standardport 8788, Namen zunächst ausgeblendet. Keine Freigabe des Dashboards erforderlich.
+
+[Bedienung, Herkunft, Messgrenzen und offene Ingame-Abnahme](docs/UPSTREAM_INSPIRATION.md).
+
 ## Neu in 0.4.0
 
 - **Vergleichsdatenbank eingebaut:** Klassen-Mediane je Boss, Instanz und Kampfkraft sind im Programm enthalten. Der Kampfbericht zeigt unter *Leistung einordnen* deinen Wert gegen den Median deiner Klasse (100 = Median), ob du in der oberen oder unteren Hälfte, im oberen Viertel oder in den Top 10 % liegst, und welche Abweichungen der Datensatz hat. Es wird nichts online abgefragt. Details unten unter [Vergleich mit Community-Werten](#vergleich-mit-community-werten).
@@ -23,7 +33,7 @@ Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die a
 
 Ältere Änderungen: [0.3.1](docs/RELEASE_REVIEW_0.3.1.md) · [0.3.0](docs/QOL_0.3.0.md) · [Fähigkeitskatalog](docs/SKILL_CATALOG.md) · [Statistik und Schadensverläufe](docs/STATISTICS_QOL.md) · [Combat Telemetry](docs/COMBAT-TELEMETRY-ACCEPTANCE.md) · [DPS-Entwicklung nach Bereich](docs/PERFORMANCE_ACTIVITY_FILTERS.md) · [Performance Coach](docs/COMBAT_FIDELITY_AND_COACH.md).
 
-**Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft. Reale AION-2-Messgenauigkeit und KDE/Wayland-Verhalten sind noch nicht final verifiziert ([offene Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md)). Einzelne Parser-Skills verwenden begrenzte 32-Bit-Summen; das Dashboard warnt bei erkennbaren Zahlengrenzen.
+**Stand der Abnahme:** Softwaretests und synthetische Messfälle sind geprüft. Reale AION-2-Messgenauigkeit und KDE/Wayland-Verhalten sind noch nicht final verifiziert ([offene Ingame-Abnahme](docs/INGAME_ACCEPTANCE.md)). Neue Messungen verwenden 64-Bit-Summen. Ältere, bereits begrenzte Messungen bleiben entsprechend gekennzeichnet.
 
 ## Installation
 
@@ -214,8 +224,8 @@ Netzwerk ──AF_PACKET──▶ capture.rs ──▶ dispatcher.rs ──▶ A
 
 - **Mitschnitt** direkt über einen `AF_PACKET`-Socket, ohne libpcap. Braucht nur `CAP_NET_RAW`.
 - **Protokoll-Parser und Kampfauswertung** kommen aus [A2Tools DPS Meter](https://github.com/taengu/A2Tools-DPS-Meter)
-  (GPL-3.0) als Bibliothek, ohne dessen Tauri-Oberfläche. So profitiert dieser Meter direkt von deren
-  Anpassungen an Spiel-Patches. Die Datendateien in `data/` (Skill-, NPC- und Dungeon-Namen) stammen ebenfalls von dort.
+  (GPL-3.0) als nachvollziehbar angepasster Bibliotheksquellbestand unter `vendor/a2tools-core`, ohne dessen Tauri-Oberfläche.
+  Ausgangsrevision und lokale Änderungen stehen in dessen NOTICE.md. Upstream-Anpassungen müssen bewusst übernommen und geprüft werden. Die Datendateien in `data/` (Skill-, NPC- und Dungeon-Namen) stammen ebenfalls von dort.
 - **Runs:** Die Instanz-ID kommt aus dem Party-Roster des Spiels. Wechselt sie, endet der alte Run und ein neuer beginnt.
   Die Gruppe eines Runs sind alle Spieler aus dem Roster plus alle, die in einem Bosskampf mit dir Schaden gemacht haben.
   Runs ohne Bosskampf und ohne Mitspieler werden verworfen.
@@ -249,7 +259,7 @@ Prüfungen wie in der CI:
 ```bash
 cargo fmt --all --check
 cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
+cargo test --locked --workspace
 cargo build --release --locked
 python3 scripts/test-headless.py
 npm ci

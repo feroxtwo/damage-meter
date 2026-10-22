@@ -1,0 +1,18 @@
+[package]
+name = "a2tools-dps-meter"
+version = "2.0.54"
+edition = "2024"
+license = "GPL-3.0-or-later"
+[lib]
+name = "a2tools_dps_meter_lib"
+[features]
+default = []
+desktop = []
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lz4_flex = "0.11"
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+sha2 = "0.11.0"

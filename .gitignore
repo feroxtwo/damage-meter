@@ -6,3 +6,6 @@
 
 /dist
 /scripts/__pycache__
+
+/vendor/a2tools-core/target
+/vendor/a2tools-core/Cargo.lock

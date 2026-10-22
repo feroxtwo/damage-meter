@@ -1,3 +1,13 @@
+// Compare only observed skill uses. Missing event evidence is not zero casts.
+function coachRotationChanges(f,previous,self,old) {
+  const a=f?.analytics?.evidence,b=previous?.analytics?.evidence;
+  if(!a||!b||a.partial||b.partial)return [];
+  const current=(a.rotations||[]).filter(r=>Number(r.actor)===Number(self?.actor_id));
+  const before=new Map((b.rotations||[]).filter(r=>Number(r.actor)===Number(old?.actor_id)).map(r=>[Number(r.skill),r]));
+  return current.filter(r=>before.has(Number(r.skill))).map(r=>({...r,code:r.skill,
+    delta_per_minute:Number(r.per_minute)-Number(before.get(Number(r.skill)).per_minute)}))
+    .filter(r=>Number.isFinite(r.delta_per_minute)).sort((a,b)=>Math.abs(b.delta_per_minute)-Math.abs(a.delta_per_minute)).slice(0,3);
+}
 // Conservative personal fight coach. Never interpret observed hits as casts.
 function coachMetric(n) {
   return Number.isFinite(Number(n)) ? Number(n).toLocaleString('de-DE',{maximumFractionDigits:1}) : '—';
@@ -76,7 +86,7 @@ function performanceCoachData(f,previous=null) {
     activity_delta:match&&own&&oldActivity?own.rate-oldActivity.rate:null,
     current_peak:currentPeak?.dps??null,
     peak_delta:match&&currentPeak&&previousPeak?coachDiff(currentPeak.dps,previousPeak.dps):null,
-    top_skill:top,buffs:match&&!f.analytics?.effects_partial&&!previous.analytics?.effects_partial?coachBuffChanges(self,old):[],
+    top_skill:top,rotation_changes:match?coachRotationChanges(f,previous,self,old):[],buffs:match&&!f.analytics?.effects_partial&&!previous.analytics?.effects_partial?coachBuffChanges(self,old):[],
     predecessor_date:match?previous.started_at:null
   };
 }
@@ -93,9 +103,10 @@ function coachView(data) {
     '<div class="coach-cell"><span>Stärkster Skill</span><strong>'+esc(data.top_skill?coachMetric(data.top_skill.share)+' %':'—')+'</strong><small>'+(data.top_skill?skillLabel(data.top_skill)+(data.top_skill.is_dot?' · DoT':''):'Keine belastbaren Skillanteile')+'</small></div>'
   ].join('');
   const buffs=data.buffs.length?'<p class="analysis-note">Beobachtete Buff-Veränderung: '+data.buffs.map(b=>esc(b.name)+' '+(b.delta>=0?'+':'')+b.delta.toFixed(1).replace('.',',')+' PP').join(' · ')+'</p>':'';
+  const rotations=(data.rotation_changes||[]).length?'<p class="analysis-note">Beobachtete Skill-Nutzungen: '+data.rotation_changes.map(r=>skillLabel(r)+' '+(r.delta_per_minute>=0?'+':'')+r.delta_per_minute.toFixed(1)+' Nutzungen/min').join(' · ')+'. Unterschiede allein belegen keine bessere oder schlechtere Rotation.</p>':'';
   const notes=(data.notes||[]).map(x=>esc(x)).join(' · ');
   const head='<div class="skill-index-head"><div><span class="eyebrow">Dein letzter Versuch</span><h3>'+(data.match&&data.predecessor_date?'Was hat sich seit '+esc(date(data.predecessor_date))+' verändert?':'Dein Kampf in Zahlen')+'</h3></div></div>';
-  return head+'<div class="coach-grid">'+row+'</div>'+buffs+
+  return head+'<div class="coach-grid">'+row+'</div>'+buffs+rotations+
     '<p class="analysis-note">Aktive Schadenszeit: Anteil der 500-ms-Abschnitte, in denen du Schaden gemacht hast. Das ist kein Cast- oder Rotationswert und nennt keine Ursache.'+(notes?' '+notes+'.':'')+'</p>';
 }
 async function fillPerformanceCoach(f,root,request) {

@@ -51,7 +51,7 @@ html, body { margin: 0; background: transparent; color: #edf3fb; font: 13px syst
 </head>
 <body>
 <div class="box" id="box"><div class="head"><span id="t">Kein Ziel</span><span class="n" id="time">0:00</span></div><div class="group-line" id="groupRate"></div>
-<div class="hp" id="hpTrack" hidden><div id="hp" style="width:0"></div></div><div id="rows"></div>
+<div class="hp" id="hpTrack" hidden><div id="hp" style="width:0"></div></div><div id="rows"></div><div id="combatAids" style="padding:4px 8px"></div>
 <div class="foot" id="foot"><span id="state">Warte auf Meter …</span><span id="ping" class="n"></span></div></div>
 <script>
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -62,7 +62,7 @@ const el = id => document.getElementById(id);
 function appearance(s) {
   const colors={midnight:['11,16,24','#f0c878','16,28,44','#5bd5de'],aether:['8,26,32','#f0d28c','14,44,50','#75e0ce'],ember:['25,17,21','#ffd68c','46,28,30','#f6a060']}[s.theme]||['11,16,24','#f0c878','16,28,44','#5bd5de'];
   document.documentElement.style.setProperty('--accent',colors[3]);el('box').style.borderRadius={aether:'12px',ember:'3px'}[s.theme]||'7px';
-  el('box').style.background=`rgba(${colors[0]},${clamp(s.opacity,0,1)})`;
+  el('box').style.background=`rgba(${colors[0]},${(s.high_contrast?1:clamp(s.opacity,0,1))})`;
   document.documentElement.style.setProperty('--title',colors[1]);
   document.documentElement.style.setProperty('--header',`rgba(${colors[2]},.7)`);
   document.documentElement.classList.toggle('compact',Boolean(s.compact));
@@ -97,6 +97,9 @@ async function tick() {
       <div class="f" style="width:${clamp(r.value / top * 100, 0, 100)}%;background:var(--${key})"></div>
       <div class="t"><span class="rk">${String(r.rank).padStart(2,'0')}</span><span class="name">${["gladiator","templar","assassin","ranger","sorcerer","elementalist","cleric","chanter","fighter"].includes(key)?`<img src="/assets/icons/class-${key}.webp" alt="" style="width:18px;height:18px;vertical-align:middle;margin-right:5px">`:""}${r.dead ? '† ' : ''}${esc(name)}</span><span class="n"><strong>${s.show_dps?num(rate)+'<span class="u">/s</span>':num(r.value)}</strong><small>${!s.compact&&s.show_dps?num(r.value)+' · ':''}${(r.value*100/sum).toFixed(0)} %</small></span></div></div>`;
     }).join('') || '<div class="empty">Warte auf Kampf …</div>';
+    const cast=s.show_boss_cast&&l.boss_cast?l.boss_cast:null;
+    el('combatAids').hidden=!(s.cooldown_skills?.length||cast);
+    el('combatAids').textContent=(cast?'Boss-Skill #'+cast.skill+' · '+(cast.remaining_ms/1000).toFixed(1)+' s':'')+(s.cooldown_skills?.length?'  '+(l.cooldowns||[]).map(c=>'#'+c.skill+': '+(c.seconds==null?'?':(c.estimated?'~':'')+c.seconds.toFixed(1)+'s')).join(' · '):'');
     const c = l.capture;
     el('state').textContent = c.error ? 'Capture-Fehler' : !c.permission ? 'Keine Capture-Berechtigung' : l.numeric_limited ? 'Zahlengrenze: Näherungswerte' : paused ? 'Kampfpause · '+Math.floor(Number(l.target_idle_ms||0)/1000)+' s ohne Treffer' : c.locked_port ? l.dungeon || 'Verbunden' : c.game_running ? 'Suche Verbindung …' : 'AION2 nicht gestartet';
     el('foot').hidden = Boolean(s.locked) && !c.error && c.permission && Boolean(c.locked_port) && !l.numeric_limited && !c.recording && !paused;

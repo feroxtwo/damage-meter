@@ -19,6 +19,8 @@ install -m755 "$binary" "$base/aion2-meter"
 cp packaging/*.desktop packaging/*.svg "$base/packaging/"
 cp scripts/install-binary.sh scripts/install-kwin-rule.sh scripts/install-shortcuts.sh scripts/desktop-exec.sh "$base/scripts/"
 cp README.md LICENSE "$base/"
+cp -a licenses "$base/licenses"
+cp vendor/a2tools-core/NOTICE.md "$base/licenses/A2Tools-NOTICE.md"
 cp -a docs "$base/docs"
 tar -C "$stage" -czf "dist/aion2-meter-$version-linux-x86_64.tar.gz" "${base##*/}"
 root="$stage/deb"
@@ -31,6 +33,8 @@ install -Dm755 scripts/install-kwin-rule.sh "$root/usr/lib/aion2-meter/install-k
 install -Dm755 scripts/install-shortcuts.sh "$root/usr/lib/aion2-meter/install-shortcuts.sh"
 install -Dm644 scripts/desktop-exec.sh "$root/usr/lib/aion2-meter/desktop-exec.sh"
 cp README.md "$root/usr/share/doc/aion2-meter/"
+cp -a licenses "$root/usr/share/doc/aion2-meter/licenses"
+cp vendor/a2tools-core/NOTICE.md "$root/usr/share/doc/aion2-meter/licenses/A2Tools-NOTICE.md"
 cp -a docs "$root/usr/share/doc/aion2-meter/docs"
 mkdir -p "$root/DEBIAN"
 cat > "$root/DEBIAN/control" <<EOF
@@ -78,6 +82,7 @@ cp -a %{_sourcedir}/usr %{buildroot}/
 /usr/share/applications/aion2-meter*.desktop
 /usr/share/icons/hicolor/scalable/apps/aion2-meter.svg
 %license /usr/share/doc/aion2-meter/copyright
+%license /usr/share/doc/aion2-meter/licenses
 %doc /usr/share/doc/aion2-meter/README.md
 %doc /usr/share/doc/aion2-meter/docs
 /usr/lib/aion2-meter/

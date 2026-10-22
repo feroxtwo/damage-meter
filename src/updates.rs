@@ -18,7 +18,7 @@ fn version(s: &str) -> Option<(u64, u64, u64)> {
     ))
 }
 pub fn info() -> Value {
-    json!({"version":env!("CARGO_PKG_VERSION"),"parser_version":"2.0.54","parser_rev":PARSER_REV})
+    json!({"version":env!("CARGO_PKG_VERSION"),"parser_version":"2.0.54","parser_rev":PARSER_REV,"parser_patch":"local-i64-evidence-1"})
 }
 pub fn release_status(tag: &str) -> Value {
     let newer = version(tag)
