@@ -774,12 +774,12 @@ function settingsValues() {
   });
 }
 async function loadSettings() {
-  if(window.loadInsightSettings)task(loadInsightSettings());
   if (settingsSaving || settingsDirty) return;
   const request = ++settingsRequest;
   const loaded = await api('/api/overlay');
   if (request !== settingsRequest || settingsSaving || settingsDirty) return;
   settings = loaded;
+  if (window.applyInsightSettings) applyInsightSettings(loaded);
   document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v ?? i.value; });
   settingsValues();
 }
