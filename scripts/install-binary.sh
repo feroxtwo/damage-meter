@@ -18,6 +18,14 @@ mv -f "$temporary" "$BIN"
 install -Dm644 packaging/aion2-meter.desktop "$PREFIX/share/applications/aion2-meter.desktop"
 install -Dm644 packaging/aion2-meter-dashboard.desktop "$PREFIX/share/applications/aion2-meter-dashboard.desktop"
 install -Dm644 packaging/aion2-meter.svg "$PREFIX/share/icons/hicolor/scalable/apps/aion2-meter.svg"
+install -Dm644 LICENSE "$PREFIX/share/doc/aion2-meter/LICENSE"
+for notice in licenses/*; do
+    install -Dm644 "$notice" "$PREFIX/share/doc/aion2-meter/licenses/${notice##*/}"
+done
+# Source checkouts additionally carry the parser provenance notice.
+if [[ -f vendor/a2tools-core/NOTICE.md ]]; then
+    install -Dm644 vendor/a2tools-core/NOTICE.md "$PREFIX/share/doc/aion2-meter/licenses/A2Tools-NOTICE.md"
+fi
 # Desktop Exec uses its own quoting rules, not shell quoting. Escape literal % too.
 desktop="$PREFIX/share/applications/aion2-meter.desktop"
 while IFS= read -r line; do

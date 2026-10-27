@@ -19,7 +19,6 @@ use a2tools_dps_meter_lib::capture::framing::{self, FrameKind};
 use a2tools_dps_meter_lib::capture::stream_assembler::StreamAssembler;
 use a2tools_dps_meter_lib::capture::stream_processor::StreamProcessor;
 
-use crate::buffs;
 use crate::engine::Engine;
 use crate::tcp::TcpOrder;
 
@@ -503,9 +502,9 @@ impl Dispatcher {
                         for chunk in ordered {
                             assembler.process_chunk(&chunk, processor);
                             effects.feed(&chunk, |payload| {
-                                if let Some(event) = buffs::parse(payload) {
-                                    self.engine.buffs.record(event, packet.captured_at_ms);
-                                }
+                                self.engine
+                                    .buffs
+                                    .record_packet(payload, packet.captured_at_ms);
                                 self.engine.note_packet(payload, packet.captured_at_ms);
                             });
                         }
@@ -555,9 +554,7 @@ impl Dispatcher {
                     last_parsed_ms = now;
                 }
                 effects.feed(&chunk, |payload| {
-                    if let Some(event) = buffs::parse(payload) {
-                        self.engine.buffs.record(event, now);
-                    }
+                    self.engine.buffs.record_packet(payload, now);
                     self.engine.note_packet(payload, now);
                 });
             }

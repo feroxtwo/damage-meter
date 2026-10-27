@@ -81,8 +81,11 @@ pub fn decorate(value: &mut Value, language: &str) {
             for item in fields.values_mut() {
                 decorate(item, language);
             }
-            if fields.contains_key("name")
-                && let Some(code) = fields.get("code").and_then(Value::as_i64)
+            if (fields.contains_key("name") || fields.contains_key("skill"))
+                && let Some(code) = fields
+                    .get("code")
+                    .or_else(|| fields.get("skill"))
+                    .and_then(Value::as_i64)
                 && let Some(Value::Object(meta)) = metadata(code)
             {
                 if let Some(name) = meta

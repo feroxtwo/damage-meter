@@ -584,7 +584,7 @@ pub fn skill_rows(
     let total: i64 = skills
         .iter()
         .filter(|s| s.actor_id == actor)
-        .map(|s| i64::from(s.dmg))
+        .map(|s| s.dmg)
         .sum();
     let mut rows: Vec<Value> = skills.iter().filter(|s|s.actor_id==actor).map(|s| {
         let hits=s.time.max(0) as f64;
@@ -872,11 +872,11 @@ impl Db {
             // Damage per actor, from the skill breakdown.
             let mut damage: HashMap<i32, i64> = HashMap::new();
             for s in &record.details.skills {
-                *damage.entry(s.actor_id).or_default() += s.dmg as i64;
+                *damage.entry(s.actor_id).or_default() += s.dmg;
             }
             let mut heal: HashMap<i32, i64> = HashMap::new();
             for s in &record.details.heal_skills {
-                *heal.entry(s.actor_id).or_default() += s.dmg as i64;
+                *heal.entry(s.actor_id).or_default() += s.dmg;
             }
             let total: i64 = damage.values().sum::<i64>();
             let secs = (record.duration_ms as f64 / 1000.0).max(1.0);
@@ -909,7 +909,7 @@ impl Db {
                         .skills
                         .iter()
                         .chain(&record.details.heal_skills)
-                        .any(|s| s.dmg == i32::MAX)
+                        .any(|s| s.dmg == i64::from(i32::MAX) || s.dmg == i64::MAX)
                 ],
             )?;
             tx.execute(
@@ -1200,7 +1200,7 @@ impl Db {
                     .skills
                     .iter()
                     .chain(&record.details.heal_skills)
-                    .any(|s| s.dmg == i32::MAX)
+                    .any(|s| s.dmg == i64::from(i32::MAX) || s.dmg == i64::MAX)
             );
             for p in &mut players {
                 let actor = p["actor_id"].as_i64().unwrap_or(0) as i32;
@@ -1214,7 +1214,7 @@ impl Db {
                     .filter(|s| s.actor_id == actor)
                     .collect();
                 if !heals.is_empty() {
-                    p["heal"] = json!(heals.iter().map(|s| i64::from(s.dmg)).sum::<i64>());
+                    p["heal"] = json!(heals.iter().map(|s| s.dmg).sum::<i64>());
                 }
                 p["hps"] = json!(
                     p["heal"].as_f64().unwrap_or(0.0) * 1000.0
@@ -3262,10 +3262,10 @@ mod tests {
         let db = Db::in_memory().unwrap();
         let normal = record("normal", 1000, 100);
         let mut limited = record("limited", 2000, 100);
-        limited.details.skills[0].dmg = i32::MAX;
+        limited.details.skills[0].dmg = i64::from(i32::MAX);
         let mut healing = record("healing", 3000, 100);
         let mut heal_skill = healing.details.skills[0].clone();
-        heal_skill.dmg = i32::MAX;
+        heal_skill.dmg = i64::from(i32::MAX);
         healing.details.heal_skills.push(heal_skill);
         db.save_fights(
             &[normal, limited, healing],

@@ -618,6 +618,14 @@ async fn last_training(State(e): State<AppState>) -> Result<Json<Value>, StatusC
 // Restrict Host to the listening address or an IP literal for an all-interface
 // listener. This also blocks DNS rebinding attacks against the local API.
 async fn local_request(State(addr): State<SocketAddr>, request: Request, next: Next) -> Response {
+    if request.uri().path().starts_with("/api/stream")
+        && !request
+            .extensions()
+            .get::<axum::extract::ConnectInfo<SocketAddr>>()
+            .is_some_and(|peer| peer.0.ip().is_loopback())
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let allowed = request
         .headers()
         .get(header::HOST)
@@ -649,6 +657,37 @@ async fn local_request(State(addr): State<SocketAddr>, request: Request, next: N
         .entry(header::X_FRAME_OPTIONS)
         .or_insert(axum::http::HeaderValue::from_static("DENY"));
     response
+}
+
+async fn stream_settings(State(e): State<AppState>) -> Json<Value> {
+    let addr = *e.stream.address.read();
+    let address = addr.map(|a| {
+        if a.ip().is_unspecified() {
+            SocketAddr::new("127.0.0.1".parse().unwrap(), a.port())
+        } else {
+            a
+        }
+    });
+    Json(
+        json!({"available":addr.is_some(),"lan":addr.is_some_and(|a|!a.ip().is_loopback()),"enabled":e.overlay.read().stream_enabled,
+        "url":address.map(|a|format!("http://{a}/s/{}/",e.stream.key.read()))}),
+    )
+}
+async fn rotate_stream(
+    State(e): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, StatusCode> {
+    guard(&headers)?;
+    e.stream
+        .rotate()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+async fn insights_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../web/combat-insights.js"),
+    )
 }
 
 pub fn router(engine: AppState, addr: SocketAddr) -> Router {
@@ -715,6 +754,9 @@ pub fn router(engine: AppState, addr: SocketAddr) -> Router {
         .route("/api/version", get(version))
         .route("/api/update-check", post(update_check))
         .route("/api/live", get(live))
+        .route("/combat-insights.js", get(insights_js))
+        .route("/api/stream", get(stream_settings))
+        .route("/api/stream/rotate", post(rotate_stream))
         .route("/api/runs", get(runs))
         .route("/api/runs/{id}", get(run_detail).delete(delete_run))
         .route("/api/runs/{id}/analysis", get(run_analysis))
@@ -760,13 +802,16 @@ pub async fn serve(engine: AppState, listener: std::net::TcpListener) -> anyhow:
     let listener = tokio::net::TcpListener::from_std(listener)?;
     tracing::info!("Dashboard: http://{addr}/");
     let shutdown = engine.clone();
-    axum::serve(listener, router(engine, addr))
-        .with_graceful_shutdown(async move {
-            while !shutdown.is_stopping() {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
-        })
-        .await?;
+    axum::serve(
+        listener,
+        router(engine, addr).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        while !shutdown.is_stopping() {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    })
+    .await?;
     Ok(())
 }
 

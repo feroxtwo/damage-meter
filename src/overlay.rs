@@ -108,6 +108,7 @@ pub struct Overlay {
     last_size: Vec2,
     last_position: Option<[f32; 2]>,
     last_scale: f32,
+    skill_icons: std::collections::HashMap<i32, egui::TextureHandle>,
     class_icons: std::collections::HashMap<String, egui::TextureHandle>,
     #[cfg(debug_assertions)]
     fixture: Option<Live>,
@@ -246,6 +247,7 @@ impl Overlay {
             passthrough: None,
             last_size: Vec2::ZERO,
             last_scale: 0.0,
+            skill_icons: Default::default(),
             class_icons: Default::default(),
             #[cfg(debug_assertions)]
             fixture: native_fixture(),
@@ -286,6 +288,119 @@ impl Overlay {
                 Ok(Box::new(self))
             }),
         )
+    }
+
+    fn combat_aids(&mut self, ui: &mut egui::Ui, live: &Live, width: f32) {
+        let settings = &live.overlay;
+        let label = |id: i32| {
+            crate::skills::metadata(i64::from(id))
+                .and_then(|m| {
+                    m["names"][&settings.skill_language]
+                        .as_str()
+                        .map(str::to_owned)
+                })
+                .unwrap_or_else(|| format!("#{id}"))
+        };
+        if settings.show_boss_cast && !live.boss_cast.is_null() {
+            let cast = &live.boss_cast;
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 30.0), Sense::hover());
+            let remaining = cast["remaining_ms"].as_f64().unwrap_or(0.0);
+            let duration = cast["duration_ms"].as_f64().unwrap_or(1.0).max(1.0);
+            ui.painter().rect_filled(
+                Rect::from_min_size(
+                    rect.min,
+                    Vec2::new(width * (remaining / duration).clamp(0.0, 1.0) as f32, 30.0),
+                ),
+                0,
+                Color32::from_rgb(80, 35, 35),
+            );
+            let target = cast["target"].as_i64();
+            let own = live
+                .rows
+                .iter()
+                .any(|r| r.is_self && Some(i64::from(r.id)) == target);
+            ui.painter().text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                format!(
+                    "{} · {:.1}s{}",
+                    label(cast["skill"].as_i64().unwrap_or(0) as i32),
+                    remaining / 1000.0,
+                    if own { " · auf dich" } else { "" }
+                ),
+                FontId::proportional(12.0),
+                Color32::WHITE,
+            );
+        }
+        if settings.cooldown_skills.is_empty() {
+            return;
+        }
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 46.0), Sense::hover());
+        let slot = width / settings.cooldown_skills.len() as f32;
+        for (index, id) in settings.cooldown_skills.iter().enumerate() {
+            if !self.skill_icons.contains_key(id) && self.skill_icons.len() < 256 {
+                let bytes = crate::skills::metadata(i64::from(*id)).and_then(|m| {
+                    m["icon"]
+                        .as_str()
+                        .and_then(|path| path.rsplit('/').next())
+                        .and_then(crate::skills::icon)
+                });
+                if let Some(bytes) = bytes
+                    && let Ok(image) = image::load_from_memory(bytes)
+                {
+                    let image = image.to_rgba8();
+                    let size = [image.width() as usize, image.height() as usize];
+                    self.skill_icons.insert(
+                        *id,
+                        ui.ctx().load_texture(
+                            format!("skill-{id}"),
+                            egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw()),
+                            egui::TextureOptions::LINEAR,
+                        ),
+                    );
+                }
+            }
+            let center = Pos2::new(rect.left() + slot * (index as f32 + 0.5), rect.top() + 16.0);
+            let icon = Rect::from_center_size(center, Vec2::splat(26.0));
+            if let Some(texture) = self.skill_icons.get(id) {
+                ui.painter().image(
+                    texture.id(),
+                    icon,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            } else {
+                ui.painter().text(
+                    center,
+                    Align2::CENTER_CENTER,
+                    "?",
+                    FontId::proportional(15.0),
+                    Color32::WHITE,
+                );
+            }
+            let reading = live.cooldowns.as_array().and_then(|a| {
+                a.iter()
+                    .find(|r| r["skill"].as_i64() == Some(i64::from(*id)))
+            });
+            let text = reading
+                .and_then(|r| r["seconds"].as_f64())
+                .map(|s| {
+                    if s == 0.0 && reading.is_some_and(|r| r["estimated"] == false) {
+                        "bereit".into()
+                    } else {
+                        format!("~{s:.1}s")
+                    }
+                })
+                .unwrap_or_else(|| "?".into());
+            ui.painter().text(
+                Pos2::new(center.x, rect.bottom() - 2.0),
+                Align2::CENTER_BOTTOM,
+                text,
+                FontId::proportional(10.0),
+                Color32::WHITE,
+            );
+            ui.interact(icon,ui.id().with(("cooldown",id)),Sense::hover()).on_hover_text(format!("{} · Sekunden mit Zeitfaktor sind geschätzt. Ohne Faktor ist die Zeiteinheit unbekannt.",label(*id)));
+        }
     }
 
     fn header(&self, ui: &mut egui::Ui, live: &Live, width: f32, bg: u8) {
@@ -941,7 +1056,13 @@ impl eframe::App for Overlay {
 
         let rows = live.rows.len().min(settings.max_rows);
         let footer = footer_visible(&live);
-        let size = overlay_size(settings.compact, rows, footer);
+        let mut size = overlay_size(settings.compact, rows, footer);
+        if !settings.cooldown_skills.is_empty() {
+            size.y += 46.0;
+        }
+        if settings.show_boss_cast && !live.boss_cast.is_null() {
+            size.y += 30.0;
+        }
         let width = size.x;
         if size != self.last_size || applied_scale != self.last_scale {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
@@ -949,7 +1070,11 @@ impl eframe::App for Overlay {
             self.last_scale = applied_scale;
         }
 
-        let bg = (settings.opacity.clamp(0.0, 1.0) * 200.0) as u8;
+        let bg = if settings.high_contrast {
+            255
+        } else {
+            (settings.opacity.clamp(0.0, 1.0) * 200.0) as u8
+        };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
@@ -986,6 +1111,7 @@ impl eframe::App for Overlay {
                         settings.hide_names,
                     );
                 }
+                self.combat_aids(ui, &live, width);
                 ui.add_space(4.0);
                 if footer {
                     self.footer(ui, &live, width, bg);

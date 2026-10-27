@@ -34,7 +34,7 @@ const MERGE_TOLERANCE_MS: i64 = 100;
 const KEEP_MS: i64 = 2 * 3_600_000;
 const INTERVALS_PER_EFFECT: usize = 128;
 const MAX_TARGETS: usize = 256;
-const MAX_EFFECTS_PER_TARGET: usize = 64;
+const MAX_EFFECTS_PER_TARGET: usize = 256;
 const MAX_INTERVALS: usize = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +49,9 @@ fn varint(data: &[u8], offset: usize) -> Option<(u32, usize)> {
     let mut value = 0u32;
     let mut shift = 0u32;
     for (i, &b) in data.get(offset..)?.iter().enumerate() {
+        if shift == 28 && b > 15 {
+            return None;
+        }
         value |= u32::from(b & 0x7F) << shift;
         if b & 0x80 == 0 {
             return Some((value, i + 1));
@@ -144,7 +147,7 @@ pub struct Uptime {
     pub percent: f64,
 }
 
-type EffectIntervals = HashMap<u32, HashMap<(u32, u32), VecDeque<Interval>>>;
+type EffectIntervals = HashMap<u32, HashMap<(u32, u32, u32), VecDeque<Interval>>>;
 type EffectCoverage = (Vec<(i64, i64)>, u32, i64);
 
 /// Every effect interval seen, by target, then (effect, caster).
@@ -190,7 +193,7 @@ fn span(list: &VecDeque<Interval>) -> Option<(i64, i64)> {
     Some((list.front()?.start, list.iter().map(|i| i.end).max()?))
 }
 
-fn last_end(effects: &HashMap<(u32, u32), VecDeque<Interval>>) -> i64 {
+fn last_end(effects: &HashMap<(u32, u32, u32), VecDeque<Interval>>) -> i64 {
     effects
         .values()
         .filter_map(span)
@@ -246,12 +249,15 @@ impl BuffTracker {
     }
 
     pub fn record(&self, event: BuffEvent, now_ms: i64) {
+        self.record_instance(event, 0, now_ms);
+    }
+    fn record_instance(&self, event: BuffEvent, instance: u32, now_ms: i64) {
         let end = now_ms.saturating_add(event.duration_ms as i64);
         let mut inner = self.inner.lock();
         if !inner.contains_key(&event.target) && inner.len() >= MAX_TARGETS {
             self.evict_stalest_target(&mut inner, event.target);
         }
-        let key = (event.code, event.caster);
+        let key = (event.code, event.caster, instance);
         if let Some(effects) = inner.get_mut(&event.target)
             && !effects.contains_key(&key)
             && effects.len() >= MAX_EFFECTS_PER_TARGET
@@ -267,7 +273,7 @@ impl BuffTracker {
             .get(&event.target)
             .and_then(|e| e.get(&key))
             .and_then(|l| l.back())
-            .is_some_and(|last| now_ms <= last.end + MERGE_TOLERANCE_MS);
+            .is_some_and(|last| now_ms >= last.start && now_ms <= last.end + MERGE_TOLERANCE_MS);
         while !extends && self.intervals.load(std::sync::atomic::Ordering::Relaxed) >= MAX_INTERVALS
         {
             if !self.evict_stalest_target(&mut inner, event.target) {
@@ -292,7 +298,13 @@ impl BuffTracker {
             .entry(key)
             .or_default();
         match list.back_mut() {
-            Some(last) if now_ms <= last.end + MERGE_TOLERANCE_MS => last.end = last.end.max(end),
+            Some(last) if now_ms >= last.start && now_ms <= last.end + MERGE_TOLERANCE_MS => {
+                last.end = if instance == 0 {
+                    last.end.max(end)
+                } else {
+                    end
+                }
+            }
             _ => {
                 list.push_back(Interval { start: now_ms, end });
                 self.intervals
@@ -319,10 +331,84 @@ impl BuffTracker {
         inner.retain(|_, e| !e.is_empty());
     }
 
+    /// Application/refresh instance ids allow exact early removals. Legacy
+    /// callers without an instance retain duration-based estimates.
+    pub fn record_packet(&self, payload: &[u8], at: i64) {
+        if let Some(event) = parse(payload) {
+            let payload = crate::telemetry::strip_flag(payload);
+            let after = varint(payload, 2).map(|(_, n)| 2 + n);
+            let instance = after.and_then(|p| {
+                let refresh = payload.first() == Some(&0x2b);
+                let offset = if refresh { p + 1 } else { p + 2 };
+                let (instance, n) = varint(payload, offset)?;
+                (u32_at(payload, offset + n) == Some(event.code)).then_some(instance)
+            });
+            if let Some(instance) = instance {
+                self.record_instance(event, instance, at);
+            } else {
+                self.record(event, at);
+            }
+        }
+    }
+    pub fn observe_end(&self, payload: &[u8], at: i64) {
+        let payload = crate::telemetry::strip_flag(payload);
+        if payload.get(..2) != Some(&[0x2c, 0x38]) {
+            return;
+        }
+        let Some((target, n)) = varint(payload, 2) else {
+            return;
+        };
+        let mut p = 2 + n;
+        let Some(&count) = payload.get(p) else { return };
+        p += 1;
+        if count == 0 || count > 64 {
+            return;
+        }
+        let mut instances = Vec::new();
+        for _ in 0..count {
+            let Some(&kind) = payload.get(p) else { return };
+            p += 1;
+            if kind != 0 && kind != 7 {
+                return;
+            }
+            let Some((instance, n)) = varint(payload, p) else {
+                return;
+            };
+            p += n;
+            if payload.get(p).is_none() {
+                return;
+            }
+            p += 1;
+            if kind == 7 {
+                let Some((_, n)) = varint(payload, p) else {
+                    return;
+                };
+                p += n + 8;
+                if p > payload.len() {
+                    return;
+                }
+            }
+            instances.push(instance);
+        }
+        if p != payload.len() {
+            return;
+        } // validate entire list before changing state
+        if let Some(effects) = self.inner.lock().get_mut(&target) {
+            for ((_, _, instance), list) in effects {
+                if *instance != 0
+                    && instances.contains(instance)
+                    && let Some(last) = list.back_mut()
+                    && at >= last.start
+                {
+                    last.end = last.end.min(at);
+                }
+            }
+        }
+    }
     pub fn timeline(&self, from: i64, to: i64) -> serde_json::Value {
         let mut rows = Vec::new();
         for (&target, effects) in self.inner.lock().iter() {
-            for (&(code, caster), list) in effects {
+            for (&(code, caster, _), list) in effects {
                 for i in list {
                     let start = i.start.max(from);
                     let end = i.end.min(to);
@@ -363,7 +449,7 @@ impl BuffTracker {
             return Vec::new();
         };
         let mut by_code: HashMap<u32, EffectCoverage> = HashMap::new();
-        for (&(code, caster), list) in effects {
+        for (&(code, caster, _), list) in effects {
             let spans: Vec<(i64, i64)> = list.iter().map(|i| (i.start, i.end)).collect();
             let mine = covered(&spans, from, to);
             if mine == 0 {
@@ -567,5 +653,43 @@ mod tests {
         assert_eq!(name_keys(120_340_015)[0], 12_034_001);
         assert_eq!(name_keys(120_340_015)[2], 12_030_000);
         assert_eq!(name_keys(25_000_123)[0], 25_000_123);
+    }
+    #[test]
+    fn early_end_keeps_overlapping_instances_and_casters() {
+        let t = BuffTracker::default();
+        let buff = BuffEvent {
+            target: 42,
+            caster: 100,
+            code: 120340010,
+            duration_ms: 8000,
+        };
+        t.record_instance(buff, 5, 0);
+        t.record_instance(buff, 6, 1000);
+        t.observe_end(&[0x2c, 0x38, 42, 1, 0, 5, 0], 2000);
+        assert_eq!(t.uptimes(42, 0, 10000)[0].percent, 90.0);
+        t.observe_end(&[0x2c, 0x38, 42, 1, 0, 6, 0], 3000);
+        assert_eq!(t.uptimes(42, 0, 10000)[0].percent, 30.0);
+    }
+    #[test]
+    fn malformed_end_list_is_atomic_and_refresh_can_shorten_duration() {
+        let t = BuffTracker::default();
+        let buff = BuffEvent {
+            target: 42,
+            caster: 100,
+            code: 120340010,
+            duration_ms: 8000,
+        };
+        t.record_instance(buff, 5, 0);
+        t.observe_end(&[0x2c, 0x38, 42, 2, 0, 5, 0, 0], 2000);
+        assert_eq!(t.uptimes(42, 0, 10000)[0].percent, 80.0);
+        t.record_instance(
+            BuffEvent {
+                duration_ms: 2000,
+                ..buff
+            },
+            5,
+            1000,
+        );
+        assert_eq!(t.uptimes(42, 0, 10000)[0].percent, 30.0);
     }
 }

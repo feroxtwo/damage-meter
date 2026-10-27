@@ -2,6 +2,8 @@ name: Linux Release
 on:
   push:
     tags: ['v*']
+    branches: ['release/v*']
+  # A release/vVERSION branch publishes a commit already merged into main.
   # Release the current main without pushing a tag first: the tag is
   # created from Cargo.toml's version when the release is published.
   workflow_dispatch:
@@ -12,27 +14,36 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       - name: Determine release tag
         run: |
           version=$(sed -n 's/^version = "\([0-9.]*\)"/\1/p' Cargo.toml | head -1)
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
             test "$GITHUB_REF_NAME" = "v$version"
           else
-            test "$GITHUB_REF_NAME" = main
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              test "$GITHUB_REF_NAME" = "release/v$version"
+              git fetch origin main
+              git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+            else
+              test "$GITHUB_REF_NAME" = main
+            fi
             if git ls-remote --exit-code --tags origin "refs/tags/v$version"; then
               echo "v$version gibt es schon: Version in Cargo.toml erhöhen" >&2; exit 1
             fi
           fi
           echo "TAG=v$version" >> "$GITHUB_ENV"
-      - run: cargo test --locked && cargo build --release --locked
+      - run: cargo test --locked --workspace && cargo build --release --locked
       - run: python3 scripts/test-headless.py && python3 scripts/test-validation.py
       - run: sudo apt-get update && sudo apt-get install -y rpm
       - run: ./scripts/package-linux.sh
+      - run: python3 scripts/test-packages.py
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then target=(--verify-tag); else target=(--target "$GITHUB_SHA"); fi
-          gh release create "$TAG" dist/* "${target[@]}" --latest --title "AION2 Meter $TAG" --generate-notes
+          if [ "$GITHUB_REF_TYPE" = tag ]; then target=(--verify-tag); else target=(--target "$GITHUB_SHA"); fi
+          notes=(--generate-notes)
+          if [ -f "docs/RELEASE_${TAG#v}.md" ]; then notes=(--notes-file "docs/RELEASE_${TAG#v}.md"); fi
+          gh release create "$TAG" dist/* "${target[@]}" --latest --title "AION2 Meter $TAG" "${notes[@]}"

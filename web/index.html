@@ -284,9 +284,28 @@ label.set input[type=checkbox] { width: 18px; height: 18px; }
       <label class="set"><span>Open World: andere Spieler anzeigen<small>Aus: nur du und deine Gruppe. In Dungeons immer die ganze Gruppe.</small></span> <input type="checkbox" data-k="open_world_others"></label>
       <details class="secondary-tools"><summary>Wann wird zurückgesetzt?</summary><p class="analysis-note">Vor jedem Reset wird der Versuch gespeichert. Wipe-Erkennung braucht mindestens zwei erfasste Spieler einschließlich dir, alle als tot erfasst, fünf Sekunden ohne Treffer und einen gemeldeten Boss-HP-Reset. Geschätzte HP lösen keinen Wipe aus. Während Training bleibt Auto-Reset aus.</p></details>
     </div>
+    <div class="card"><h2>Kampfhilfen</h2>
+      <label class="set">Boss-Cast anzeigen <input type="checkbox" data-k="show_boss_cast"></label>
+      <label class="set">Hoher Kontrast <input type="checkbox" data-k="high_contrast"></label>
+      <p class="analysis-note" id="overlayContrast"></p>
+      <label class="set">Cooldown-Skills suchen <input id="cooldownSearch" type="search" placeholder="Skillname eingeben" aria-label="Cooldown-Skills suchen"></label>
+      <div class="row"><select id="cooldownPicker" aria-label="Cooldown-Skill auswählen"><option value="">Suche öffnen …</option></select><button class="btn" type="button" id="addCooldownSkill">Hinzufügen</button></div>
+      <div id="cooldownSelection" class="row" aria-label="Gewählte Cooldown-Skills"></div>
+      <details class="secondary-tools"><summary>Weitere Skill-IDs</summary><input id="cooldownSkills" aria-label="Cooldown-Skill-IDs" placeholder="Bis zu 8 IDs, mit Komma getrennt"></details>
+      <p class="analysis-note">Gemeldete Cooldown-Werte haben noch keine bestätigte Zeiteinheit. Ohne Faktor erscheinen keine Sekunden.</p>
+      <label class="set">Geschätzter Zeitfaktor <input id="cooldownFactor" aria-label="Geschätzter Zeitfaktor" type="number" min="0.1" max="10" step="0.1" placeholder="Unbekannt"></label>
+      <button type="button" class="btn" id="saveCooldowns">Cooldown-Auswahl speichern</button>
+    </div>
+    <div class="card"><h2>Geschützte OBS-Freigabe</h2>
+      <label class="set">Freigabe einschalten <input type="checkbox" data-k="stream_enabled"></label>
+      <label class="set">Spielernamen im Stream zeigen <input type="checkbox" data-k="stream_names"></label>
+      <label class="set">Adresse des Spiel-PCs <input id="streamHost" aria-label="Adresse des Spiel-PCs" placeholder="127.0.0.1"></label>
+      <div class="row"><button type="button" class="btn" id="copyStreamLink">Geschützten OBS-Link kopieren</button><button type="button" class="btn" id="rotateStreamKey">Schlüssel erneuern</button></div>
+      <p class="analysis-note">Nur die Stream-Ansicht wird freigegeben. Für einen zweiten PC mit <code>--stream-listen 0.0.0.0</code> starten und hier die lokale IP des Spiel-PCs eingeben. Port 8788, anpassbar mit <code>--stream-port</code>. Schlüssel gelten bis zum Neustart oder Erneuern. Namen sind zunächst ausgeblendet.</p>
+    </div>
     <div class="card"><h2>Profile</h2><p class="muted">Speichert Overlay-Einstellungen und Position unter einem Namen, zum Beispiel pro Charakter oder für OBS.</p><div class="row"><input id="profileName" maxlength="100" placeholder="Profilname / Charakter" aria-label="Profilname"><button class="btn" id="saveProfile">Profil speichern</button><button class="btn" id="loadProfile">Profil laden</button></div></div>
     <div class="card">
-      <h2>Diagnose</h2>
+      <h2>Diagnose</h2><p id="protocolHealth" class="analysis-note" role="status"></p><p id="protocolFamilies" class="analysis-note"></p>
       <label class="set"><span>Pakete mitschneiden<small>bleibt nach Neustart an</small></span> <input type="checkbox" id="recAuto"></label>
       <p class="muted">Hilft, weitere Kampfwerte zu entschlüsseln. Dateien liegen in <code>~/.local/share/aion2-meter/captures/</code>, enthalten auch Chat und Namen und werden ab 2 GB automatisch ausgedünnt (älteste zuerst).</p>
     </div>
@@ -760,6 +779,7 @@ async function loadSettings() {
   const loaded = await api('/api/overlay');
   if (request !== settingsRequest || settingsSaving || settingsDirty) return;
   settings = loaded;
+  if (window.applyInsightSettings) applyInsightSettings(loaded);
   document.querySelectorAll('[data-k]').forEach(i => { const v = settings[i.dataset.k]; if (i.type === 'checkbox') i.checked = v; else i.value = v ?? i.value; });
   settingsValues();
 }
@@ -809,5 +829,6 @@ show(tab);
 <script src="/community.js"></script>
 <script src="/qol.js"></script>
 <script src="/run-analysis.js"></script>
+<script src="/combat-insights.js"></script>
 </body>
 </html>

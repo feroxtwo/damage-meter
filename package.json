@@ -2,9 +2,10 @@
   "name": "aion2-meter-web-tests",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-insights.cjs && node scripts/test-skill-ui.cjs && node scripts/test-chart-ui.cjs && node scripts/test-run-analysis.cjs && node scripts/test-web.cjs && node scripts/test-community.cjs && node scripts/test-performance-coach.cjs"
+    "test": "node scripts/test-combat-insights.cjs && node scripts/test-combat-insights-dom.cjs && node scripts/test-insights.cjs && node scripts/test-skill-ui.cjs && node scripts/test-chart-ui.cjs && node scripts/test-run-analysis.cjs && node scripts/test-web.cjs && node scripts/test-community.cjs && node scripts/test-performance-coach.cjs"
   },
   "devDependencies": {
+    "jsdom": "26.1.0",
     "playwright": "1.62.1"
   }
 }

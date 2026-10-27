@@ -65,6 +65,7 @@ pub fn run(path: &Path) -> Result<Value> {
     let mut clock_clamped_packets = 0u64;
     let mut previous_raw_ms = None;
     let engine = Engine::new(Db::in_memory()?, "de", std::env::temp_dir());
+    engine.telemetry.set_replay();
     let _guard = ClockGuard;
     let mut flows: HashMap<String, (TcpOrder, StreamAssembler, StreamProcessor, EffectScanner)> =
         HashMap::new();
@@ -207,9 +208,7 @@ pub fn run(path: &Path) -> Result<Value> {
         for chunk in chunks {
             assembler.process_chunk(&chunk, processor);
             effects.feed(&chunk, |payload| {
-                if let Some(event) = crate::buffs::parse(payload) {
-                    engine.buffs.record(event, header.ms);
-                }
+                engine.buffs.record_packet(payload, header.ms);
                 engine.note_packet(payload, header.ms);
             });
         }

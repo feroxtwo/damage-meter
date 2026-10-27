@@ -14,7 +14,9 @@ mod overlay;
 mod reference_bundle;
 mod replay;
 mod skills;
+mod streaming;
 mod tcp;
+mod telemetry;
 mod updates;
 mod web;
 
@@ -31,6 +33,11 @@ struct Cli {
     /// Port of the web dashboard.
     #[arg(long, default_value_t = 8787, global = true)]
     port: u16,
+    /// Dedicated read-only OBS listener. Use 0.0.0.0 for a second streaming PC.
+    #[arg(long, default_value = "127.0.0.1")]
+    stream_listen: IpAddr,
+    #[arg(long, default_value_t = 8788)]
+    stream_port: u16,
     /// Address the dashboard listens on. 0.0.0.0 makes it reachable from
     /// other devices in your network (phone, second PC).
     #[arg(long, default_value = "127.0.0.1", global = true)]
@@ -324,6 +331,14 @@ fn main() -> anyhow::Result<()> {
         .enable_all()
         .build()?;
     let mut web = runtime.spawn(web::serve(engine.clone(), listener));
+    match std::net::TcpListener::bind(SocketAddr::new(cli.stream_listen, cli.stream_port)) {
+        Ok(stream_listener) => {
+            stream_listener.set_nonblocking(true)?;
+            *engine.stream.address.write() = Some(stream_listener.local_addr()?);
+            runtime.spawn(streaming::serve(engine.clone(), stream_listener));
+        }
+        Err(error) => tracing::warn!("OBS listener unavailable: {error}"),
+    }
     let signal_engine = engine.clone();
     let signals = runtime.spawn(async move {
         let mut terminate =

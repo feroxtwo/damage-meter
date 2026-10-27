@@ -228,7 +228,7 @@ function captureHelp(c) {
 }
 $('#copyDiagnostics').onclick=()=>task((async()=>{
   const v=await api('/api/version'),c=latestLive?.capture||{};
-  await copyText(JSON.stringify({version:v.version,parser:v.parser_version,permission:!!c.permission,game_running:!!c.game_running,connected:!!c.locked_port,packets:c.packets||0,packet_age_seconds:c.last_packet_ms==null?null:Math.max(0,Math.round((Date.now()-c.last_packet_ms)/1000)),stream_gaps:c.stream_gaps||0,capture_error:!!c.error,recording_error:!!c.recording_error},null,2));
+  await copyText(JSON.stringify({version:v.version,parser:v.parser_version,permission:!!c.permission,game_running:!!c.game_running,connected:!!c.locked_port,packets:c.packets||0,packet_age_seconds:c.last_packet_ms==null?null:Math.max(0,Math.round((Date.now()-c.last_packet_ms)/1000)),stream_gaps:c.stream_gaps||0,protocol:latestLive?.health||null,capture_error:!!c.error,recording_error:!!c.recording_error},null,2));
 })());
 const liveSignalState={key:null,points:[]};
 function renderLiveSignal(l) {
@@ -303,7 +303,7 @@ function renderTraining(l) {
 }
 
 function renderEnhancedLive(l) {
-  latestLive=l;captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);updateSavedMoment(l);
+  latestLive=l;if(window.renderInsightLive)renderInsightLive(l);captureHelp(l.capture);renderLiveMetrics(l);renderLiveSignal(l);updateSavedMoment(l);
   $('#numericWarning').hidden=!l.numeric_limited;
   $("#selfBurst").textContent="5s Burst: "+num(l.rows.find(r=>r.is_self)?.burst_dps||0)+"/s";
   $('#metricHint').textContent=metricKey()==='heal' ? 'Heilung seit Parser-Reset. HPS nutzt die angezeigte Kampfdauer. Overheal wird nicht abgezogen.' : metricKey()==='damage_received' ? 'Erlittener Schaden aus erfassten NPC-Treffern.' : (l.combat_state==='paused'?'Kampfpause: aktuelle DPS 0. Gesamtschaden und bisherige Kampf-DPS bleiben erhalten. Kein Kill-Nachweis.':'Spieler anklicken für Skilldetails. Burst-DPS: gleitende 5 Sekunden, Beobachtung alle 500 ms.');
@@ -600,7 +600,7 @@ function effectTimeline(f,actor,W=900) {
   const effects=(f.analytics?.effects||[]).filter(e=>e.target===actor);if(!effects.length)return '';
   const keys=[...new Set(effects.map(e=>e.code))],L=W<600?120:210,end=Math.max(1000,f.duration_ms);
   const names=Object.fromEntries([...(f.boss_debuffs||[]),...f.players.flatMap(p=>p.buffs||[])].map(e=>[e.code,skillName(e)]));
-  return `<h4>Buff-Zeitlinie</h4><p class="analysis-note">Aus beobachteter Anwendung und gemeldeter Dauer. Vorzeitiges Entfernen wird derzeit nicht erkannt.</p><svg class="timeline" viewBox="0 0 ${W} ${keys.length*24+20}" role="img" aria-label="Buff-Zeitlinie">${keys.map((code,i)=>`<text x="0" y="${i*24+17}">${esc((names[code]||'#'+code).slice(0,28))}</text>${effects.filter(e=>e.code===code).map(e=>`<rect x="${L+e.start_ms/end*(W-L)}" y="${i*24+5}" width="${Math.max(1,(e.end_ms-e.start_ms)/end*(W-L))}" height="13" rx="3" fill="#966ee6"><title>${esc(names[code]||code)} · ${(e.start_ms/1000).toFixed(1)}–${(e.end_ms/1000).toFixed(1)} s</title></rect>`).join('')}`).join('')}</svg>`;
+  return `<h4>Buff-Zeitlinie</h4><p class="analysis-note">Aus beobachteter Anwendung und gemeldeter Dauer. Endereignisse werden berücksichtigt, soweit eindeutig erkannt. Ohne Endereignis gilt die gemeldete Dauer als Schätzung.</p><svg class="timeline" viewBox="0 0 ${W} ${keys.length*24+20}" role="img" aria-label="Buff-Zeitlinie">${keys.map((code,i)=>`<text x="0" y="${i*24+17}">${esc((names[code]||'#'+code).slice(0,28))}</text>${effects.filter(e=>e.code===code).map(e=>`<rect x="${L+e.start_ms/end*(W-L)}" y="${i*24+5}" width="${Math.max(1,(e.end_ms-e.start_ms)/end*(W-L))}" height="13" rx="3" fill="#966ee6"><title>${esc(names[code]||code)} · ${(e.start_ms/1000).toFixed(1)}–${(e.end_ms/1000).toFixed(1)} s</title></rect>`).join('')}`).join('')}</svg>`;
 }
 // One ranking row per player; it opens that player's skills in place. Your own row starts open.
 function playerReport(p,f,i=0) {
@@ -659,6 +659,7 @@ async function openFight(id) {
   $('#saveFightNote').onclick=()=>task(api('/api/fights/'+encodeURIComponent(id)+'/annotation',{method:'POST',body:JSON.stringify({favorite:$('#favoriteFight').checked,note:$('#fightNote').value,tags:$('#fightTags').value})}).then(()=>{toast('Kampfnotiz gespeichert.');if(tab==='runs')task(loadFights(false));}));
   bindFightExport(f);
   if(window.installFightQol)installFightQol(f);
+  if(window.installCombatInsights)installCombatInsights(f);
   bindFightChart(f);
   $('#compareBtn').onclick=()=>task(compareFight());
   // Picking a fight compares at once; opening the section preselects the previous attempt.

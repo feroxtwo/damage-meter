@@ -1,6 +1,6 @@
 [package]
 name = "aion2-meter"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Standalone AION 2 damage meter for Linux: packet capture, in-game overlay, web dashboard and run history"
@@ -9,14 +9,16 @@ rust-version = "1.88"
 
 [dependencies]
 # Packet parser and combat aggregation from A2Tools DPS Meter (GPL-3.0),
-# built without its Tauri desktop half. Bump `rev` after a game patch.
-a2tools-dps-meter = { git = "https://github.com/taengu/A2Tools-DPS-Meter.git", rev = "82e53c1008ac4c2974446cc703703f473bbbed81", default-features = false }
+# Vendored without its desktop half, with explicit i64/observation patches.
+# Update the source snapshot and NOTICE together after replay verification.
+a2tools-dps-meter = { path = "vendor/a2tools-core", default-features = false }
 
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 eframe = { version = "0.32", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
+image = { version = "0.25", default-features = false, features = ["webp"] }
 libc = "0.2"
 parking_lot = "0.12"
 rusqlite = { version = "0.37", features = ["bundled", "functions"] }
@@ -32,3 +34,8 @@ tower = { version = "0.5", features = ["util"] }
 [profile.release]
 lto = "thin"
 strip = true
+
+[workspace]
+members = ["vendor/a2tools-core"]
+default-members = ["."]
+resolver = "3"
