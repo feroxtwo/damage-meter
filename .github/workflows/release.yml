@@ -30,9 +30,12 @@ jobs:
       - run: python3 scripts/test-headless.py && python3 scripts/test-validation.py
       - run: sudo apt-get update && sudo apt-get install -y rpm
       - run: ./scripts/package-linux.sh
+      - run: python3 scripts/test-packages.py
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then target=(--verify-tag); else target=(--target "$GITHUB_SHA"); fi
-          gh release create "$TAG" dist/* "${target[@]}" --latest --title "AION2 Meter $TAG" --generate-notes
+          notes=(--generate-notes)
+          if [ -f "docs/RELEASE_${TAG#v}.md" ]; then notes=(--notes-file "docs/RELEASE_${TAG#v}.md"); fi
+          gh release create "$TAG" dist/* "${target[@]}" --latest --title "AION2 Meter $TAG" "${notes[@]}"

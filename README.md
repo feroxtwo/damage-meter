@@ -8,13 +8,13 @@ Er liest den Netzwerkverkehr des Spiels mit, zeigt ein **Overlay im Spiel** und 
 |---|---|
 | **Overlay** | Kleines, transparentes Fenster über dem Spiel: Ziel mit HP-Balken, Kampfzeit, Gruppen-DPS, pro Spieler Schaden, DPS und Anteil (Klassenicons/-farben, eigene Zeile hervorgehoben; Kompaktmodus), Ping und aktueller Dungeon. Drei Designs. |
 | **Dashboard** | `http://127.0.0.1:8787/` im Browser: Live-Meter, alle Runs mit Gruppe und Bossen, Kampfbericht mit Skills, Schadensverlauf, Buffs und Export (Text, Chat, PNG, CSV, JSON). |
-| **Leistung einordnen** | Performance Coach, Vergleich mit deinen eigenen Aufzeichnungen und **Vergleich mit Community-Werten** aus der eingebauten Vergleichsdatenbank: deine DPS gegen den Median deiner Klasse beim selben Boss und ähnlicher Kampfkraft. |
+| **Leistung einordnen** | Performance Coach, Vergleich mit deinen eigenen Aufzeichnungen und **Vergleich mit Community-Werten** aus optional importierten, zulässigen Referenzdaten: deine DPS gegen den Median deiner Klasse beim selben Boss und ähnlicher Kampfkraft. |
 | **Statistik** | Boss-Verlauf mit Versuchsauswahl, DPS-Entwicklung nach Bereich und Expedition, **Top 5 Mitspieler**, Runs pro Dungeon mit Bestzeit, Bestwerte pro Boss, Aktivität der letzten 30 Tage. |
 | **Datenbank** | `~/.local/share/aion2-meter/meter.db` (SQLite). Ein Run beginnt beim Betreten einer Instanz und endet beim Verlassen. |
 
 Kein Discord und kein Account. Kampf- und Personendaten bleiben lokal; nur die ausdrücklich ausgelöste Updateprüfung fragt GitHub ab. Exporte teilst du selbst.
 
-## Neue Kampfanalyse (Entwicklungsstand)
+## Neu in 0.5.0
 
 Rotation mit tatsächlichen Skill-Nutzungen, Opener und Buff-Beiträgen, Bossfähigkeiten und Todesanalyse, HP-Plausibilität sowie ein räumliches Replay sind im Kampfbericht unter **Rotation, Bossanalyse und Replay** verfügbar. Neue Kämpfe erhalten eine begrenzte Ereignisaufzeichnung. Ältere Kämpfe bleiben lesbar.
 
@@ -22,11 +22,11 @@ Unter **Einstellungen → Kampfhilfen** lassen sich Boss-Cast, bis zu acht Coold
 
 Die **geschützte OBS-Freigabe** ist separat, nur lesend und zunächst ausgeschaltet. Für einen zweiten PC: `--stream-listen 0.0.0.0`, dann den Link in Einstellungen kopieren und die lokale IP des Spiel-PCs angeben. Standardport 8788, Namen zunächst ausgeblendet. Keine Freigabe des Dashboards erforderlich.
 
-[Bedienung, Herkunft, Messgrenzen und offene Ingame-Abnahme](docs/UPSTREAM_INSPIRATION.md).
+[Release-Hinweise 0.5.0](docs/RELEASE_0.5.0.md) · [Bedienung, Herkunft und Messgrenzen](docs/UPSTREAM_INSPIRATION.md).
 
-## Neu in 0.4.0
+### Weitere enthaltene Verbesserungen
 
-- **Vergleichsdatenbank eingebaut:** Klassen-Mediane je Boss, Instanz und Kampfkraft sind im Programm enthalten. Der Kampfbericht zeigt unter *Leistung einordnen* deinen Wert gegen den Median deiner Klasse (100 = Median), ob du in der oberen oder unteren Hälfte, im oberen Viertel oder in den Top 10 % liegst, und welche Abweichungen der Datensatz hat. Es wird nichts online abgefragt. Details unten unter [Vergleich mit Community-Werten](#vergleich-mit-community-werten).
+- **Optionale Vergleichsdaten:** Eigene zulässige Referenzdaten lassen sich als JSON oder über `--reference-db` importieren. Es werden keine externen Anbieterarchive mitgeliefert. Details unter [Vergleich mit Community-Werten](#vergleich-mit-community-werten).
 - **Eigene Referenzdatei:** Ist in einer Datei für `--reference-db` ein Datensatz fehlerhaft, wird nur dieser übersprungen statt der ganzen Datei.
 - **Gruppen und Runs:** Gruppenzugehörigkeit aus der Party-Liste des Spiels, Heiler ohne Schaden bleiben in der Gruppe, Runs enden beim Auflösen der Gruppe, Bosse zählen je Name einmal, unbekannter Run-Ausgang wird neutral angezeigt.
 - **Oberfläche:** Combat Studio mit Kampfbericht in Abschnitten, OBS-Vorschau in den Einstellungen, Statistik nach Bereich und Expedition, Performance Coach mit Skillsymbolen.
@@ -135,7 +135,7 @@ zeigt alle zusammen. Deine eigenen Charaktere zählen nie als Mitspieler.
 - **Verlauf → Dungeon-Runs:** Run öffnen: oben Gruppe und Bosse des Runs, darunter Gesamtwerte, Skill-Summen und Schadensverlauf. **Zurück zu Dungeon-Runs** führt zur vorherigen Listenseite. Die zuletzt gewählte Ansicht (Runs oder Einzelkämpfe) bleibt erhalten.
 - **Verlauf → Einzelkämpfe:** Bosse, Training und Welt-Mobs suchen (die Liste filtert beim Tippen) und per Klick auf die Zeile den Kampfbericht öffnen. Der Bericht zeigt zuerst die Gruppe als Rangliste; deine eigene Zeile ist mit deinen Skills schon aufgeklappt.
 - **Kampfbericht → Leistung einordnen:** Performance Coach, lokaler Skill Index und Vergleich mit Community-Werten. **Vergleichen** lädt sofort den vorherigen Versuch und bietet den Spielervergleich. **Exportieren** merkt sich Format und Anonymisierung.
-- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Vergleichsregion, integrierte Vergleichsdaten und eigene Importe stehen unter **Vergleichsdaten verwalten**; aus dem Kampfbericht führt „← Zurück zum Kampfbericht“ wieder zurück.
+- **Statistik:** Entwicklung über mehrere Runs oder Bossversuche. Vergleichsregion und eigene Referenzimporte stehen unter **Vergleichsdaten verwalten**; aus dem Kampfbericht führt „← Zurück zum Kampfbericht“ wieder zurück.
 - **Skill-Katalog:** Namen und IDs nachschlagen; gemessene Skills stehen in Live und Verlauf.
 - **Einstellungen:** links alles zum Overlay im Spiel (Sichtbarkeit, „Overlay zurückholen“, Größe, Inhalt, Aussehen), rechts Sprache, Messung, Profile, Diagnose und Updates. Änderungen werden automatisch gespeichert.
 
@@ -154,9 +154,9 @@ deinem Client schickt, also auch Chat und Namen: nur weitergeben, wem du das zei
 
 ## Vergleich mit Community-Werten
 
-Im Kampfbericht unter **Leistung einordnen → Vergleich mit Community-Werten** steht für Bosskämpfe deine DPS im Verhältnis zum Median deiner Klasse. 100 ist der Median, 124,6 heißt 24,6 % darüber. Darunter steht, wo du innerhalb der vom Datensatz genannten Quantile liegst (zum Beispiel „Top 25 %“).
+Im Kampfbericht unter **Leistung einordnen → Vergleich mit Community-Werten** steht bei passenden importierten Referenzdaten für Bosskämpfe deine DPS im Verhältnis zum Median deiner Klasse. 100 ist der Median, 124,6 heißt 24,6 % darüber. Darunter steht, wo du innerhalb der vom Datensatz genannten Quantile liegst (zum Beispiel „Top 25 %“).
 
-Die Vergleichsdatenbank ist im Programm enthalten und wird beim Start im Hintergrund in deine lokale Datenbank übernommen. Verglichen wird nur, was zu deinem Kampf passt:
+Der Meter liefert keine externen Anbieterarchive aus und importiert beim Standardstart keine Referenzdatei. Ohne passende eigene Importe bleibt der Community-Vergleich leer. Der lokale Vergleich deiner eigenen Aufzeichnungen bleibt verfügbar. Verglichen wird nur, was zu deinem Kampf passt:
 
 - **gleiche Klasse** und **gleicher Boss**; nennt ein Datensatz die Schwierigkeit, muss auch sie stimmen. Ohne Bosswert dient ein Wert für die ganze Instanz als Richtwert,
 - dein **Kampfkraftbereich** liegt im Bereich der Vergleichsgruppe,
@@ -164,7 +164,7 @@ Die Vergleichsdatenbank ist im Programm enthalten und wird beim Start im Hinterg
 
 Jeder Datensatz wird einzeln gezeigt, nie zu einem Durchschnitt gemischt. Was nicht exakt unserer Messung entspricht, etwa ein nicht belegter Patch-Zeitraum, eine leicht andere DPS-Berechnung oder ein breiter Kampfkraftbereich, steht als Hinweis neben dem Wert. Lies den Vergleich deshalb als Richtwert. Training, Kämpfe unter 10 Sekunden, Welt-Mobs und Kämpfe ohne Kampfkraft werden nicht verglichen.
 
-Eigene aggregierte Daten lassen sich zusätzlich als JSON importieren oder mit `aion2-meter build-references --output referenzen.sqlite <dateien...>` zu einer SQLite-Datei bündeln und mit `--reference-db referenzen.sqlite` laden. Schema, Regeln und Herkunft der Daten: [Vergleichsdaten](docs/COMMUNITY_DATA_SOURCES.md).
+Eigene zulässige aggregierte Daten lassen sich als JSON importieren oder mit `aion2-meter build-references --output referenzen.sqlite <dateien...>` zu einer SQLite-Datei bündeln und mit `--reference-db referenzen.sqlite` laden. `rights_confirmed: true` bestätigt die Nutzungsberechtigung durch den Importierenden, ist aber kein unabhängiger Lizenznachweis. Bereits lokal gespeicherte Anbieterarchive ohne Bestätigung werden nicht verglichen. Schema, Regeln und Herkunft der Daten: [Vergleichsdaten](docs/COMMUNITY_DATA_SOURCES.md).
 
 ## Kampfanalyse und Komfort
 

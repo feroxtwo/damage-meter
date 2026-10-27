@@ -6,6 +6,7 @@ version=$(sed -n 's/^version = "\([0-9.]*\)"/\1/p' Cargo.toml | head -1)
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 binary=${METER_BINARY:-${CARGO_TARGET_DIR:-target}/release/aion2-meter}
 [[ -x "$binary" ]] || { echo "Release-Binary fehlt: cargo build --release --locked" >&2; exit 1; }
+python3 scripts/test-reference-distribution.py "$binary"
 [[ $("$binary" --version) == "aion2-meter $version" ]] || { echo "Binary-Version passt nicht zu Cargo.toml" >&2; exit 1; }
 readelf -h "$binary" | grep -q 'Advanced Micro Devices X86-64' || { echo "Nur x86_64-Binaries unterstützt" >&2; exit 1; }
 glibc=$(readelf --version-info "$binary" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -Vu | tail -1)

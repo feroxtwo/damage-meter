@@ -57,6 +57,6 @@ Die Ereigniserfassung ist auf 50.000 Ereignisse und zwei Stunden begrenzt. Verdr
 
 Erforderliche Ingame-Gegenprüfung: EU-Frames für Nutzungen und Unterbrechungen, Boss- und Spieler-HP, Buff-Ende mit mehreren Wirkern, Tod/Wiederbelebung, Skillvarianten und Cooldown-Zeiteinheit, lange Kämpfe, Zonenwechsel und KDE/Wayland-Darstellung. Synthetische und Softwaretests ersetzen diese Abnahme nicht.
 
-Der offene PR #33 zur Behandlung vorhandener Community-Archive ist ein getrenntes Vorhaben. Dieser Branch ändert daran nichts und fügt keine weiteren fremden Referenzdaten hinzu.
+PR #33 ist in Version 0.5.0 integriert: Externe Anbieterarchive werden nicht mehr mitgeliefert oder automatisch importiert. Eigene zulässige Referenzimporte bleiben möglich. Bereits gespeicherte unbestätigte Archive liefern keine Vergleichsscores.
 
 Builds und CI verwenden Rust 1.88.0, die erklärte Mindestversion und lokal erfolgreich geprüfte Release-Toolchain. Rust 1.99.1 zeigte in dieser Umgebung beim ThinLTO-Linken undefinierte Symbole. Das bestehende PR #33 dokumentiert denselben Fehler auf unverändertem main. LTO und Optimierung bleiben eingeschaltet.

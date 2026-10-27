@@ -1,4 +1,4 @@
-# Combat insights: Softwareabnahme
+# Combat insights: Softwareabnahme vom 22.10.2026
 
 Die acht Verbesserungsbereiche sind implementiert. Diese Abnahme beschreibt Softwareprüfungen, keine bestätigte AION-2-Ingame-Messgenauigkeit.
 
@@ -21,3 +21,7 @@ Die acht Verbesserungsbereiche sind implementiert. Diese Abnahme beschreibt Soft
 - Keine Spielsitzung oder echten neuen EU-Mitschnitte. Nutzungsframes, Buff-Ende mit mehreren Wirkern, Unterbrechungen, Positionen und Cooldown-Zeiteinheit benötigen die in UPSTREAM_INSPIRATION.md beschriebene Ingame-Abnahme.
 
 Es wurde kein Release veröffentlicht. Der offene Datenrechte-PR #33 und die bereits veröffentlichten v0.4.0-Assets wurden nicht geändert.
+
+## Integration in 0.5.0
+
+PR #33 entfernt die mitgelieferten unbestätigten Anbieterarchive. PR #35 beseitigt die doppelte Einstellungsabfrage und den zugehörigen Browser-Testfehler. Diese Änderungen werden vor der Veröffentlichung zusammen mit der Kampfanalyse durch die CI geprüft. Die obigen Zahlen dokumentieren die frühere Einzelabnahme, nicht die neue integrierte Testzahl.

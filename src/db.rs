@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS fight_effects (
 );
 "#;
 
-/// Provider observations from the built-in datasets and `--reference-db`.
+/// Provider observations explicitly imported with `--reference-db`.
 /// A local cache, so an older layout is rebuilt.
 const PROVIDER_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS provider_archives (
@@ -1723,13 +1723,20 @@ impl Db {
         Ok(deleted > 0)
     }
 
-    /// Import normalized observations as observations, never as comparable score
-    /// cohorts. An identical data state is not rewritten on every start; an older
-    /// capture never replaces a newer one, so generations are not mixed.
+    /// Import authorized normalized observations for optional reference comparisons.
+    /// An identical authorized state is not rewritten; an older authorized
+    /// capture never replaces a newer authorized one. Unconfirmed legacy data
+    /// can be replaced by an explicitly authorized import.
     pub fn import_provider_archives(
         &self,
         archives: &[crate::reference_bundle::ProviderArchive],
     ) -> Result<Value> {
+        anyhow::ensure!(
+            archives
+                .iter()
+                .all(|archive| archive.source.rights_confirmed),
+            "Provider data rights must be explicitly confirmed before import"
+        );
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let mut outcome = serde_json::Map::new();
@@ -1739,7 +1746,7 @@ impl Db {
             let current: Option<(i64, i64, String, String, String)> = tx
                 .query_row(
                     "SELECT captured_at, row_count, source_url, detail, evidence
-                     FROM provider_archives WHERE source_id=?1",
+                     FROM provider_archives WHERE source_id=?1 AND rights_confirmed=1",
                     params![source.id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
                 )
@@ -1846,7 +1853,7 @@ impl Db {
     ) -> Result<Value> {
         let mut stmt = conn.prepare(
             "SELECT o.source_id, o.class_key,
-                    json_extract(o.payload, '$.compatibility') AS compatibility
+                    json_extract(o.payload, '$.compatibility') AS compatibility, a.rights_confirmed
              FROM provider_observations o JOIN provider_archives a USING(source_id)
              WHERE (o.mob_code=?1 AND ?1>0)
                 OR (o.mob_code IS NULL AND o.dungeon_id=?2 AND ?2>0)",
@@ -1865,6 +1872,9 @@ impl Db {
                 serde_json::from_str(&row.get::<_, String>(2).unwrap_or_default())
                     .unwrap_or_default();
             blockers.extend(flags);
+            if row.get::<_, i64>(3)? != 1 {
+                blockers.insert("rights_unconfirmed".into());
+            }
         }
         let sources: Vec<_> = sources
             .iter()
@@ -1878,16 +1888,17 @@ impl Db {
         }))
     }
 
-    /// Integrated provider medians that fit this fight: the same class, the
+    /// Authorized, locally imported medians that fit this fight: same class,
     /// same boss (and difficulty where the dataset names one) or, failing
     /// that, the same instance, a CP band covering the own CP and a compatible
-    /// region. Training data, class indices and rows without a boss are never
-    /// compared. One reference per dataset; differences in method stay listed
+    /// region. Training data, class indices and rows without a boss or instance
+    /// are never compared. One reference per dataset; differences in method stay listed
     /// as caveats next to the score.
     fn provider_comparisons(conn: &Connection, fight: ProviderFight<'_>) -> Result<Vec<Value>> {
         let mut stmt = conn.prepare(
-            "SELECT source_id, payload FROM provider_observations
-             WHERE class_key=?1 AND ((mob_code=?2 AND ?2>0)
+            "SELECT o.source_id, o.payload FROM provider_observations o
+             JOIN provider_archives a USING(source_id)
+             WHERE a.rights_confirmed=1 AND class_key=?1 AND ((mob_code=?2 AND ?2>0)
                 OR (mob_code IS NULL AND dungeon_id=?3 AND ?3>0))",
         )?;
         let korean = matches!(fight.region, "KR" | "TW");
@@ -2031,13 +2042,14 @@ impl Db {
         )?;
         let imports = rows_to_json(&mut stmt, [])?;
         let mut archives = conn.prepare(
-            "SELECT source_id, captured_at, row_count
+            "SELECT source_id, captured_at, row_count, rights_confirmed
             FROM provider_archives ORDER BY source_id",
         )?;
         let mut offline_data = rows_to_json(&mut archives, [])?;
         for entry in &mut offline_data {
             let label = crate::community::dataset_label(entry["source_id"].as_str().unwrap_or(""));
             entry["dataset"] = json!(label);
+            entry["rights_confirmed"] = json!(entry["rights_confirmed"].as_i64() == Some(1));
         }
         Ok(json!({
             "offline_data": offline_data,

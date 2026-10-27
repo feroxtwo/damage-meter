@@ -47,7 +47,7 @@ struct Cli {
     /// SQLite database [default: ~/.local/share/aion2-meter/meter.db]
     #[arg(long)]
     db: Option<PathBuf>,
-    /// Load an offline community reference database (built with build-references).
+    /// Load your authorized offline reference data (built with build-references).
     #[arg(long)]
     reference_db: Option<PathBuf>,
     /// Language of skill and monster names.
@@ -276,23 +276,13 @@ fn main() -> anyhow::Result<()> {
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
 
-    // Reference data must never keep the meter from starting or delay it:
-    // it loads in the background, the built-in datasets first, then an
-    // optional local file. A broken file is ignored.
-    {
+    // Only an explicitly selected local file is imported. Broken or
+    // unconfirmed reference data must never prevent the meter from starting.
+    if let Some(path) = cli.reference_db.clone() {
         let engine = engine.clone();
-        let extra = cli.reference_db.clone();
-        std::thread::spawn(move || {
-            match reference_bundle::load_embedded(&engine.db) {
-                Ok(result) => tracing::info!("Integrierte Vergleichsdaten: {result}"),
-                Err(e) => tracing::warn!("Integrierte Vergleichsdaten nicht geladen: {e:#}"),
-            }
-            if let Some(path) = extra.as_deref() {
-                match reference_bundle::load(&engine.db, path) {
-                    Ok(result) => tracing::info!("Offline reference data: {result}"),
-                    Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
-                }
-            }
+        std::thread::spawn(move || match reference_bundle::load(&engine.db, &path) {
+            Ok(result) => tracing::info!("Offline reference data: {result}"),
+            Err(e) => tracing::warn!("Offline-Referenzdatenbank ignoriert: {e:#}"),
         });
     }
 

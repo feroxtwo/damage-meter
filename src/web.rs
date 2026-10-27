@@ -884,7 +884,7 @@ mod tests {
         let archive: crate::reference_bundle::ProviderArchive = serde_json::from_value(json!({
             "schema": "a2m-provider-observations-v1",
             "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
-                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": false},
+                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": true},
             "evidence": [{}], "detail": "", "rows": rows
         }))
         .unwrap();
