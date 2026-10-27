@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import struct
 import subprocess
 import tempfile
@@ -81,14 +82,10 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             with urllib.request.urlopen(base + asset, timeout=2) as response:
                 assert mime in response.headers["Content-Type"]
                 assert response.read()
-        # The built-in reference datasets load in the background, without
-        # naming their websites in the dashboard.
-        deadline = time.monotonic() + 20
-        while len((sources := get("/api/references/sources"))["offline_data"]) < 6:
-            assert time.monotonic() < deadline, sources
-            time.sleep(.1)
+        # A fresh default start never imports provider data.
+        sources = get("/api/references/sources")
+        assert sources["offline_data"] == [], sources
         assert sources["imports"] == [], sources
-        assert all(o["dataset"] and "url" not in o for o in sources["offline_data"]), sources
         assert not any(p.get("url") for p in sources["providers"]), sources
         settings = get("/api/overlay")
         settings.update({"theme":"ember","compact":True,"idle_reset_seconds":30,"wipe_reset":True,"position":[123,456], "hide_names":True, "metric":"heal", "max_rows":2})
@@ -163,13 +160,13 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-smoke-") as tmp:
             proc.wait()
 
 # A broken local reference file must never keep the meter from starting and
-# changes nothing; a valid, newer one replaces the built-in dataset.
+# changes nothing; authorized data is imported only on explicit request.
 with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
     tmp = Path(tmp)
     archive = {
         "schema": "a2m-provider-observations-v1",
         "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
-                   "captured_at": 2000000000000, "rights_confirmed": False},
+                   "captured_at": 2000000000000, "rights_confirmed": True},
         "evidence": [{"url": "https://a2tools.app/stats"}], "detail": "Smoke test",
         "rows": [{"class_key": "gladiator", "region": "EU", "dungeon_id": 600072, "mob_code": 2300812,
                   "cp_min": 70000, "cp_max": 76000, "median_dps": 9000.0, "samples": 40,
@@ -182,14 +179,20 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
                    check=True, capture_output=True, timeout=20)
     garbage = tmp / "garbage.sqlite"
     garbage.write_bytes(b"definitely not sqlite")
-    # A broken file leaves the built-in data (16 rows); a newer valid file wins.
-    for reference, expected in [(garbage, 16), (tmp / "missing.sqlite", 16), (built, 1)]:
+    unconfirmed = tmp / "unconfirmed.sqlite"
+    unconfirmed.write_bytes(built.read_bytes())
+    archive["source"]["rights_confirmed"] = False
+    with sqlite3.connect(unconfirmed) as conn:
+        conn.execute("UPDATE archives SET payload=?", (json.dumps(archive),))
+    # Optional data persists locally; a later default start does not erase it.
+    for reference, expected in [(None, 0), (garbage, 0), (tmp / "missing.sqlite", 0),
+                                (unconfirmed, 0), (built, 1), (None, 1), (garbage, 1)]:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
         proc = subprocess.Popen(
-            [binary, "--no-overlay", "--db", str(tmp / "meter.db"), "--port", str(port),
-             "--reference-db", str(reference)],
+            [binary, "--no-overlay", "--db", str(tmp / "meter.db"), "--port", str(port)] +
+            (["--reference-db", str(reference)] if reference else []),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         try:
@@ -199,13 +202,15 @@ with tempfile.TemporaryDirectory(prefix="aion2-meter-references-") as tmp:
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/references/sources", timeout=1) as r:
                         offline = json.load(r)["offline_data"]
-                    rows = next((o["row_count"] for o in offline if o["source_id"] == "a2tools"), None)
+                    rows = next((o["row_count"] for o in offline if o["source_id"] == "a2tools"), 0)
                 except OSError:
                     pass
-                assert proc.poll() is None, f"meter exited with --reference-db {reference.name}"
-                assert time.monotonic() < deadline, (reference.name, rows)
+                assert proc.poll() is None, f"meter exited with --reference-db {reference}"
+                assert time.monotonic() < deadline, (reference, rows)
                 time.sleep(0.1)
         finally:
             proc.terminate()
             proc.wait(timeout=5)
-    print("PASS reference database: built-in data loads, invalid files are ignored, a newer valid file wins")
+        with sqlite3.connect(tmp / "meter.db") as conn:
+            assert conn.execute("SELECT count(*) FROM provider_observations").fetchone()[0] == expected
+    print("PASS reference database: no default data, explicit authorized import, invalid/unconfirmed files ignored, local imports retained")

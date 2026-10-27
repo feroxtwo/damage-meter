@@ -17,7 +17,6 @@ anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 eframe = { version = "0.32", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
-flate2 = "1"
 libc = "0.2"
 parking_lot = "0.12"
 rusqlite = { version = "0.37", features = ["bundled", "functions"] }

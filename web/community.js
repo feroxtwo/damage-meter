@@ -1,4 +1,4 @@
-// Comparison with the integrated reference data and optional own imports.
+// Comparison with optional, authorized local reference data.
 // No automatic requests to websites; fight data stays on this device.
 const communityRegions = ['ALL', 'EU', 'NAE', 'NAW', 'SA', 'ASIA', 'KR', 'TW'];
 const communityReasons = {
@@ -13,6 +13,7 @@ const communityReasons = {
 };
 // Caveats and reasons, shown in words, never as raw flags.
 const communityBlockers = {
+  rights_unconfirmed: 'Nutzungsrechte für diese Daten nicht bestätigt',
   balance_period_unconfirmed: 'Patch-Zeitraum nicht belegt',
   all_time_mixes_balance_periods: 'mischt mehrere Patch-Zeiträume',
   methodology_not_a2m_v2: 'DPS-Berechnung kann leicht abweichen',
@@ -56,7 +57,7 @@ function withheldMarkup(response) {
       (offline.sources || []).map(esc).join(', ') + '), davon ' + num(offline.same_class || 0) + ' für deine Klasse.');
   }
   if (withheld.length) parts.push(num(withheld.length) + ' importierte Referenzgruppen passen zu Boss und Kampfkraft.');
-  const reasons = communityBlockerText(withheld.map(w => w.reason));
+  const reasons = communityBlockerText([...withheld.map(w => w.reason), ...(offline.blockers || [])]);
   return '<p class="analysis-note community-withheld"><strong>Keine passenden Vergleichswerte.</strong> ' + parts.join(' ') +
     ' Keine Gruppe passt zugleich zu Klasse, Boss, Schwierigkeit, Kampfkraft und Region.' +
     (reasons ? ' Importierte Daten: ' + reasons + '.' : '') + '</p>';
@@ -159,12 +160,12 @@ async function loadCommunitySources() {
     ).join('');
     const offline = (result.offline_data || []).map(entry =>
       '<div class="reference-imported"><strong>' + esc(entry.dataset || 'Vergleichsdaten') + '</strong><span>' +
-      num(entry.row_count) + ' Vergleichsgruppen · Stand ' + date(entry.captured_at) + '</span></div>').join('');
+      num(entry.row_count) + ' Vergleichsgruppen · Stand ' + date(entry.captured_at) + (entry.rights_confirmed ? '' : ' · Nicht aktiv: Datenrechte unbestätigt') + '</span></div>').join('');
     root.innerHTML = '<h3>Verfügbare Quellen</h3><div class="reference-providers">' + providers + '</div>' +
-      (offline ? '<h3>Integrierte Vergleichsdaten</h3>' + offline + '<p class="analysis-note">Im Programm enthalten und offline nutzbar. Verglichen wird nur, was zu Klasse, Boss, Schwierigkeit, Kampfkraft und Region passt.</p>' : '') +
+      (offline ? '<h3>Lokal gespeicherte Referenzdaten</h3>' + offline + '<p class="analysis-note">Nur Daten mit bestätigten Nutzungsrechten werden verglichen. Eigene zulässige Referenzdaten können über --reference-db geladen werden.</p>' : '') +
       '<h3>Eigene Importe auf diesem Gerät</h3>' +
       (imported || '<p class="analysis-note">Noch kein eigener Datensatz importiert.</p>') +
-      '<p class="analysis-note">Es werden keine Kampfdaten hochgeladen und keine Websites abgefragt.</p>';
+      '<p class="analysis-note">Es werden keine Anbieterarchive mitgeliefert, keine Kampfdaten hochgeladen und keine Websites abgefragt.</p>';
     root.querySelectorAll('[data-remove-community]').forEach(button => {
       button.onclick = () => {
         const source = button.dataset.removeCommunity, balance = button.dataset.balance;

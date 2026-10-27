@@ -1,4 +1,4 @@
-//! Offline reference data: the built-in datasets and optional local files.
+//! Optional, user-supplied offline reference data. No provider data is embedded.
 //! Only aggregate class statistics, no fights.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -40,6 +40,9 @@ pub struct Observation {
 
 impl ProviderArchive {
     fn validate(self) -> Result<Self> {
+        if !self.source.rights_confirmed {
+            bail!("Provider data rights must be explicitly confirmed before import");
+        }
         self.source
             .validate_provenance()
             .map_err(anyhow::Error::msg)?;
@@ -302,36 +305,6 @@ pub fn load(db: &crate::db::Db, path: &Path) -> Result<Value> {
     Ok(serde_json::json!({"archives": archives, "snapshots": snapshots, "skipped": bundle.skipped}))
 }
 
-/// Reference observations built into the meter. Prepared from the normalized
-/// archives by scripts/prepare-embedded-references.py; each archive keeps its
-/// source and evidence, so the data stays reproducible.
-const EMBEDDED: &[&[u8]] = &[
-    include_bytes!("../data/community/a2tools.json.gz"),
-    include_bytes!("../data/community/abysslogs.json.gz"),
-    include_bytes!("../data/community/aiondps.json.gz"),
-    include_bytes!("../data/community/jameter.json.gz"),
-    include_bytes!("../data/community/notmeter.json.gz"),
-    include_bytes!("../data/community/questlog.json.gz"),
-];
-
-/// Decode and validate the built-in datasets.
-pub fn embedded_archives() -> Result<Vec<ProviderArchive>> {
-    EMBEDDED
-        .iter()
-        .map(|bytes| {
-            let mut json = String::new();
-            std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(*bytes), &mut json)?;
-            serde_json::from_str::<ProviderArchive>(&json)?.validate()
-        })
-        .collect()
-}
-
-/// Import the built-in datasets. An unchanged dataset is not rewritten and a
-/// newer one loaded with `--reference-db` is kept.
-pub fn load_embedded(db: &crate::db::Db) -> Result<Value> {
-    db.import_provider_archives(&embedded_archives()?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,7 +350,7 @@ mod tests {
         json!({
             "schema": "a2m-provider-observations-v1",
             "source": {"id": "a2tools", "url": "https://a2tools.app/stats",
-                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": false},
+                       "captured_at": 1_790_000_000_000_i64, "rights_confirmed": true},
             "evidence": [{"url": "https://a2tools.app/stats", "sha256": "00", "captured_at": 1_790_000_000_000_i64}],
             "detail": "Test",
             "rows": rows
@@ -522,7 +495,7 @@ mod tests {
         assert_eq!(page["limit"], 200);
         assert_eq!(page["rows"].as_array().unwrap().len(), 4);
         assert_eq!(page["next_offset"], Value::Null);
-        assert_eq!(page["rights_confirmed"], false);
+        assert_eq!(page["rights_confirmed"], true);
         assert!(db.provider_observations("missing", 0, 2).unwrap().is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -567,8 +540,17 @@ mod tests {
             params![bad.to_string()],
         )
         .unwrap();
+        bad["source"]["id"] = json!("questlog");
+        bad["source"]["url"] = json!("https://questlog.gg/aion-2/en/app");
+        bad["source"]["rights_confirmed"] = json!(false);
+        bad["rows"][0]["median_dps"] = json!(9000);
+        conn.execute(
+            "INSERT INTO archives VALUES ('questlog', ?1)",
+            params![bad.to_string()],
+        )
+        .unwrap();
         drop(conn);
-        // An invalid dataset is skipped, the valid one still loads.
+        // Invalid and unconfirmed datasets are skipped; the valid one loads.
         let loaded = load(&db, &empty).unwrap();
         assert_eq!(loaded["archives"]["a2tools"], "imported");
         assert!(
@@ -577,6 +559,8 @@ mod tests {
                 .unwrap()
                 .starts_with("jameter")
         );
+        assert_eq!(loaded["skipped"].as_array().unwrap().len(), 2);
+        assert!(loaded["skipped"][1].as_str().unwrap().contains("rights"));
         let sources = db.community_sources().unwrap();
         assert_eq!(sources["offline_data"].as_array().unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
@@ -636,44 +620,113 @@ mod tests {
     }
 
     #[test]
-    fn embedded_datasets_load_and_compare_a_vakron_kill() {
-        let archives = embedded_archives().unwrap();
-        assert_eq!(archives.len(), EMBEDDED.len());
-        // Provenance stays in the data: every dataset names source and evidence.
-        assert!(
-            archives
-                .iter()
-                .all(|a| !a.source.url.is_empty() && !a.evidence.is_empty())
-        );
+    fn unconfirmed_provider_data_is_rejected_without_changing_history() {
+        let dir = temp_dir();
+        let input = dir.join("synthetic.json");
+        let output = dir.join("references.sqlite");
+        let mut data = provider_archive(vec![observation(
+            "gladiator",
+            Some(2300812),
+            (60000, 80000),
+            9000.0,
+        )]);
+        std::fs::write(&input, data.to_string()).unwrap();
+        build(&output, std::slice::from_ref(&input)).unwrap();
         let db = crate::db::Db::in_memory().unwrap();
-        load_embedded(&db).unwrap();
-        assert!(
-            load_embedded(&db)
-                .unwrap()
-                .as_object()
-                .unwrap()
-                .values()
-                .all(|v| v == "unchanged")
-        );
         db.insert_test_fight(
-            "vakron",
+            "own",
             2300812,
             600072,
-            "호법성",
-            73000,
-            15000.0,
+            "검성",
+            70000,
+            18000.0,
             r#"{"outcome":"kill","partial":false}"#,
         );
-        let result = db.community_index("vakron", "EU").unwrap().unwrap();
-        assert_eq!(result["status"], "ready");
-        let rows = result["comparisons"].as_array().unwrap();
-        let exact = rows
-            .iter()
-            .find(|r| r["region"] == "EU")
-            .expect("EU boss median for the CP band");
-        assert_eq!(exact["level"], "boss");
-        assert_eq!(exact["cp_min"], 71000);
-        assert!(rows.iter().all(|r| r["class_key"] == "chanter"));
-        assert!(rows.iter().all(|r| r["region"] != "KR/TW"));
+        assert!(
+            db.community_sources().unwrap()["offline_data"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let before = db.community_index("own", "EU").unwrap();
+        data["source"]["rights_confirmed"] = json!(false);
+        std::fs::write(&input, data.to_string()).unwrap();
+        let denied = dir.join("denied.sqlite");
+        assert!(build(&denied, &[input]).is_err());
+        assert!(!denied.exists());
+        let conn = Connection::open(&output).unwrap();
+        conn.execute("UPDATE archives SET payload=?1", params![data.to_string()])
+            .unwrap();
+        assert!(load(&db, &output).is_err());
+        // The database import boundary also rejects a direct, unchecked call.
+        let archive = serde_json::from_value::<ProviderArchive>(data).unwrap();
+        assert!(db.import_provider_archives(&[archive]).is_err());
+        assert_eq!(db.community_index("own", "EU").unwrap(), before);
+        assert!(
+            db.community_sources().unwrap()["offline_data"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        drop(conn);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn legacy_unconfirmed_cache_is_withheld_and_can_be_replaced_with_authorized_data() {
+        let dir = temp_dir();
+        let path = dir.join("meter.sqlite");
+        let input = dir.join("synthetic.json");
+        let bundle = dir.join("references.sqlite");
+        let data = provider_archive(vec![observation(
+            "gladiator",
+            Some(2300812),
+            (60000, 80000),
+            9000.0,
+        )]);
+        std::fs::write(&input, data.to_string()).unwrap();
+        build(&bundle, &[input]).unwrap();
+        let db = crate::db::Db::open(&path).unwrap();
+        load(&db, &bundle).unwrap();
+        db.insert_test_fight(
+            "own",
+            2300812,
+            600072,
+            "검성",
+            70000,
+            18000.0,
+            r#"{"outcome":"kill","partial":false}"#,
+        );
+        // Simulate a pre-fix cache without needing a real provider fixture.
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("UPDATE provider_archives SET rights_confirmed=0", [])
+            .unwrap();
+        let result = db.community_index("own", "EU").unwrap().unwrap();
+        assert!(result["comparisons"].as_array().unwrap().is_empty());
+        assert!(
+            result["offline_observations"]["blockers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("rights_unconfirmed"))
+        );
+        assert_eq!(
+            db.community_sources().unwrap()["offline_data"][0]["rights_confirmed"],
+            false
+        );
+        // Same capture/evidence must not hide a changed rights confirmation.
+        assert_eq!(
+            load(&db, &bundle).unwrap()["archives"]["a2tools"],
+            "imported"
+        );
+        assert_eq!(
+            db.community_index("own", "EU").unwrap().unwrap()["comparisons"][0]["score"],
+            200.0
+        );
+        assert_eq!(
+            load(&db, &bundle).unwrap()["archives"]["a2tools"],
+            "unchanged"
+        );
+        drop(conn);
+        drop(db);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
